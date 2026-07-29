@@ -70,7 +70,6 @@ const savePin = async (uid_,pin)=>{
 const clearPin = uid_ => localStorage.removeItem(pinKey(uid_));
 const fmt = n=>'$'+Number(n||0).toFixed(2);
 const fDate = d=>new Date(d).toLocaleDateString('es-MX',{day:'2-digit',month:'short',year:'2-digit'});
-  
 // S_PROD y S_CLI se usan solo como datos semilla la primera vez que Firestore está vacío
 const S_PROD = [
   {identificación: 'p1', nombre: 'Paquete jumbo', precio: 250.00, existencias: 298, unidad: 'paquete', código: '750000000010'},
