@@ -363,6 +363,7 @@ function Productos({productos,currentUser}){
     return db.collection('inventario_historial').add({
       productoId,productoNombre,stockAnterior,stockNuevo,diferencia:stockNuevo-stockAnterior,
       motivo:motivo||'Sin especificar',
+      usuarioUid:currentUser?.uid||'',
       usuarioNombre:currentUser?.nombre||'',usuarioEmail:currentUser?.email||'',
       fecha:new Date().toISOString()
     });
@@ -517,7 +518,7 @@ function Clientes({clientes,notas,creditos}){
 }
 
 /* ── Crear Nota ── */
-function CrearNota({productos,clientes}){
+function CrearNota({productos,clientes,currentUser}){
   const [cliOpen,setCliOpen]=useState(true);
   const [prodOpen,setProdOpen]=useState(false);
   const [cliMode,setCliMode]=useState('buscar');
@@ -525,7 +526,7 @@ function CrearNota({productos,clientes}){
   const [cliSel,setCliSel]=useState(null);
   const [nuevoC,setNuevoC]=useState({nombre:'',telefono:''});
   const [cart,setCart]=useState([]);
-  const [pago,setPago]=useState('contado');
+  const [pago,setPago]=useState('efectivo');
   const [done,setDone]=useState(null);
   const [saving,setSaving]=useState(false);
   const cliFilt=clientes.filter(c=>c.activo&&c.nombre.toLowerCase().includes(cliSearch.toLowerCase()));
@@ -556,7 +557,7 @@ function CrearNota({productos,clientes}){
         const ref=await db.collection('clientes').add({nombre:nuevoC.nombre,telefono:nuevoC.telefono||'',domicilio:'',activo:true});
         cl={id:ref.id,nombre:nuevoC.nombre,telefono:nuevoC.telefono||''};
       }
-      const nota={fecha:new Date().toISOString(),clienteId:cl.id,clienteNombre:cl.nombre,clienteTelefono:cl.telefono||'',items:cart.map(x=>({...x})),total,formaPago:pago};
+      const nota={fecha:new Date().toISOString(),clienteId:cl.id,clienteNombre:cl.nombre,clienteTelefono:cl.telefono||'',items:cart.map(x=>({...x})),total,formaPago:pago,capturadoPorUid:currentUser.uid,capturadoPorNombre:currentUser.nombre};
       const notaRef=await db.collection('notas').add(nota);
       if(pago==='credito') await db.collection('creditos').add({notaId:notaRef.id,clienteId:cl.id,clienteNombre:cl.nombre,fecha:nota.fecha,total,saldo:total,abonos:[]});
       const batch=db.batch();
@@ -645,8 +646,8 @@ function CrearNota({productos,clientes}){
         </Row>
       </div>
       <Row style={{gap:8,marginBottom:12}}>
-        {[['contado','💵 Contado','var(--ok-bg)','var(--ok-text)'],['credito','📋 Crédito','var(--warn-bg)','var(--warn-text)']].map(([v,l,bg,col])=>(
-          <button key={v} onClick={()=>setPago(v)} style={{flex:1,padding:'9px',borderRadius:8,border:'none',background:pago===v?bg:'var(--surface-2)',color:pago===v?col:'var(--ink-soft)',fontSize:12,fontWeight:700,cursor:'pointer'}}>{l}</button>
+        {[['efectivo','💵 Efectivo','var(--ok-bg)','var(--ok-text)'],['transferencia','🏦 Transferencia','var(--info-bg)','var(--info-text)'],['credito','📋 Crédito','var(--warn-bg)','var(--warn-text)']].map(([v,l,bg,col])=>(
+          <button key={v} onClick={()=>setPago(v)} style={{flex:1,padding:'9px 2px',borderRadius:8,border:'none',background:pago===v?bg:'var(--surface-2)',color:pago===v?col:'var(--ink-soft)',fontSize:11,fontWeight:700,cursor:'pointer'}}>{l}</button>
         ))}
       </Row>
       <Row style={{gap:8}}>
@@ -711,7 +712,7 @@ function Creditos({creditos}){
 }
 
 /* ── Ruta de reparto ── */
-function RutaReparto({productos,clientes,rutas}){
+function RutaReparto({productos,clientes,rutas,currentUser}){
   const [scanOpen,setScanOpen]=useState(false);
   const [cart,setCart]=useState([]);
   const [msg,setMsg]=useState('');
@@ -723,7 +724,7 @@ function RutaReparto({productos,clientes,rutas}){
   const [cliSel,setCliSel]=useState(null);
   const [nuevoC,setNuevoC]=useState({nombre:'',telefono:''});
   const [entCart,setEntCart]=useState([]);
-  const [pago,setPago]=useState('contado');
+  const [pago,setPago]=useState('efectivo');
   const [saving,setSaving]=useState(false);
   const [expandId,setExpandId]=useState(null);
   const flash=m=>{ setMsg(m); setTimeout(()=>setMsg(''),2500); };
@@ -793,11 +794,11 @@ function RutaReparto({productos,clientes,rutas}){
       const items=entCart.map(x=>({id:x.id,nombre:x.nombre,precio:x.precio,cant:x.cant}));
       const batch=db.batch();
       const notaRef=db.collection('notas').doc();
-      batch.set(notaRef,{fecha:new Date().toISOString(),clienteId:cl.id,clienteNombre:cl.nombre,clienteTelefono:cl.telefono||'',items,total,formaPago:pago,rutaId:rutaActiva.id});
+      batch.set(notaRef,{fecha:new Date().toISOString(),clienteId:cl.id,clienteNombre:cl.nombre,clienteTelefono:cl.telefono||'',items,total,formaPago:pago,rutaId:rutaActiva.id,capturadoPorUid:currentUser.uid,capturadoPorNombre:currentUser.nombre});
       if(pago==='credito'){
         batch.set(db.collection('creditos').doc(),{notaId:notaRef.id,clienteId:cl.id,clienteNombre:cl.nombre,fecha:new Date().toISOString(),total,saldo:total,abonos:[]});
       }
-      const rutaUpdate={ entregas: firebase.firestore.FieldValue.arrayUnion({id:notaRef.id,fecha:new Date().toISOString(),clienteNombre:cl.nombre,total,formaPago:pago,items}) };
+      const rutaUpdate={ entregas: firebase.firestore.FieldValue.arrayUnion({id:notaRef.id,fecha:new Date().toISOString(),clienteNombre:cl.nombre,total,formaPago:pago,items,capturadoPorNombre:currentUser.nombre}) };
       entCart.forEach(x=>{ rutaUpdate[`items.${x.id}.cantRestante`]=firebase.firestore.FieldValue.increment(-x.cant); });
       batch.update(db.collection('rutas').doc(rutaActiva.id),rutaUpdate);
       await batch.commit();
@@ -924,8 +925,8 @@ function RutaReparto({productos,clientes,rutas}){
           </div>}
 
           <Row style={{gap:8,marginBottom:12}}>
-            {[['contado','💵 Contado','var(--ok-bg)','var(--ok-text)'],['credito','📋 Crédito','var(--warn-bg)','var(--warn-text)']].map(([v,l,bg,col])=>(
-              <button key={v} onClick={()=>setPago(v)} style={{flex:1,padding:'9px',borderRadius:8,border:'none',background:pago===v?bg:'var(--surface-2)',color:pago===v?col:'var(--ink-soft)',fontSize:12,fontWeight:700,cursor:'pointer'}}>{l}</button>
+            {[['efectivo','💵 Efectivo','var(--ok-bg)','var(--ok-text)'],['transferencia','🏦 Transferencia','var(--info-bg)','var(--info-text)'],['credito','📋 Crédito','var(--warn-bg)','var(--warn-text)']].map(([v,l,bg,col])=>(
+              <button key={v} onClick={()=>setPago(v)} style={{flex:1,padding:'9px 2px',borderRadius:8,border:'none',background:pago===v?bg:'var(--surface-2)',color:pago===v?col:'var(--ink-soft)',fontSize:11,fontWeight:700,cursor:'pointer'}}>{l}</button>
             ))}
           </Row>
           <BFill onClick={guardarEntrega} bg={canSaveEnt?'var(--accent)':'var(--line-strong)'} color={canSaveEnt?'var(--ink)':'var(--ink-faint)'} style={{width:'100%'}} disabled={!canSaveEnt||saving}>{saving?'Guardando…':'💾 Guardar entrega'}</BFill>
@@ -1206,9 +1207,9 @@ function App(){
     return ()=>unsubs.forEach(u=>u());
   },[currentUser]);
 
-  const ALL_TABS=[['home','🏠','Inicio'],['productos','📦','Productos'],['nota','🧾','Pedido'],['clientes','👥','Clientes'],['creditos','💳','Créditos'],['ruta','🚚','Ruta']];
-  // Pestañas visibles según el rol. 'admin' y 'usuario' ven todo; 'repartidor' solo su ruta y la pantalla de ventas.
-  const TABS_POR_ROL={admin:['home','productos','nota','clientes','creditos','ruta'],usuario:['home','productos','nota','clientes','creditos','ruta'],repartidor:['ruta','nota']};
+  const ALL_TABS=[['home','🏠','Inicio'],['productos','📦','Productos'],['nota','🧾','Pedido'],['clientes','👥','Clientes'],['creditos','💳','Créditos'],['ruta','🚚','Ruta'],['gerencia','💰','Gerencia']];
+  // Pestañas visibles según el rol. 'admin' y 'usuario' ven todo; 'repartidor' solo su ruta, ventas y gerencia (para registrar sus gastos).
+  const TABS_POR_ROL={admin:['home','productos','nota','clientes','creditos','ruta','gerencia'],usuario:['home','productos','nota','clientes','creditos','ruta','gerencia'],repartidor:['ruta','nota','gerencia']};
   const tabsPermitidos=TABS_POR_ROL[currentUser?.role]||TABS_POR_ROL.usuario;
   const TABS=ALL_TABS.filter(([id])=>tabsPermitidos.includes(id));
 
@@ -1240,10 +1241,11 @@ function App(){
     {firestoreError&&<div style={{margin:'0 12px 10px',background:'var(--danger-bg)',border:'1px solid var(--danger)55',borderRadius:4,padding:'8px 12px',fontSize:12,color:'var(--danger-text)'}}>{firestoreError}</div>}
     {tab==='home'&&<Dashboard {...ctx}/>}
     {tab==='productos'&&<Productos {...ctx} currentUser={currentUser}/>}
-    {tab==='nota'&&<CrearNota {...ctx}/>}
+    {tab==='nota'&&<CrearNota {...ctx} currentUser={currentUser}/>}
     {tab==='clientes'&&<Clientes {...ctx}/>}
     {tab==='creditos'&&<Creditos {...ctx}/>}
-    {tab==='ruta'&&<RutaReparto {...ctx}/>}
+    {tab==='ruta'&&<RutaReparto {...ctx} currentUser={currentUser}/>}
+    {tab==='gerencia'&&<Gerencia notas={notas} currentUser={currentUser}/>}
     {tab==='config'&&<Configuracion currentUser={currentUser} onBack={()=>setTab(prevTab)} onLogout={logout}/>}
     {tab!=='config'&&<nav style={{position:'fixed',bottom:0,left:'50%',transform:'translateX(-50%)',width:'100%',maxWidth:420,background:'var(--rail)',borderTop:'1px solid var(--rail-border)',display:'flex',zIndex:200}}>
       {TABS.map(([id,ico,lbl])=>(
@@ -1258,6 +1260,7 @@ function App(){
 ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
 </script>
 <script type="text/babel" src="./rutas-repartidores.js"></script>
+<script type="text/babel" src="./gerencia.js"></script>
 <script>
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {

@@ -3,7 +3,7 @@
 // Los DATOS (productos, clientes, etc.) los maneja Firestore con enablePersistence()
 // en el propio HTML — este SW no toca esos datos.
 
-const CACHE_NAME = 'distribupanel-shell-v7'; // ⬆️ sube este número si cambias la lista de abajo (v7: firebase-init.js separado + login con PIN)
+const CACHE_NAME = 'distribupanel-shell-v8'; // ⬆️ sube este número si cambias la lista de abajo (v8: módulo gerencia.js — gastos y caja)
 
 // Ajusta la ruta de tu HTML principal si tu index no se llama exactamente así.
 const SHELL_URLS = [
@@ -12,6 +12,7 @@ const SHELL_URLS = [
   './firebase-init.js',
   './offline.html',
   './rutas-repartidores.js',
+  './gerencia.js',
   './manifest.json',
   './icons/icon-192.png',
   './icons/icon-512.png',
