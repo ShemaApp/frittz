@@ -4,7 +4,9 @@
    (Card, BFill, BOut, Inp, Lbl, Row, Tag, fmt, fDate, uid, db).
    No toca inventario/stock para nada — es solo dinero que entra y sale. */
 
-const { useState, useEffect } = React;
+/* useState y useEffect ya están disponibles globalmente desde index.html
+   (se declaran una sola vez ahí) — no se repiten aquí para evitar el error
+   "Identifier 'useState' has already been declared" que rompía el render. */
 
 // Trata 'contado' (formaPago histórico) como efectivo para no perder ventas viejas
 const esVentaEfectivo = fp => fp === 'efectivo' || fp === 'contado';
