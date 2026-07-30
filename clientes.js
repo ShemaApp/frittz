@@ -1,0 +1,66 @@
+/* ── Clientes ── */
+function Clientes({clientes,notas,creditos}){
+  const [filtro,setFiltro]=useState('activos');
+  const [q,setQ]=useState('');
+  const [form,setForm]=useState(null);
+  const [histId,setHistId]=useState(null);
+  const cmap=creditos.reduce((m,c)=>{ if(c.saldo>0)m[c.clienteId]=(m[c.clienteId]||0)+c.saldo; return m; },{});
+  const list=clientes
+    .filter(c=>filtro==='activos'?c.activo:filtro==='inactivos'?!c.activo:!!cmap[c.id])
+    .filter(c=>c.nombre.toLowerCase().includes(q.toLowerCase()));
+  const save=async()=>{
+    if(!form.nombre) return;
+    const item={nombre:form.nombre,telefono:form.telefono||'',domicilio:form.domicilio||'',activo:form.activo!==undefined?form.activo:true};
+    if(form.id) await db.collection('clientes').doc(form.id).update(item);
+    else await db.collection('clientes').add(item);
+    setForm(null);
+  };
+  return <div style={{padding:'16px 12px'}}>
+    <Row style={{justifyContent:'space-between',marginBottom:12}}>
+      <div style={{fontSize:20,fontWeight:800}}>👥 Clientes</div>
+      <BFill onClick={()=>setForm({nombre:'',telefono:'',domicilio:''})}>+ Nuevo</BFill>
+    </Row>
+    <Inp placeholder="🔍 Buscar…" value={q} onChange={e=>setQ(e.target.value)} style={{marginBottom:10}}/>
+    <Row style={{gap:6,marginBottom:12}}>
+      {[['activos','Activos'],['credito','Crédito'],['inactivos','Inactivos']].map(([v,l])=>(
+        <button key={v} onClick={()=>setFiltro(v)} style={{flex:1,padding:'7px 2px',borderRadius:8,border:'none',background:filtro===v?'var(--accent)':'var(--surface-2)',color:filtro===v?'var(--ink)':'var(--ink-soft)',fontSize:11,fontWeight:700,cursor:'pointer'}}>{l}</button>
+      ))}
+    </Row>
+    {list.map(c=><Card key={c.id} style={{opacity:c.activo?1:0.65}}>
+      <Row style={{justifyContent:'space-between',alignItems:'flex-start'}}>
+        <div style={{flex:1,minWidth:0}}>
+          <Row style={{flexWrap:'wrap',gap:4}}>
+            <span style={{fontWeight:700,fontSize:14}}>{c.nombre}</span>
+            {!c.activo&&<Tag color="var(--ink-soft)">Inactivo</Tag>}
+            {cmap[c.id]&&<Tag color="var(--warn-text)">💳 {fmt(cmap[c.id])}</Tag>}
+          </Row>
+          <div style={{fontSize:12,color:'var(--ink-soft)',marginTop:3}}>📱 {c.telefono||'—'}</div>
+          <div style={{fontSize:12,color:'var(--ink-soft)'}}>📍 {c.domicilio||'—'}</div>
+        </div>
+        <div style={{display:'flex',gap:4,flexShrink:0}}>
+          <button onClick={()=>setForm({...c})} style={{background:'var(--info-bg)',border:'none',color:'var(--info-text)',borderRadius:6,padding:'5px 9px',cursor:'pointer'}}>✏️</button>
+          <button onClick={()=>db.collection('clientes').doc(c.id).update({activo:!c.activo})} style={{background:c.activo?'var(--danger-bg)':'var(--ok-bg)',border:'none',color:c.activo?'var(--danger-text)':'var(--ok-text)',borderRadius:6,padding:'5px 9px',cursor:'pointer'}}>{c.activo?'🚫':'✅'}</button>
+          <button onClick={()=>setHistId(histId===c.id?null:c.id)} style={{background:'var(--info-bg)',border:'none',color:'var(--info-text)',borderRadius:6,padding:'5px 9px',cursor:'pointer'}}>📋</button>
+        </div>
+      </Row>
+      {histId===c.id&&<div style={{marginTop:10,borderTop:'1px solid var(--line)',paddingTop:8}}>
+        <div style={{fontSize:11,color:'var(--ink-faint)',fontWeight:700,marginBottom:6}}>HISTORIAL DE PEDIDOS</div>
+        {notas.filter(n=>n.clienteId===c.id).length===0
+          ?<div style={{fontSize:12,color:'var(--ink-faint)'}}>Sin pedidos aún</div>
+          :notas.filter(n=>n.clienteId===c.id).map(n=><Row key={n.id} style={{justifyContent:'space-between',fontSize:12,paddingBottom:5,borderBottom:'1px solid var(--line)',marginBottom:4,flexWrap:'wrap',gap:4}}>
+            <span style={{color:'var(--ink-faint)'}}>{fDate(n.fecha)}</span>
+            <span style={{flex:1,paddingLeft:4}}>{n.items.length} prod.</span>
+            <span style={{color:'var(--accent-text)',fontWeight:700}}>{fmt(n.total)}</span>
+            <Tag color={n.formaPago==='credito'?'var(--warn-text)':'var(--ok-text)'}>{n.formaPago}</Tag>
+          </Row>)
+        }
+      </div>}
+    </Card>)}
+    {form&&<Modal title={form.id?'Editar Cliente':'Nuevo Cliente'} onClose={()=>setForm(null)}>
+      <Lbl>Nombre</Lbl><Inp value={form.nombre} onChange={e=>setForm(f=>({...f,nombre:e.target.value}))} style={{marginBottom:10}}/>
+      <Lbl>Teléfono</Lbl><Inp type="tel" value={form.telefono} onChange={e=>setForm(f=>({...f,telefono:e.target.value}))} style={{marginBottom:10}}/>
+      <Lbl>Domicilio</Lbl><Inp value={form.domicilio} onChange={e=>setForm(f=>({...f,domicilio:e.target.value}))} style={{marginBottom:16}}/>
+      <BFill onClick={save} style={{width:'100%'}}>💾 Guardar</BFill>
+    </Modal>}
+  </div>;
+}

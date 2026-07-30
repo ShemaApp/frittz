@@ -1,0 +1,94 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── Helpers ──
+    function signedIn() {
+      return request.auth != null;
+    }
+    function role() {
+      return get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data.role;
+    }
+    function isAdmin() {
+      return signedIn() && role() == 'admin';
+    }
+    function isStaff() {
+      // admin y vendedor ('usuario') tienen los mismos permisos de escritura
+      // en la mayoría de las colecciones.
+      return signedIn() && (role() == 'admin' || role() == 'usuario');
+    }
+
+    // ── productos ──
+    match /productos/{id} {
+      allow read: if signedIn();
+      allow create, update: if isStaff();
+      allow delete: if isAdmin();
+    }
+
+    // ── inventario_historial ──
+    // Solo admin lee. Se exige que quien crea el registro sea quien dice ser
+    // (usuarioUid debe coincidir con el uid autenticado).
+    match /inventario_historial/{id} {
+      allow read: if isAdmin();
+      allow create: if isStaff() && request.resource.data.usuarioUid == request.auth.uid;
+      allow update, delete: if false;
+    }
+
+    // ── clientes ──
+    match /clientes/{id} {
+      allow read: if signedIn();
+      allow create, update: if signedIn();
+      allow delete: if false;
+    }
+
+    // ── notas (pedidos) ──
+    // Inmutables una vez creadas. Se exige que capturadoPorUid coincida con
+    // quien está autenticado, para que nadie registre una venta a nombre de otro.
+    match /notas/{id} {
+      allow read: if signedIn();
+      allow create: if signedIn() && request.resource.data.capturadoPorUid == request.auth.uid;
+      allow update, delete: if false;
+    }
+
+    // ── creditos ──
+    match /creditos/{id} {
+      allow read: if signedIn();
+      allow create, update: if signedIn();
+      allow delete: if false;
+    }
+
+    // ── rutas ──
+    match /rutas/{id} {
+      allow read: if signedIn();
+      allow create, update: if signedIn();
+      allow delete: if false;
+    }
+
+    // ── gastos (Gerencia: salidas de efectivo/tarjeta) ──
+    // Cualquiera crea, siempre y cuando capturadoPorUid sea su propio uid.
+    // Cada quien lee solo lo suyo; admin lee todo. Solo admin edita/elimina.
+    match /gastos/{id} {
+      allow read: if signedIn() && (isAdmin() || resource.data.capturadoPorUid == request.auth.uid);
+      allow create: if signedIn() && request.resource.data.capturadoPorUid == request.auth.uid;
+      allow update, delete: if isAdmin();
+    }
+
+    // ── usuarios (perfiles) ──
+    match /usuarios/{uid} {
+      allow read: if signedIn() && (request.auth.uid == uid || isAdmin());
+      allow create: if signedIn() && (request.auth.uid == uid || isAdmin());
+      allow update: if isAdmin();
+      allow delete: if isAdmin() && request.auth.uid != uid;
+    }
+
+    // ── _meta (control interno de sembrado de datos) ──
+    match /_meta/{id} {
+      allow read, write: if signedIn();
+    }
+
+    // ── Todo lo demás: denegado por defecto ──
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
