@@ -3,7 +3,7 @@
 // Los DATOS (productos, clientes, etc.) los maneja Firestore con enablePersistence()
 // en el propio HTML — este SW no toca esos datos.
 
-const CACHE_NAME = 'distribupanel-shell-v10'; // ⬆️ v10: index.html se separó en módulos (app-core, auth, dashboard, productos, clientes, pedidos, creditos, ruta, config, app)
+const CACHE_NAME = 'distribupanel-shell-v11'; // ⬆️ v11: se agregó permisos.js (gestión de permisos por pantalla/formulario)
 
 // Ajusta la ruta de tu HTML principal si tu index no se llama exactamente así.
 const SHELL_URLS = [
@@ -23,6 +23,7 @@ const SHELL_URLS = [
   './app.js',
   './rutas-repartidores.js',
   './gerencia.js',
+  './permisos.js',
   './manifest.json',
   './icons/icon-192.png',
   './icons/icon-512.png',

@@ -29,6 +29,7 @@ function InventarioHistorial({onClose}){
 /* ── Productos ── */
 function Productos({productos,currentUser,abrirForm,onAbrirFormConsumido}){
   const isAdmin=currentUser?.role==='admin';
+  const puedeEditar=isAdmin||permisoEdita(currentUser).productos;
   const [sel,setSel]=useState([]);
   const [q,setQ]=useState('');
   const [form,setForm]=useState(null);
@@ -83,7 +84,7 @@ function Productos({productos,currentUser,abrirForm,onAbrirFormConsumido}){
       <div style={{fontSize:20,fontWeight:800}}>📦 Productos</div>
       <Row style={{gap:6}}>
         {isAdmin&&<BOut onClick={()=>setHistOpen(true)}>📋 Historial</BOut>}
-        <BFill onClick={()=>setForm({nombre:'',precio:'',stock:'',unidad:'',codigoBarras:'',motivo:''})}>+ Nuevo</BFill>
+        {puedeEditar&&<BFill onClick={()=>setForm({nombre:'',precio:'',stock:'',unidad:'',codigoBarras:'',motivo:''})}>+ Nuevo</BFill>}
       </Row>
     </Row>
     <Inp placeholder="🔍 Buscar..." value={q} onChange={e=>setQ(e.target.value)} style={{marginBottom:10}}/>
@@ -110,7 +111,7 @@ function Productos({productos,currentUser,abrirForm,onAbrirFormConsumido}){
         {p.codigoBarras&&<div style={{fontSize:10,color:'var(--ink-faint)',marginTop:3}}>🏷️ {p.codigoBarras}</div>}
       </div>
       <Row style={{gap:4,flexShrink:0}}>
-        <button onClick={()=>setForm({...p,precio:String(p.precio),stock:String(p.stock),codigoBarras:p.codigoBarras||'',motivo:''})} style={{background:'var(--info-bg)',border:'none',color:'var(--info-text)',borderRadius:6,padding:'5px 9px',cursor:'pointer'}}>✏️</button>
+        {puedeEditar&&<button onClick={()=>setForm({...p,precio:String(p.precio),stock:String(p.stock),codigoBarras:p.codigoBarras||'',motivo:''})} style={{background:'var(--info-bg)',border:'none',color:'var(--info-text)',borderRadius:6,padding:'5px 9px',cursor:'pointer'}}>✏️</button>}
         {isAdmin&&<button onClick={()=>db.collection('productos').doc(p.id).delete()} style={{background:'var(--danger-bg)',border:'none',color:'var(--danger-text)',borderRadius:6,padding:'5px 9px',cursor:'pointer'}}>🗑</button>}
       </Row>
     </Card>)}

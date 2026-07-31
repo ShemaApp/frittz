@@ -1,5 +1,6 @@
 /* ── Créditos ── */
-function Creditos({creditos}){
+function Creditos({creditos,currentUser}){
+  const puedeEditar=currentUser?.role==='admin'||permisoEdita(currentUser).creditos;
   const [abonoId,setAbonoId]=useState(null);
   const [monto,setMonto]=useState('');
   const [savingAbono,setSavingAbono]=useState(false);
@@ -42,11 +43,11 @@ function Creditos({creditos}){
           <span style={{color:'var(--ok-text)',fontWeight:700}}>+{fmt(a.monto)}</span>
         </Row>)}
       </div>}
-      {abonoId===c.id?<Row style={{gap:8}}>
+      {puedeEditar&&(abonoId===c.id?<Row style={{gap:8}}>
         <Inp type="number" placeholder="Monto abono…" value={monto} onChange={e=>setMonto(e.target.value)} style={{flex:1}}/>
         <BFill onClick={()=>abonar(c)} bg="var(--ok)" color="var(--ink)" style={{padding:'8px 14px',opacity:savingAbono?0.6:1}} disabled={savingAbono}>{savingAbono?'…':'✓'}</BFill>
         <button onClick={()=>{setAbonoId(null);setMonto('');}} style={{background:'none',border:'none',color:'var(--ink-soft)',cursor:'pointer',display:'flex'}}><XI size={18}/></button>
-      </Row>:<BOut onClick={()=>setAbonoId(c.id)} color="var(--ok-text)" style={{width:'100%'}}>+ Registrar abono</BOut>}
+      </Row>:<BOut onClick={()=>setAbonoId(c.id)} color="var(--ok-text)" style={{width:'100%'}}>+ Registrar abono</BOut>)}
     </Card>)}
   </div>;
 }

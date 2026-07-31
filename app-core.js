@@ -73,6 +73,52 @@ function Modal({title,onClose,children}){
   </div>;
 }
 
+/* ── Interruptor ON/OFF reutilizable ── */
+const Toggle = ({checked,onChange,disabled=false})=>(
+  <button
+    onClick={()=>!disabled&&onChange(!checked)}
+    disabled={disabled}
+    aria-pressed={checked}
+    style={{width:44,height:26,borderRadius:13,border:'none',padding:2,flexShrink:0,
+      background:checked?'var(--ok)':'var(--line-strong)',
+      cursor:disabled?'default':'pointer',position:'relative',
+      transition:'background .15s',opacity:disabled?0.5:1}}>
+    <div style={{width:22,height:22,borderRadius:'50%',background:'#fff',
+      transform:checked?'translateX(18px)':'translateX(0)',
+      transition:'transform .15s',boxShadow:'0 1px 2px rgba(0,0,0,.3)'}}/>
+  </button>
+);
+
+/* ── Modelo de permisos por pantalla/formulario ──
+   Cada usuario puede tener overrides en usuarios/{uid}.permisos, que se
+   combinan sobre los valores por defecto de su rol. Un admin siempre ve y
+   edita todo, sin excepción. */
+const TABS_INFO = [
+  ['productos','📦','Productos'],
+  ['nota','🧾','Pedido'],
+  ['clientes','👥','Clientes'],
+  ['creditos','💳','Créditos'],
+  ['ruta','🚚','Ruta'],
+  ['gerencia','💰','Gerencia'],
+];
+const EDICION_INFO = [
+  ['productos','📦','Editar / dar de alta productos'],
+  ['clientes','👥','Editar / dar de alta clientes'],
+  ['creditos','💳','Registrar abonos a créditos'],
+];
+const TABS_DEFAULT_ROL = {
+  admin:      {productos:true,nota:true,clientes:true,creditos:true,ruta:true,gerencia:true},
+  usuario:    {productos:true,nota:true,clientes:true,creditos:true,ruta:true,gerencia:true},
+  repartidor: {productos:false,nota:true,clientes:false,creditos:false,ruta:true,gerencia:true},
+};
+const EDITA_DEFAULT_ROL = {
+  admin:      {productos:true,clientes:true,creditos:true},
+  usuario:    {productos:true,clientes:true,creditos:true},
+  repartidor: {productos:false,clientes:false,creditos:false},
+};
+const permisoTabs = u => ({...(TABS_DEFAULT_ROL[u?.role]||TABS_DEFAULT_ROL.usuario), ...(u?.permisos?.tabs||{})});
+const permisoEdita = u => u?.role==='admin' ? EDITA_DEFAULT_ROL.admin : ({...(EDITA_DEFAULT_ROL[u?.role]||EDITA_DEFAULT_ROL.usuario), ...(u?.permisos?.edita||{})});
+
 function PwInp({value,onChange,placeholder}){
   const [show,setShow]=useState(false);
   return <div style={{position:'relative',marginBottom:10}}>

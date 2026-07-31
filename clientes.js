@@ -1,5 +1,6 @@
 /* ── Clientes ── */
-function Clientes({clientes,notas,creditos}){
+function Clientes({clientes,notas,creditos,currentUser}){
+  const puedeEditar=currentUser?.role==='admin'||permisoEdita(currentUser).clientes;
   const [filtro,setFiltro]=useState('activos');
   const [q,setQ]=useState('');
   const [form,setForm]=useState(null);
@@ -18,7 +19,7 @@ function Clientes({clientes,notas,creditos}){
   return <div style={{padding:'16px 12px'}}>
     <Row style={{justifyContent:'space-between',marginBottom:12}}>
       <div style={{fontSize:20,fontWeight:800}}>👥 Clientes</div>
-      <BFill onClick={()=>setForm({nombre:'',telefono:'',domicilio:''})}>+ Nuevo</BFill>
+      {puedeEditar&&<BFill onClick={()=>setForm({nombre:'',telefono:'',domicilio:''})}>+ Nuevo</BFill>}
     </Row>
     <Inp placeholder="🔍 Buscar…" value={q} onChange={e=>setQ(e.target.value)} style={{marginBottom:10}}/>
     <Row style={{gap:6,marginBottom:12}}>
@@ -38,8 +39,8 @@ function Clientes({clientes,notas,creditos}){
           <div style={{fontSize:12,color:'var(--ink-soft)'}}>📍 {c.domicilio||'—'}</div>
         </div>
         <div style={{display:'flex',gap:4,flexShrink:0}}>
-          <button onClick={()=>setForm({...c})} style={{background:'var(--info-bg)',border:'none',color:'var(--info-text)',borderRadius:6,padding:'5px 9px',cursor:'pointer'}}>✏️</button>
-          <button onClick={()=>db.collection('clientes').doc(c.id).update({activo:!c.activo})} style={{background:c.activo?'var(--danger-bg)':'var(--ok-bg)',border:'none',color:c.activo?'var(--danger-text)':'var(--ok-text)',borderRadius:6,padding:'5px 9px',cursor:'pointer'}}>{c.activo?'🚫':'✅'}</button>
+          {puedeEditar&&<button onClick={()=>setForm({...c})} style={{background:'var(--info-bg)',border:'none',color:'var(--info-text)',borderRadius:6,padding:'5px 9px',cursor:'pointer'}}>✏️</button>}
+          {puedeEditar&&<button onClick={()=>db.collection('clientes').doc(c.id).update({activo:!c.activo})} style={{background:c.activo?'var(--danger-bg)':'var(--ok-bg)',border:'none',color:c.activo?'var(--danger-text)':'var(--ok-text)',borderRadius:6,padding:'5px 9px',cursor:'pointer'}}>{c.activo?'🚫':'✅'}</button>}
           <button onClick={()=>setHistId(histId===c.id?null:c.id)} style={{background:'var(--info-bg)',border:'none',color:'var(--info-text)',borderRadius:6,padding:'5px 9px',cursor:'pointer'}}>📋</button>
         </div>
       </Row>

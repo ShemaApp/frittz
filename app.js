@@ -88,9 +88,11 @@ function App(){
   },[currentUser]);
 
   const ALL_TABS=[['home','🏠','Inicio'],['productos','📦','Productos'],['nota','🧾','Pedido'],['clientes','👥','Clientes'],['creditos','💳','Créditos'],['ruta','🚚','Ruta'],['gerencia','💰','Gerencia']];
-  // Pestañas visibles según el rol. 'admin' y 'usuario' ven todo; 'repartidor' ve Inicio (con sus propias cifras), Ruta, Pedido y Gerencia.
-  const TABS_POR_ROL={admin:['home','productos','nota','clientes','creditos','ruta','gerencia'],usuario:['home','productos','nota','clientes','creditos','ruta','gerencia'],repartidor:['home','ruta','nota','gerencia']};
-  const tabsPermitidos=TABS_POR_ROL[currentUser?.role]||TABS_POR_ROL.usuario;
+  // Pestañas visibles: por defecto según el rol, con overrides por persona que
+  // el admin concede o retira desde Configuración → Permisos (permisos.js).
+  // 'home' siempre está disponible; los demás pasan por permisoTabs().
+  const permTabs=permisoTabs(currentUser);
+  const tabsPermitidos=['home',...ALL_TABS.filter(([id])=>id!=='home'&&permTabs[id]).map(([id])=>id)];
   const TABS=ALL_TABS.filter(([id])=>tabsPermitidos.includes(id));
 
   // Si la pestaña actual no está permitida para el rol (p.ej. justo tras iniciar sesión), manda a la primera que sí vea.
@@ -122,8 +124,8 @@ function App(){
     {tab==='home'&&<Dashboard {...ctx} currentUser={currentUser} onIrA={setTab} onVentaRapida={()=>{setVentaRapida(true);setTab('nota');}} onAgregarProducto={()=>{setAbrirFormProducto(true);setTab('productos');}} onAgregarUsuario={()=>{setAbrirUsuarios(true);goConfig();}}/>}
     {tab==='productos'&&<Productos {...ctx} currentUser={currentUser} abrirForm={abrirFormProducto} onAbrirFormConsumido={()=>setAbrirFormProducto(false)}/>}
     {tab==='nota'&&<CrearNota {...ctx} currentUser={currentUser} ventaRapida={ventaRapida} onVentaRapidaConsumida={()=>setVentaRapida(false)}/>}
-    {tab==='clientes'&&<Clientes {...ctx}/>}
-    {tab==='creditos'&&<Creditos {...ctx}/>}
+    {tab==='clientes'&&<Clientes {...ctx} currentUser={currentUser}/>}
+    {tab==='creditos'&&<Creditos {...ctx} currentUser={currentUser}/>}
     {tab==='ruta'&&<RutaReparto {...ctx} currentUser={currentUser}/>}
     {tab==='gerencia'&&<Gerencia notas={notas} currentUser={currentUser}/>}
     {tab==='config'&&<Configuracion currentUser={currentUser} onBack={()=>setTab(prevTab)} onLogout={logout} abrirUsuarios={abrirUsuarios} onAbrirUsuariosConsumido={()=>setAbrirUsuarios(false)}/>}
