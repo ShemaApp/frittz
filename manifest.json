@@ -3,7 +3,7 @@
   "name": "Productos de la Costa",
   "short_name": "P. Costa",
   "description": "Panel de administración: productos, clientes, pedidos, créditos y rutas de reparto.",
-  "start_url": "/frittz/index.html",
+  "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
   "orientation": "portrait",
@@ -19,15 +19,9 @@
     },
     {
       "src": "./icons/icon-512.png",
-      "sizes": "1254x1254",
+      "sizes": "512x512",
       "type": "image/png",
       "purpose": "any"
     },
-    {
-      "src": "./icons/icon-512-maskable.png",
-      "sizes": "512x512",
-      "type": "image/png",
-      "purpose": "maskable"
-    }
   ]
 }
