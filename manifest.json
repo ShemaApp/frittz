@@ -1,8 +1,9 @@
 {
+  "id": "https://shemaapp.github.io/frittz/"
   "name": "Productos de la Costa",
   "short_name": "P. Costa",
   "description": "Panel de administración: productos, clientes, pedidos, créditos y rutas de reparto.",
-  "start_url": "./index.html",
+  "start_url": "/frittz/index.html",
   "scope": "./",
   "display": "standalone",
   "orientation": "portrait",
