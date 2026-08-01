@@ -87,7 +87,7 @@ function App(){
     return ()=>unsubs.forEach(u=>u());
   },[currentUser]);
 
-  const ALL_TABS=[['home','🏠','Inicio'],['productos','📦','Productos'],['nota','🧾','Pedido'],['clientes','👥','Clientes'],['creditos','💳','Créditos'],['ruta','🚚','Ruta'],['gerencia','💰','Gerencia']];
+  const ALL_TABS=[['home','🏠','Inicio'],['productos','📦','Productos'],['nota','🧾','Pedido'],['clientes','👥','Clientes'],['creditos','💳','Créditos'],['ruta','🚚','Ruta'],['repartidores','🧭','Repartidores'],['gerencia','💰','Gerencia']];
   // Pestañas visibles: por defecto según el rol, con overrides por persona que
   // el admin concede o retira desde Configuración → Permisos (permisos.js).
   // 'home' siempre está disponible; los demás pasan por permisoTabs().
@@ -127,6 +127,7 @@ function App(){
     {tab==='clientes'&&<Clientes {...ctx} currentUser={currentUser}/>}
     {tab==='creditos'&&<Creditos {...ctx} currentUser={currentUser}/>}
     {tab==='ruta'&&<RutaReparto {...ctx} currentUser={currentUser}/>}
+    {tab==='repartidores'&&<RepartidoresPanel {...ctx} currentUser={currentUser}/>}
     {tab==='gerencia'&&<Gerencia notas={notas} currentUser={currentUser}/>}
     {tab==='config'&&<Configuracion currentUser={currentUser} onBack={()=>setTab(prevTab)} onLogout={logout} abrirUsuarios={abrirUsuarios} onAbrirUsuariosConsumido={()=>setAbrirUsuarios(false)}/>}
     {tab!=='config'&&<nav style={{position:'fixed',bottom:0,left:'50%',transform:'translateX(-50%)',width:'100%',maxWidth:420,background:'var(--rail)',borderTop:'1px solid var(--rail-border)',display:'flex',zIndex:200}}>

@@ -14,10 +14,12 @@ transpila en el navegador (`type="text/babel"`).
 - **PWA offline-first**: `sw.js` precachea el shell (todos los `.js`,
   `index.html`, fuentes) para que la app cargue sin conexión; los datos siguen
   viniendo de Firestore (que ya maneja su propia caché/offline local).
-- **`rutas-repartidores.js`** es un panel independiente que se monta en su
-  propio nodo del DOM (no vive dentro del árbol de `<App/>` de `app.js`) —
-  cubre ruteo, checklist de entrega, GPS, QR, conteo de inventario,
-  devoluciones y reportes/backup de admin.
+- **`rutas-repartidores.js`** es una pestaña más dentro de `<App/>` (igual
+  que `productos.js`, `ruta.js`, etc.) — recibe `productos`, `clientes` y
+  `rutas` como props ya suscritos por `app.js`, sin listeners propios
+  duplicados. Cubre ruteo, checklist de entrega, GPS, QR, conteo de
+  inventario, devoluciones y reportes/backup de admin. Solo la ven `admin`
+  y `repartidor` (control por permiso de pestaña + chequeo de rol interno).
 
 ### Estructura de archivos
 

@@ -114,6 +114,7 @@ const TABS_INFO = [
   ['clientes','👥','Clientes'],
   ['creditos','💳','Créditos'],
   ['ruta','🚚','Ruta'],
+  ['repartidores','🧭','Rutas repartidores'],
   ['gerencia','💰','Gerencia'],
 ];
 const EDICION_INFO = [
@@ -126,22 +127,25 @@ const EDICION_INFO = [
 const ACCIONES_INFO = [
   ['camara','📷','Usar cámara (escanear QR de cliente)'],
   ['csv','📄','Descargar reportes en CSV'],
+  ['gps','📍','Compartir ubicación en vivo (GPS)'],
   ['password','🔑','Cambiar su propia contraseña'],
 ];
 const ACCIONES_DEFAULT_ROL = {
-  admin:      {camara:true, csv:true,  password:true},
-  usuario:    {camara:false,csv:true,  password:true},
-  repartidor: {camara:true, csv:false, password:true},
+  admin:      {camara:true, csv:true,  gps:true,  password:true},
+  usuario:    {camara:false,csv:true,  gps:false, password:true},
+  repartidor: {camara:true, csv:false, gps:true,  password:true},
 };
 const permisoAcciones = u => u?.role==='admin' ? ACCIONES_DEFAULT_ROL.admin : ({...(ACCIONES_DEFAULT_ROL[u?.role]||ACCIONES_DEFAULT_ROL.usuario), ...(u?.permisos?.acciones||{})});
 const TABS_DEFAULT_ROL = {
   // 'ruta' (cargar camión, ruta.js) es exclusiva del admin: es quien carga el
-  // camión y arranca la ruta. 'gerencia' aquí es solo el default de lectura
-  // de esa pestaña para repartidor (ver rutas-repartidores.js para el panel
-  // de seguimiento que sí ven repartidor/admin).
-  admin:      {productos:true,nota:true,clientes:true,creditos:true,ruta:true,gerencia:true},
-  usuario:    {productos:true,nota:true,clientes:true,creditos:true,ruta:false,gerencia:true},
-  repartidor: {productos:false,nota:true,clientes:false,creditos:false,ruta:false,gerencia:true},
+  // camión y arranca la ruta. 'repartidores' (rutas-repartidores.js) es el
+  // panel de seguimiento/GPS/QR/inventario que sí ven repartidor y admin,
+  // pero no 'usuario' de oficina — además de este permiso de pestaña, el
+  // propio componente vuelve a validar el rol como defensa adicional.
+  // 'gerencia' aquí es solo el default de lectura de esa pestaña.
+  admin:      {productos:true,nota:true,clientes:true,creditos:true,ruta:true,repartidores:true, gerencia:true},
+  usuario:    {productos:true,nota:true,clientes:true,creditos:true,ruta:false,repartidores:false,gerencia:true},
+  repartidor: {productos:false,nota:true,clientes:false,creditos:false,ruta:false,repartidores:true, gerencia:true},
 };
 const EDITA_DEFAULT_ROL = {
   admin:      {productos:true,clientes:true,creditos:true},

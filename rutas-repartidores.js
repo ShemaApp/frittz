@@ -12,11 +12,15 @@
  * del Service Worker):
  *
  *   <script type="text/babel" src="./rutas-repartidores.js"></script>
+ *
+ * Se monta como pestaña de <App/> (app.js), igual que las demás pantallas:
+ * recibe `productos`, `clientes`, `rutas` (colección `rutas`, la de "cargar
+ * camión") y `currentUser` como props — ya no abre sus propios listeners
+ * para esas tres colecciones, para no duplicar lo que app.js ya suscribe.
  */
-(function () {
-  'use strict';
+'use strict';
 
-  // ---- Carga de Leaflet (mapa) bajo demanda, sin tocar el <head> original ----
+// ---- Carga de Leaflet (mapa) bajo demanda, sin tocar el <head> original ----
   let leafletLoading = false;
   function ensureLeaflet(cb) {
     if (window.L) { cb(); return; }
@@ -78,7 +82,6 @@
 
   const fbApp = firebase.app();
   const dbx = fbApp.firestore();
-  const authx = fbApp.auth();
 
   const { useState, useEffect, useRef } = React;
 
@@ -367,15 +370,11 @@
   }
 
 
-  function RepartidoresPanel() {
+  function RepartidoresPanel({ productos, clientes, rutas: rutasReales, currentUser }) {
     const [open, setOpen] = useState(false);
     const [tab, setTab] = useState('activas');
-    const [currentUser, setCurrentUser] = useState(null);
     const [usuarios, setUsuarios] = useState([]);
     const [rutas, setRutas] = useState([]);
-    const [rutasReales, setRutasReales] = useState([]);
-    const [productos, setProductos] = useState([]);
-    const [clientes, setClientes] = useState([]);
     const [planEditFor, setPlanEditFor] = useState(null);
     const [expandPlan, setExpandPlan] = useState(null);
     const [waFor, setWaFor] = useState(null);
@@ -440,19 +439,11 @@
 
     const flash = m => { setMsg(m); setTimeout(() => setMsg(''), 3000); };
 
-    useEffect(() => {
-      const unsub = authx.onAuthStateChanged(async u => {
-        if (!u) { setCurrentUser(null); return; }
-        try {
-          const snap = await dbx.collection('usuarios').doc(u.uid).get();
-          setCurrentUser({ uid: u.uid, ...(snap.exists ? snap.data() : { nombre: u.email, email: u.email, role: 'usuario' }) });
-        } catch (e) {
-          setCurrentUser({ uid: u.uid, nombre: u.email, email: u.email, role: 'usuario' });
-        }
-      });
-      return unsub;
-    }, []);
-
+    // productos, clientes y la colección `rutas` (cargar camión) ya llegan
+    // como props desde app.js — ese listener vive una sola vez ahí. Aquí
+    // solo se suscribe lo que es exclusivo de este panel: `rutas_meta`,
+    // `usuarios` (solo admin, para reasignar), `devoluciones` y el meta de
+    // respaldos (solo admin).
     useEffect(() => {
       if (!currentUser) return;
       const unsub = dbx.collection('rutas_meta').orderBy('fechaCreacion', 'desc').limit(200)
@@ -461,16 +452,12 @@
       if (currentUser.role === 'admin') {
         unsubU = dbx.collection('usuarios').onSnapshot(snap => setUsuarios(snap.docs.map(d => ({ id: d.id, ...d.data() }))), () => {});
       }
-      const unsubR = dbx.collection('rutas').orderBy('fecha', 'desc').limit(100)
-        .onSnapshot(snap => setRutasReales(snap.docs.map(d => ({ id: d.id, ...d.data() }))), () => {});
-      const unsubP = dbx.collection('productos').onSnapshot(snap => setProductos(snap.docs.map(d => ({ id: d.id, ...d.data() }))), () => {});
-      const unsubC = dbx.collection('clientes').onSnapshot(snap => setClientes(snap.docs.map(d => ({ id: d.id, ...d.data() }))), () => {});
       const unsubD = dbx.collection('devoluciones').orderBy('fecha', 'desc').limit(100).onSnapshot(snap => setDevoluciones(snap.docs.map(d => ({ id: d.id, ...d.data() }))), () => {});
       let unsubB = () => {};
       if (currentUser.role === 'admin') {
         unsubB = dbx.collection('_meta').doc('backups').onSnapshot(snap => setBackupMeta(snap.exists ? snap.data() : null), () => {});
       }
-      return () => { unsub(); unsubU(); unsubR(); unsubP(); unsubC(); unsubD(); unsubB(); };
+      return () => { unsub(); unsubU(); unsubD(); unsubB(); };
     }, [currentUser]);
 
     const actualizarParadas = async (rutaId, nuevasParadas) => {
@@ -1106,6 +1093,7 @@
     // ellos usan 'ruta.js' para cargar camión, y ese ya es admin-only.
     if (currentUser.role !== 'admin' && currentUser.role !== 'repartidor') return null;
     const puedeCamara = permisoAcciones(currentUser).camara;
+    const puedeGps = currentUser.role === 'admin' || permisoAcciones(currentUser).gps;
     _permisoCSV = currentUser.role === 'admin' || permisoAcciones(currentUser).csv;
 
     const activas = rutas.filter(r => r.estado === 'pendiente' || r.estado === 'en_curso');
@@ -1209,7 +1197,7 @@
                       <div style={{ display: 'flex', gap: 8 }}>
                         {r.estado === 'pendiente' && <button onClick={() => iniciar(r)} style={{ flex: 1, background: 'var(--ok-bg)', color: 'var(--ok-text)', border: 'none', borderRadius: 8, padding: 8, fontWeight: 700, cursor: 'pointer', fontSize: 12 }}>🚀 Iniciar</button>}
                         {r.estado === 'pendiente' && <button onClick={() => cancelar(r)} style={{ background: 'transparent', color: 'var(--danger-text)', border: '1.5px solid var(--danger-text)', borderRadius: 8, padding: '7px 12px', fontSize: 12, cursor: 'pointer' }}>✕</button>}
-                        {r.estado === 'en_curso' && <button onClick={() => tracking === r.id ? detenerSeguimiento() : iniciarSeguimiento(r)} style={{ flex: 1, background: tracking === r.id ? 'var(--warn-bg)' : 'var(--surface-2)', color: tracking === r.id ? 'var(--warn-text)' : 'var(--ink-soft)', border: '1px solid var(--line-strong)', borderRadius: 8, padding: 8, fontWeight: 700, cursor: 'pointer', fontSize: 12 }}>{tracking === r.id ? '📍 Compartiendo…' : '📍 Compartir ubicación'}</button>}
+                        {r.estado === 'en_curso' && puedeGps && <button onClick={() => tracking === r.id ? detenerSeguimiento() : iniciarSeguimiento(r)} style={{ flex: 1, background: tracking === r.id ? 'var(--warn-bg)' : 'var(--surface-2)', color: tracking === r.id ? 'var(--warn-text)' : 'var(--ink-soft)', border: '1px solid var(--line-strong)', borderRadius: 8, padding: 8, fontWeight: 700, cursor: 'pointer', fontSize: 12 }}>{tracking === r.id ? '📍 Compartiendo…' : '📍 Compartir ubicación'}</button>}
                         {r.estado === 'en_curso' && <button onClick={() => completar(r)} style={{ flex: 1, background: 'var(--accent)', color: 'var(--surface-2)', border: 'none', borderRadius: 8, padding: 8, fontWeight: 700, cursor: 'pointer', fontSize: 12 }}>🏁 Completar</button>}
                       </div>
                     </div>
@@ -1763,12 +1751,4 @@
     );
   }
 
-  function mount() {
-    const div = document.createElement('div');
-    div.id = 'rutas-repartidores-root';
-    document.body.appendChild(div);
-    ReactDOM.createRoot(div).render(<RepartidoresPanel />);
-  }
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', mount);
-  else mount();
-})();
+
