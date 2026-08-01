@@ -138,6 +138,10 @@
   }
 
   // ---- Exportar CSV ----
+  // downloadCSV() vive fuera del componente (no tiene closure sobre
+  // currentUser), así que el permiso se guarda en esta variable de módulo,
+  // actualizada en cada render de RepartidoresPanel según permisoAcciones().
+  let _permisoCSV = true;
   function csvEscape(v) {
     const s = String(v === undefined || v === null ? '' : v);
     return /[",\n;]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
@@ -146,6 +150,7 @@
     return rows.map(r => r.map(csvEscape).join(',')).join('\r\n');
   }
   function downloadCSV(filename, rows) {
+    if (!_permisoCSV) { alert('No tienes permiso para descargar reportes en CSV. Pídele a un administrador que te lo active en Configuración → Permisos.'); return; }
     const csv = '\uFEFF' + toCSV(rows);
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
@@ -180,6 +185,29 @@
       );
     });
   }
+
+  // ---- Mapa offline (una sola zona fija, descargada bajo demanda) ----
+  // Matemática estándar de "slippy map tiles" (la misma que usan
+  // OpenStreetMap/Leaflet) para convertir lat/lng a coordenadas de tile.
+  function lonLatATile(lat, lng, z) {
+    const n = Math.pow(2, z);
+    const x = Math.floor((lng + 180) / 360 * n);
+    const latRad = lat * Math.PI / 180;
+    const y = Math.floor((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2 * n);
+    return { x, y };
+  }
+  function tilesParaZona(bounds, zMin, zMax) {
+    const tiles = [];
+    for (let z = zMin; z <= zMax; z++) {
+      const nw = lonLatATile(bounds.getNorth(), bounds.getWest(), z);
+      const se = lonLatATile(bounds.getSouth(), bounds.getEast(), z);
+      for (let x = nw.x; x <= se.x; x++) {
+        for (let y = nw.y; y <= se.y; y++) tiles.push({ z, x, y });
+      }
+    }
+    return tiles;
+  }
+  const MAPA_OFFLINE_KEY = 'pdlc_mapa_offline_v1';
 
   const inputStyle = { background: 'var(--surface-2)', border: '1px solid var(--line-strong)', borderRadius: 8, padding: '8px 10px', color: 'var(--ink)', fontSize: 13, width: '100%', boxSizing: 'border-box', marginBottom: 10 };
   const lblStyle = { fontSize: 11, color: 'var(--ink-soft)', marginBottom: 3, textTransform: 'uppercase', letterSpacing: '.5px' };
@@ -356,6 +384,10 @@
     const [form, setForm] = useState(null);
     const [msg, setMsg] = useState('');
     const [mapReady, setMapReady] = useState(false);
+    const [mapaOffline, setMapaOffline] = useState(() => {
+      try { return JSON.parse(localStorage.getItem(MAPA_OFFLINE_KEY) || 'null'); } catch (e) { return null; }
+    });
+    const [descargandoMapa, setDescargandoMapa] = useState(null); // {hecho, total} | null
     const mapRef = useRef(null);
     const mapInstance = useRef(null);
     const markersRef = useRef({});
@@ -363,6 +395,8 @@
     const [tracking, setTracking] = useState(null);
     const [qrModalFor, setQrModalFor] = useState(null);
     const [qrDataURL, setQrDataURL] = useState(null);
+    const [qrSel, setQrSel] = useState([]);
+    const [qrMasivoLoading, setQrMasivoLoading] = useState(false);
     const [clienteScanOpen, setClienteScanOpen] = useState(false);
     const [clienteBuscarOpen, setClienteBuscarOpen] = useState(false);
     const [cliQSearch, setCliQSearch] = useState('');
@@ -384,6 +418,9 @@
     const [devAccion, setDevAccion] = useState('reingreso');
     const [devSaving, setDevSaving] = useState(false);
     const [respaldoSubTab, setRespaldoSubTab] = useState('respaldo');
+    const [ubicFecha, setUbicFecha] = useState(() => new Date().toISOString().slice(0, 10));
+    const [ubicNotas, setUbicNotas] = useState(null);
+    const [ubicLoading, setUbicLoading] = useState(false);
     const [backupMeta, setBackupMeta] = useState(null);
     const [backupGenerating, setBackupGenerating] = useState(false);
     const [reporteRango, setReporteRango] = useState('semana');
@@ -475,13 +512,19 @@
           const prod = productos.find(x => x.id === it.id);
           return { id: it.id, nombre: it.nombre, cant: it.cant, precio: prod ? prod.precio : 0 };
         });
+        const loc = await getLoc();
+        const clienteReg = clientes.find(x => x.id === p.clienteId);
+        const ubicacionVenta = (loc && clienteReg && clienteReg.ubicacion)
+          ? { ok: distanciaMetros(loc.lat, loc.lng, clienteReg.ubicacion.lat, clienteReg.ubicacion.lng) <= RADIO_VISITA_METROS,
+              distanciaM: Math.round(distanciaMetros(loc.lat, loc.lng, clienteReg.ubicacion.lat, clienteReg.ubicacion.lng)) }
+          : { ok: null, distanciaM: null };
 
         const batch = dbx.batch();
         const notaRef = dbx.collection('notas').doc();
         batch.set(notaRef, {
           fecha: new Date().toISOString(), clienteId: p.clienteId, clienteNombre: p.clienteNombre,
           clienteTelefono: p.clienteTelefono || '', items: itemsConPrecio, total, formaPago: confirmPago,
-          rutaMetaId: r.id,
+          rutaMetaId: r.id, ubicacionVenta, capturadoPorUid: currentUser.uid, capturadoPorNombre: currentUser.nombre || '',
         });
         if (confirmPago === 'credito') {
           batch.set(dbx.collection('creditos').doc(), {
@@ -505,6 +548,42 @@
     };
 
     // ---- Mapa ----
+    // Descarga los tiles de la zona que se ve ahora mismo en el mapa (la
+    // "zona fija" del negocio: se navega una vez hasta ahí, se descarga, y
+    // queda disponible sin conexión desde entonces en este dispositivo).
+    const descargarZonaOffline = async () => {
+      if (!mapInstance.current) return;
+      const bounds = mapInstance.current.getBounds();
+      const zActual = Math.round(mapInstance.current.getZoom());
+      const zMin = Math.max(zActual, 12), zMax = Math.min(zActual + 3, 17);
+      const tiles = tilesParaZona(bounds, zMin, zMax);
+      if (tiles.length > 3500) { flash('⚠️ La zona visible es muy grande (' + tiles.length + ' tiles). Acércate más con el zoom antes de descargar.'); return; }
+      if (!confirm('Se van a descargar ' + tiles.length + ' imágenes de mapa (~' + Math.max(1, Math.round(tiles.length * 15 / 1024)) + ' MB aprox., zoom ' + zMin + '–' + zMax + '). ¿Continuar?')) return;
+      setDescargandoMapa({ hecho: 0, total: tiles.length });
+      const cola = [...tiles];
+      let hecho = 0;
+      const trabajador = async () => {
+        while (cola.length) {
+          const t = cola.shift();
+          try { await fetch(`https://a.tile.openstreetmap.org/${t.z}/${t.x}/${t.y}.png`); } catch (e) { /* se reintenta la próxima vez que se pida ese tile */ }
+          hecho++; setDescargandoMapa({ hecho, total: tiles.length });
+        }
+      };
+      await Promise.all(Array.from({ length: 6 }, trabajador)); // 6 descargas en paralelo
+      const meta = { fecha: new Date().toISOString(), tileCount: tiles.length, zMin, zMax,
+        bounds: { n: bounds.getNorth(), s: bounds.getSouth(), e: bounds.getEast(), w: bounds.getWest() } };
+      localStorage.setItem(MAPA_OFFLINE_KEY, JSON.stringify(meta));
+      setMapaOffline(meta);
+      setDescargandoMapa(null);
+      flash('✅ Zona de mapa lista para uso sin conexión');
+    };
+    const borrarMapaOffline = async () => {
+      if (!confirm('¿Borrar el mapa descargado de este dispositivo?')) return;
+      try { if ('caches' in window) await caches.delete('distribupanel-tiles-v1'); } catch (e) { /* noop */ }
+      localStorage.removeItem(MAPA_OFFLINE_KEY);
+      setMapaOffline(null);
+      flash('🗑️ Mapa offline borrado');
+    };
     useEffect(() => {
       if (!open || tab !== 'mapa') return;
       ensureLeaflet(() => {
@@ -512,7 +591,7 @@
         setTimeout(() => {
           if (!mapInstance.current && mapRef.current) {
             mapInstance.current = window.L.map(mapRef.current).setView([23.6, -102.5], 5);
-            window.L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap' }).addTo(mapInstance.current);
+            window.L.tileLayer('https://a.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap' }).addTo(mapInstance.current);
           }
           setMapReady(true);
           if (mapInstance.current) setTimeout(() => mapInstance.current.invalidateSize(), 100);
@@ -595,15 +674,58 @@
       setQrModalFor(cliente); setQrDataURL(null);
       renderQRDataURL(qrTextForCliente(cliente.id), 260, url => setQrDataURL(url));
     };
+    const renderQRDataURLAsync = (text, size) => new Promise(res => renderQRDataURL(text, size, res));
+    const togQrSel = id => setQrSel(s => s.includes(id) ? s.filter(x => x !== id) : [...s, id]);
+    // Genera todos los QR seleccionados y abre una sola hoja imprimible con
+    // uno por tarjeta, en vez de una ventana por cliente.
+    const imprimirQRsMasivo = async lista => {
+      if (!lista.length || qrMasivoLoading) return;
+      setQrMasivoLoading(true);
+      try {
+        const items = await Promise.all(lista.map(async c => ({ cliente: c, dataURL: await renderQRDataURLAsync(qrTextForCliente(c.id), 260) })));
+        const w = window.open('', '_blank');
+        if (!w) { alert('Habilita las ventanas emergentes para imprimir los QR.'); return; }
+        const tarjetas = items.map(({ cliente, dataURL }) => `
+          <div class="tarjeta">
+            <h2>${cliente.nombre}</h2>
+            <p>${cliente.telefono || ''}${cliente.domicilio ? ' · ' + cliente.domicilio : ''}</p>
+            ${dataURL ? `<img src="${dataURL}"/>` : '<p>No se pudo generar el QR</p>'}
+          </div>`).join('');
+        w.document.write(`<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"/><title>QR de clientes</title>
+          <style>
+            *{box-sizing:border-box;font-family:system-ui,-apple-system,sans-serif}
+            body{padding:16px;color:#1B1D19}
+            .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+            .tarjeta{border:1px solid #ddd;border-radius:10px;padding:12px;text-align:center;break-inside:avoid;page-break-inside:avoid}
+            .tarjeta img{width:150px;height:150px;margin:6px auto;display:block}
+            .tarjeta h2{font-size:13px;margin:0}
+            .tarjeta p{color:#585D53;font-size:10px;margin:2px 0 0}
+            .no-print{margin-bottom:14px;background:#E8A400;border:none;border-radius:8px;padding:10px 18px;font-weight:700;cursor:pointer}
+            @media print{ .no-print{display:none} }
+          </style></head><body>
+          <button class="no-print" onclick="window.print()">🖨️ Imprimir (${items.length})</button>
+          <div class="grid">${tarjetas}</div>
+          </body></html>`);
+        w.document.close();
+      } finally {
+        setQrMasivoLoading(false);
+      }
+    };
 
     const crearClienteRapido = async () => {
       if (!nuevoCliForm.nombre) { flash('⚠️ Falta el nombre'); return; }
       try {
+        // El repartidor está parado frente al cliente en este momento — se
+        // captura su ubicación actual como domicilio de referencia, sin pedir
+        // un paso extra. Si el GPS no está disponible, se guarda sin ella
+        // (se puede agregar después desde Clientes en la app principal).
+        const loc = await getLoc();
         const ref = await dbx.collection('clientes').add({
           nombre: nuevoCliForm.nombre, telefono: nuevoCliForm.telefono || '', domicilio: nuevoCliForm.domicilio || '', activo: true,
+          ubicacion: loc || null,
         });
         setNuevoCliForm(null);
-        flash('✅ Cliente creado');
+        flash(loc ? '✅ Cliente creado con ubicación' : '✅ Cliente creado (sin ubicación GPS)');
         verQR({ id: ref.id, nombre: nuevoCliForm.nombre, telefono: nuevoCliForm.telefono || '', domicilio: nuevoCliForm.domicilio || '' });
       } catch (e) { flash('❌ ' + e.message); }
     };
@@ -643,13 +765,21 @@
         });
         const total = itemsConPrecio.reduce((s, it) => s + it.precio * it.cant, 0);
         const loc = await getLoc();
+        // No se guarda la coordenada del repartidor en la nota — solo el
+        // resultado de comparar contra la ubicación registrada del cliente
+        // (ver distanciaMetros/RADIO_VISITA_METROS en app-core.js). Nunca
+        // bloquea la venta, solo queda marcada para revisión del admin.
+        const ubicacionVenta = (loc && ventaRapida.cliente.ubicacion)
+          ? { ok: distanciaMetros(loc.lat, loc.lng, ventaRapida.cliente.ubicacion.lat, ventaRapida.cliente.ubicacion.lng) <= RADIO_VISITA_METROS,
+              distanciaM: Math.round(distanciaMetros(loc.lat, loc.lng, ventaRapida.cliente.ubicacion.lat, ventaRapida.cliente.ubicacion.lng)) }
+          : { ok: null, distanciaM: null };
 
         const batch = dbx.batch();
         const notaRef = dbx.collection('notas').doc();
         batch.set(notaRef, {
           fecha: new Date().toISOString(), clienteId: ventaRapida.cliente.id, clienteNombre: ventaRapida.cliente.nombre,
           clienteTelefono: ventaRapida.cliente.telefono || '', items: itemsConPrecio, total, formaPago: ventaRapida.pago,
-          origen: 'qr_cliente', ...(loc ? { ubicacion: loc } : {}),
+          origen: 'qr_cliente', ubicacionVenta, capturadoPorUid: currentUser.uid, capturadoPorNombre: currentUser.nombre || '',
         });
         if (ventaRapida.pago === 'credito') {
           batch.set(dbx.collection('creditos').doc(), {
@@ -661,7 +791,7 @@
           batch.update(dbx.collection('productos').doc(it.id), { stock: firebase.firestore.FieldValue.increment(-it.cant) });
         });
         await batch.commit();
-        setVentaRapida(v => ({ ...v, saving: false, done: { total, notaId: notaRef.id, tuvoUbicacion: !!loc, items: itemsConPrecio, pago: v.pago } }));
+        setVentaRapida(v => ({ ...v, saving: false, done: { total, notaId: notaRef.id, ubicacionVenta, items: itemsConPrecio, pago: v.pago } }));
         flash('✅ Venta guardada — ' + fmtx(total));
       } catch (e) { flash('❌ ' + e.message); setVentaRapida(v => ({ ...v, saving: false })); }
     };
@@ -770,6 +900,22 @@
         flash('✅ Respaldo descargado');
       } catch (e) { flash('❌ ' + e.message); }
       setBackupGenerating(false);
+    };
+
+    // ---- Verificación de ubicación del día (solo admin) ----
+    const cargarUbicacionDia = async () => {
+      setUbicLoading(true);
+      try {
+        const desde = new Date(ubicFecha + 'T00:00:00').toISOString();
+        const hasta = new Date(ubicFecha + 'T23:59:59').toISOString();
+        const snap = await dbx.collection('notas').where('fecha', '>=', desde).where('fecha', '<=', hasta).get();
+        // Solo interesan las notas que pasaron por una validación de ubicación
+        // (ventas por ruta) — las del mostrador/oficina no traen este campo.
+        const notas = snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(n => n.ubicacionVenta);
+        notas.sort((a, b) => new Date(a.fecha) - new Date(b.fecha));
+        setUbicNotas(notas);
+      } catch (e) { flash('❌ ' + e.message); }
+      setUbicLoading(false);
     };
 
     // ---- Reporte de ventas ----
@@ -959,6 +1105,8 @@
     // presenta a trabajar). El personal de oficina ('usuario') no lo ve —
     // ellos usan 'ruta.js' para cargar camión, y ese ya es admin-only.
     if (currentUser.role !== 'admin' && currentUser.role !== 'repartidor') return null;
+    const puedeCamara = permisoAcciones(currentUser).camara;
+    _permisoCSV = currentUser.role === 'admin' || permisoAcciones(currentUser).csv;
 
     const activas = rutas.filter(r => r.estado === 'pendiente' || r.estado === 'en_curso');
     const hist = rutas.filter(r => r.estado === 'completada' || r.estado === 'cancelada');
@@ -1073,13 +1221,28 @@
                 <div>
                   <div ref={mapRef} style={{ width: '100%', height: 380, borderRadius: 12, background: 'var(--surface)' }} />
                   <div style={{ fontSize: 11, color: 'var(--ink-faint)', marginTop: 8, textAlign: 'center' }}>Muestra las rutas en curso que están compartiendo ubicación en vivo.</div>
+                  <div style={{ background: 'var(--surface)', borderRadius: 10, padding: 12, marginTop: 14 }}>
+                    <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 6 }}>🗺️ Mapa sin conexión</div>
+                    <div style={{ fontSize: 11, color: 'var(--ink-faint)', marginBottom: 8, lineHeight: 1.4 }}>
+                      Navega el mapa de arriba (pan/zoom) hasta cubrir tu zona de reparto y descárgala — queda guardada en <strong>este dispositivo</strong> para verse sin internet. Cada dispositivo (el tuyo, el de cada repartidor) necesita descargarla por separado, una vez, mientras tenga conexión.
+                    </div>
+                    {mapaOffline
+                      ? <div style={{ fontSize: 11, color: 'var(--ok-text)', marginBottom: 8 }}>✅ Zona descargada el {fDateTime(mapaOffline.fecha)} · {mapaOffline.tileCount} imágenes · zoom {mapaOffline.zMin}–{mapaOffline.zMax}</div>
+                      : <div style={{ fontSize: 11, color: 'var(--ink-faint)', marginBottom: 8 }}>Sin zona descargada todavía en este dispositivo.</div>}
+                    {descargandoMapa
+                      ? <div style={{ fontSize: 12, fontWeight: 700 }}>Descargando… {descargandoMapa.hecho}/{descargandoMapa.total}</div>
+                      : <Row style={{ gap: 8 }}>
+                          <button onClick={descargarZonaOffline} style={{ flex: 1, background: 'var(--accent)', color: 'var(--surface-2)', border: 'none', borderRadius: 8, padding: 10, fontWeight: 700, cursor: 'pointer', fontSize: 12 }}>📥 Descargar esta zona</button>
+                          {mapaOffline && <button onClick={borrarMapaOffline} style={{ background: 'var(--danger-bg)', color: 'var(--danger-text)', border: 'none', borderRadius: 8, padding: '0 14px', fontWeight: 700, cursor: 'pointer' }}>🗑️</button>}
+                        </Row>}
+                  </div>
                 </div>
               )}
 
               {tab === 'clientesqr' && (
                 <>
                   <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
-                    <button onClick={() => setClienteScanOpen(true)} style={{ flex: 1, background: 'var(--accent)', color: 'var(--surface-2)', border: 'none', borderRadius: 8, padding: 10, fontWeight: 700, cursor: 'pointer', fontSize: 12 }}>📷 Escanear para vender</button>
+                    {puedeCamara&&<button onClick={() => setClienteScanOpen(true)} style={{ flex: 1, background: 'var(--accent)', color: 'var(--surface-2)', border: 'none', borderRadius: 8, padding: 10, fontWeight: 700, cursor: 'pointer', fontSize: 12 }}>📷 Escanear para vender</button>}
                     <button onClick={() => setClienteBuscarOpen(o => !o)} style={{ flex: 1, background: 'var(--surface)', color: 'var(--ink-soft)', border: '1px solid var(--line-strong)', borderRadius: 8, padding: 10, fontWeight: 700, cursor: 'pointer', fontSize: 12 }}>🔍 Buscar manualmente</button>
                   </div>
                   {clienteBuscarOpen && (
@@ -1105,13 +1268,29 @@
                     </div>
                   )}
                   <input value={cliQSearch} onChange={e => setCliQSearch(e.target.value)} placeholder="🔍 Buscar en la lista…" style={inputStyle} />
+                  {(() => { const lista = clientes.filter(c => c.activo && c.nombre.toLowerCase().includes(cliQSearch.toLowerCase())); const todosSel = lista.length > 0 && lista.every(c => qrSel.includes(c.id));
+                    return <Row style={{ justifyContent: 'space-between', margin: '10px 0' }}>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--ink-soft)', cursor: 'pointer' }}>
+                        <input type="checkbox" checked={todosSel} onChange={() => setQrSel(todosSel ? [] : lista.map(c => c.id))} />
+                        Seleccionar todos ({lista.length})
+                      </label>
+                      {qrSel.length > 0 && (
+                        <button onClick={() => imprimirQRsMasivo(clientes.filter(c => qrSel.includes(c.id)))} disabled={qrMasivoLoading}
+                          style={{ background: 'var(--accent)', color: 'var(--surface-2)', border: 'none', borderRadius: 8, padding: '7px 12px', fontSize: 12, fontWeight: 700, cursor: 'pointer', opacity: qrMasivoLoading ? 0.6 : 1 }}>
+                          {qrMasivoLoading ? 'Generando…' : `🖨️ Imprimir seleccionados (${qrSel.length})`}
+                        </button>
+                      )}
+                    </Row>; })()}
                   {clientes.filter(c => c.activo && c.nombre.toLowerCase().includes(cliQSearch.toLowerCase())).map(c => (
-                    <div key={c.id} style={{ background: 'var(--surface)', borderRadius: 12, padding: 12, marginBottom: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <div>
-                        <div style={{ fontWeight: 700, fontSize: 13 }}>{c.nombre}</div>
-                        <div style={{ fontSize: 11, color: 'var(--ink-faint)' }}>{c.telefono || '—'}</div>
-                      </div>
-                      <button onClick={() => verQR(c)} style={{ background: 'var(--info-bg)', color: 'var(--info-text)', border: 'none', borderRadius: 8, padding: '7px 12px', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>🔲 QR</button>
+                    <div key={c.id} style={{ background: 'var(--surface)', borderRadius: 12, padding: 12, marginBottom: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, cursor: 'pointer' }}>
+                        <input type="checkbox" checked={qrSel.includes(c.id)} onChange={() => togQrSel(c.id)} />
+                        <div style={{ minWidth: 0 }}>
+                          <div style={{ fontWeight: 700, fontSize: 13 }}>{c.nombre}</div>
+                          <div style={{ fontSize: 11, color: 'var(--ink-faint)' }}>{c.telefono || '—'}</div>
+                        </div>
+                      </label>
+                      <button onClick={() => verQR(c)} style={{ background: 'var(--info-bg)', color: 'var(--info-text)', border: 'none', borderRadius: 8, padding: '7px 12px', fontSize: 12, fontWeight: 700, cursor: 'pointer', flexShrink: 0 }}>🔲 QR</button>
                     </div>
                   ))}
                 </>
@@ -1297,7 +1476,7 @@
               {tab === 'respaldo' && currentUser.role === 'admin' && (
                 <>
                   <div style={{ display: 'flex', gap: 6, marginBottom: 14 }}>
-                    {[['respaldo', '💾 Respaldo'], ['reporte', '📈 Reporte de ventas'], ['exportar', '📤 Exportar']].map(([v, l]) => (
+                    {[['respaldo', '💾 Respaldo'], ['ubicacion', '📍 Ubicación'], ['reporte', '📈 Reporte de ventas'], ['exportar', '📤 Exportar']].map(([v, l]) => (
                       <button key={v} onClick={() => setRespaldoSubTab(v)} style={{ flex: 1, padding: '8px 4px', borderRadius: 8, border: 'none', background: respaldoSubTab === v ? 'var(--accent)' : 'var(--surface)', color: respaldoSubTab === v ? 'var(--surface-2)' : 'var(--ink-soft)', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>{l}</button>
                     ))}
                   </div>
@@ -1315,6 +1494,53 @@
                       <div style={{ fontSize: 11, color: 'var(--ink-faint)' }}>Recomendado: hazlo cada semana, y guarda uno aparte cada fin de mes. Te avisamos aquí arriba cuando ya lleve más de 7 días.</div>
                     </>
                   )}
+
+                  {respaldoSubTab === 'ubicacion' && (() => {
+                    const ok = (ubicNotas || []).filter(n => n.ubicacionVenta.ok === true);
+                    const mal = (ubicNotas || []).filter(n => n.ubicacionVenta.ok === false);
+                    const sinDatos = (ubicNotas || []).filter(n => n.ubicacionVenta.ok === null);
+                    return <>
+                      <div style={{ fontSize: 11, color: 'var(--ink-faint)', marginBottom: 12, lineHeight: 1.5 }}>
+                        Compara dónde se hizo cada venta de ruta contra el domicilio registrado del cliente (radio de {RADIO_VISITA_METROS} m). Es solo informativo: nunca bloquea ni anula una venta.
+                      </div>
+                      <Row style={{ gap: 8, marginBottom: 12 }}>
+                        <input type="date" value={ubicFecha} onChange={e => setUbicFecha(e.target.value)} style={{ ...inputStyle, marginBottom: 0, flex: 1 }} />
+                        <button onClick={cargarUbicacionDia} disabled={ubicLoading} style={{ background: 'var(--accent)', color: 'var(--surface-2)', border: 'none', borderRadius: 8, padding: '0 16px', fontWeight: 700, cursor: 'pointer', opacity: ubicLoading ? 0.6 : 1 }}>{ubicLoading ? '…' : 'Ver'}</button>
+                      </Row>
+                      {ubicNotas === null && <div style={{ fontSize: 12, color: 'var(--ink-faint)', textAlign: 'center', padding: '20px 0' }}>Elige una fecha y toca "Ver".</div>}
+                      {ubicNotas !== null && ubicNotas.length === 0 && <div style={{ fontSize: 12, color: 'var(--ink-faint)', textAlign: 'center', padding: '20px 0' }}>Sin ventas de ruta con ubicación ese día.</div>}
+                      {ubicNotas !== null && ubicNotas.length > 0 && <>
+                        <Row style={{ gap: 8, marginBottom: 14 }}>
+                          <div style={{ flex: 1, background: 'var(--ok-bg)', borderRadius: 10, padding: '10px 8px', textAlign: 'center' }}>
+                            <div style={{ fontSize: 20, fontWeight: 800, color: 'var(--ok-text)' }}>{ok.length}</div>
+                            <div style={{ fontSize: 10, color: 'var(--ok-text)' }}>✅ Concuerdan</div>
+                          </div>
+                          <div style={{ flex: 1, background: 'var(--danger-bg)', borderRadius: 10, padding: '10px 8px', textAlign: 'center' }}>
+                            <div style={{ fontSize: 20, fontWeight: 800, color: 'var(--danger-text)' }}>{mal.length}</div>
+                            <div style={{ fontSize: 10, color: 'var(--danger-text)' }}>⚠️ No concuerdan</div>
+                          </div>
+                          <div style={{ flex: 1, background: 'var(--surface)', borderRadius: 10, padding: '10px 8px', textAlign: 'center' }}>
+                            <div style={{ fontSize: 20, fontWeight: 800, color: 'var(--ink-faint)' }}>{sinDatos.length}</div>
+                            <div style={{ fontSize: 10, color: 'var(--ink-faint)' }}>➖ Sin datos</div>
+                          </div>
+                        </Row>
+                        {mal.length > 0 && <>
+                          <div style={{ fontSize: 11, color: 'var(--danger-text)', fontWeight: 700, marginBottom: 8 }}>VENTAS FUERA DE RANGO</div>
+                          {mal.map(n => (
+                            <div key={n.id} style={{ background: 'var(--danger-bg)', borderRadius: 10, padding: '10px 12px', marginBottom: 6 }}>
+                              <Row style={{ justifyContent: 'space-between' }}>
+                                <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--danger-text)' }}>{n.clienteNombre}</span>
+                                <span style={{ fontSize: 12, color: 'var(--danger-text)' }}>{fmtx(n.total)}</span>
+                              </Row>
+                              <div style={{ fontSize: 11, color: 'var(--danger-text)', marginTop: 2 }}>{fDateTime(n.fecha)} · a {n.ubicacionVenta.distanciaM} m del domicilio registrado{n.capturadoPorNombre ? ' · ' + n.capturadoPorNombre : ''}</div>
+                            </div>
+                          ))}
+                        </>}
+                        {sinDatos.length > 0 && <div style={{ fontSize: 11, color: 'var(--ink-faint)', marginTop: mal.length ? 14 : 0 }}>"Sin datos" significa que el cliente no tiene ubicación registrada, o no se pudo obtener el GPS del repartidor en ese momento — no es evidencia de nada, solo falta información para comparar.</div>}
+                      </>}
+                    </>;
+                  })()}
+
 
                   {respaldoSubTab === 'reporte' && (
                     <>
@@ -1520,7 +1746,9 @@
                         <div style={{ fontSize: 44, marginBottom: 8 }}>✅</div>
                         <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 4 }}>Venta guardada</div>
                         <div style={{ color: 'var(--ink-soft)', marginBottom: 6 }}>{ventaRapida.cliente.nombre} · {fmtx(ventaRapida.done.total)}</div>
-                        <div style={{ fontSize: 11, color: ventaRapida.done.tuvoUbicacion ? 'var(--ok)' : 'var(--warn-text)', marginBottom: 20 }}>{ventaRapida.done.tuvoUbicacion ? '📍 Ubicación registrada' : '⚠️ No se pudo obtener ubicación'}</div>
+                        <div style={{ fontSize: 11, color: ventaRapida.done.ubicacionVenta.ok === false ? 'var(--danger-text)' : ventaRapida.done.ubicacionVenta.ok === true ? 'var(--ok)' : 'var(--warn-text)', marginBottom: 20 }}>
+                          {ventaRapida.done.ubicacionVenta.ok === true ? '📍 Ubicación confirmada' : ventaRapida.done.ubicacionVenta.ok === false ? `⚠️ Ubicación fuera de rango (${ventaRapida.done.ubicacionVenta.distanciaM} m)` : '📍 No se pudo validar la ubicación'}
+                        </div>
                         {ventaRapida.cliente.telefono && <button onClick={() => window.open(waVentaLink(ventaRapida.cliente, ventaRapida.done.items, ventaRapida.done.total, ventaRapida.done.pago), '_blank')} style={{ width: '100%', background: '#25d366', color: 'var(--ink)', border: 'none', borderRadius: 8, padding: 12, fontWeight: 700, cursor: 'pointer', marginBottom: 10 }}>📲 Enviar ticket por WhatsApp</button>}
                         <button onClick={() => setVentaRapida(null)} style={{ width: '100%', background: 'var(--surface-2)', color: 'var(--ink-soft)', border: '1px solid var(--line-strong)', borderRadius: 8, padding: 12, fontWeight: 700, cursor: 'pointer' }}>Cerrar</button>
                       </div>

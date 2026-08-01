@@ -3,7 +3,12 @@
 // Los DATOS (productos, clientes, etc.) los maneja Firestore con enablePersistence()
 // en el propio HTML — este SW no toca esos datos.
 
-const CACHE_NAME = 'distribupanel-shell-v12'; // ⬆️ v12: firebase-init.js activa App Check (reCAPTCHA v3)
+const CACHE_NAME = 'distribupanel-shell-v16'; // ⬆️ v16: mapa offline (descarga de tiles por zona, cache separado y persistente)
+// Cache aparte para tiles de mapa offline: a propósito NO se borra cuando
+// sube la versión del shell (ver 'activate' más abajo) — si viviera en
+// CACHE_NAME, cada actualización de la app borraría el mapa descargado.
+const TILES_CACHE = 'distribupanel-tiles-v1';
+const TILE_HOST = 'tile.openstreetmap.org';
 
 // Ajusta la ruta de tu HTML principal si tu index no se llama exactamente así.
 const SHELL_URLS = [
@@ -50,12 +55,12 @@ self.addEventListener('install', (event) => {
   );
 });
 
-// --- Activación: limpia caches viejos ---
+// --- Activación: limpia caches viejos (nunca el de tiles de mapa) ---
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((keys) =>
       Promise.all(
-        keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k))
+        keys.filter((k) => k !== CACHE_NAME && k !== TILES_CACHE).map((k) => caches.delete(k))
       )
     ).then(() => self.clients.claim())
   );
@@ -75,6 +80,24 @@ self.addEventListener('fetch', (event) => {
     request.url.includes('securetoken.googleapis.com')
   ) {
     return; // deja pasar sin interceptar
+  }
+
+  // Tiles de mapa (OpenStreetMap): cache-first puro, sin red si ya están
+  // descargadas — esto es lo que hace que el mapa funcione sin conexión
+  // dentro de la zona que se haya descargado desde la pestaña Mapa.
+  if (request.url.includes(TILE_HOST)) {
+    event.respondWith(
+      caches.open(TILES_CACHE).then((cache) =>
+        cache.match(request).then((cached) => {
+          if (cached) return cached;
+          return fetch(request).then((res) => {
+            if (res && res.ok) cache.put(request, res.clone());
+            return res;
+          }).catch(() => cached);
+        })
+      )
+    );
+    return;
   }
 
   // Navegación (cargar la página principal)

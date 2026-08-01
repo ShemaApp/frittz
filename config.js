@@ -84,7 +84,7 @@ function Configuracion({currentUser,onBack,onLogout,abrirUsuarios,onAbrirUsuario
     {msg&&<div style={{background:'var(--ok-bg)',borderRadius:8,padding:'8px 12px',fontSize:13,color:'var(--ok-text)',marginBottom:12}}>{msg}</div>}
     {err&&<div style={{background:'var(--danger-bg)',borderRadius:8,padding:'8px 12px',fontSize:13,color:'var(--danger-text)',marginBottom:12}}>{err}</div>}
     <Row style={{gap:6,marginBottom:16}}>
-      {[['perfil','👤 Perfil'],['password','🔑 Contraseña'],['pin','🔒 PIN'],...(isAdmin?[['usuarios','👥 Usuarios'],['permisos','🔐 Permisos']]:[])].map(([v,l])=>(
+      {[['perfil','👤 Perfil'],...(permisoAcciones(currentUser).password?[['password','🔑 Contraseña']]:[]),['pin','🔒 PIN'],...(isAdmin?[['usuarios','👥 Usuarios'],['permisos','🔐 Permisos']]:[])].map(([v,l])=>(
         <button key={v} onClick={()=>{setSub(v);setErr('');setMsg('');}} style={{flex:1,padding:'8px 2px',borderRadius:8,border:'none',background:sub===v?'var(--accent)':'var(--surface-2)',color:sub===v?'var(--ink)':'var(--ink-soft)',fontSize:10,fontWeight:700,cursor:'pointer'}}>{l}</button>
       ))}
     </Row>

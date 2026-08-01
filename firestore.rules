@@ -2,6 +2,22 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    // ── Cobertura de colecciones ──
+    // Cada colección que el código realmente usa (grep de .collection('...')
+    // en todos los .js, incluida la lista dinámica del respaldo en
+    // rutas-repartidores.js) tiene su propio bloque `match` más abajo, con
+    // reglas explícitas de read/create/update/delete. Ninguna depende del
+    // catch-all final para funcionar — ese catch-all solo existe para
+    // bloquear colecciones NO anticipadas (typos, nombres nuevos que se
+    // agreguen en el código sin agregar su regla aquí).
+    //   ✅ productos            ✅ notas              ✅ rutas_meta
+    //   ✅ inventario_historial ✅ creditos           ✅ devoluciones
+    //   ✅ clientes             ✅ rutas              ✅ gastos
+    //   ✅ usuarios             ✅ _meta
+    // Si agregas una colección nueva en el código: agrégala aquí también, o
+    // sus lecturas/escrituras van a fallar en silencio (ya nos pasó con
+    // rutas_meta y devoluciones — quedaron sin regla un tiempo).
+
     // ── Helpers ──
     function signedIn() {
       return request.auth != null;
@@ -17,27 +33,46 @@ service cloud.firestore {
       // en la mayoría de las colecciones.
       return signedIn() && (role() == 'admin' || role() == 'usuario');
     }
+    function datosUsuario() {
+      return get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data;
+    }
+    // Refleja los permisos concedidos desde Configuración → Permisos (permisos.js)
+    // en la app: cada usuario puede tener overrides en usuarios/{uid}.permisos.edita
+    // que se combinan sobre el valor por defecto de su rol (mismo criterio que
+    // permisoEdita() en app-core.js — si se cambia uno, cambiar el otro).
+    // 'recurso' es uno de: 'productos', 'clientes', 'creditos'.
+    function permisoEdicion(recurso) {
+      let datos = datosUsuario();
+      let overrides = ('permisos' in datos) && ('edita' in datos.permisos) ? datos.permisos.edita : {};
+      let porDefecto = datos.role == 'usuario'; // admin: siempre true (ver abajo); repartidor: false por defecto
+      let valor = recurso in overrides ? overrides[recurso] == true : porDefecto;
+      return signedIn() && (datos.role == 'admin' || valor);
+    }
 
     // ── productos ──
     match /productos/{id} {
       allow read: if signedIn();
-      allow create, update: if isStaff();
+      allow create, update: if permisoEdicion('productos');
       allow delete: if isAdmin();
     }
 
     // ── inventario_historial ──
-    // Solo admin lee. Se exige que quien crea el registro sea quien dice ser
-    // (usuarioUid debe coincidir con el uid autenticado).
+    // Solo admin lee. Cualquiera autenticado puede crear su propio registro
+    // (usuarioUid debe coincidir con quien está autenticado) — la escritura
+    // real de stock que acompaña a este log ya está protegida por su propia
+    // regla (productos: permisoEdicion), así que aquí basta con el ownership.
+    // Repartidor entra aquí al hacer conteos de inventario o reingresos de
+    // devolución desde rutas-repartidores.js.
     match /inventario_historial/{id} {
       allow read: if isAdmin();
-      allow create: if isStaff() && request.resource.data.usuarioUid == request.auth.uid;
+      allow create: if signedIn() && request.resource.data.usuarioUid == request.auth.uid;
       allow update, delete: if false;
     }
 
     // ── clientes ──
     match /clientes/{id} {
       allow read: if signedIn();
-      allow create, update: if signedIn();
+      allow create, update: if permisoEdicion('clientes');
       allow delete: if false;
     }
 
@@ -53,15 +88,41 @@ service cloud.firestore {
     // ── creditos ──
     match /creditos/{id} {
       allow read: if signedIn();
-      allow create, update: if signedIn();
+      allow create, update: if permisoEdicion('creditos');
       allow delete: if false;
     }
 
     // ── rutas ──
+    // "Cargar camión" (ruta.js). Ahora es una pantalla exclusiva de admin en
+    // la interfaz, así que la regla ya no necesita cubrir repartidor/usuario.
+    // Si algún día vuelves a dar este permiso a 'usuario' desde Configuración
+    // → Permisos, actualiza esta regla también (hoy no está en la lista de
+    // recursos de permisoEdicion, solo productos/clientes/creditos).
     match /rutas/{id} {
       allow read: if signedIn();
-      allow create, update: if signedIn();
+      allow create, update: if isAdmin();
       allow delete: if false;
+    }
+
+    // ── rutas_meta (asignación de repartidor/vehículo/zona + seguimiento
+    // GPS/checklist — panel de rutas-repartidores.js) ──
+    // Ownership real: admin puede todo (crear, reasignar, tomar una ruta si
+    // el repartidor asignado no se presenta a trabajar); un repartidor solo
+    // puede crear/actualizar rutas donde repartidorId sea su propio uid.
+    match /rutas_meta/{id} {
+      allow read: if signedIn();
+      allow create: if isAdmin()
+        || (signedIn() && role() == 'repartidor' && request.resource.data.repartidorId == request.auth.uid);
+      allow update: if isAdmin()
+        || (signedIn() && role() == 'repartidor' && resource.data.repartidorId == request.auth.uid);
+      allow delete: if isAdmin();
+    }
+
+    // ── devoluciones (usado por rutas-repartidores.js, panel de admin/repartidor) ──
+    match /devoluciones/{id} {
+      allow read: if signedIn();
+      allow create: if isAdmin() || (signedIn() && role() == 'repartidor');
+      allow update, delete: if isAdmin();
     }
 
     // ── gastos (Gerencia: salidas de efectivo/tarjeta) ──
@@ -82,11 +143,19 @@ service cloud.firestore {
     }
 
     // ── _meta (control interno de sembrado de datos) ──
+    // Lectura abierta porque app.js revisa _meta/seed en cada inicio de
+    // sesión (para decidir si sembrar datos de ejemplo). Escritura solo
+    // admin: antes cualquier persona autenticada podía escribir aquí.
     match /_meta/{id} {
-      allow read, write: if signedIn();
+      allow read: if signedIn();
+      allow write: if isAdmin();
     }
 
     // ── Todo lo demás: denegado por defecto ──
+    // Nunca debería activarse en operación normal — es un backstop de
+    // seguridad, no una regla "viva". Si alguna vez una acción legítima
+    // termina cayendo aquí, es señal de que falta agregar esa colección
+    // arriba, en la lista de "Cobertura de colecciones".
     match /{document=**} {
       allow read, write: if false;
     }

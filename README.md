@@ -47,12 +47,20 @@ retirar, por persona:
   Créditos, Ruta, Gerencia).
 - **Edición de formularios** (alta/edición de productos y clientes, registrar
   abonos a créditos).
+- **Otras acciones**: usar la cámara (escanear QR de cliente en
+  `rutas-repartidores.js`), descargar reportes en CSV, y cambiar su propia
+  contraseña.
 
-Los valores por defecto están en `TABS_DEFAULT_ROL` / `EDITA_DEFAULT_ROL`
-(`app-core.js`); el admin los sobreescribe por usuario, y eso se guarda en
-`usuarios/{uid}.permisos`. **Estos mismos permisos están reflejados en
+Los valores por defecto están en `TABS_DEFAULT_ROL` / `EDITA_DEFAULT_ROL` /
+`ACCIONES_DEFAULT_ROL` (`app-core.js`); el admin los sobreescribe por
+usuario, y eso se guarda en `usuarios/{uid}.permisos`.
+
+Los dos primeros grupos ("tabs" y "edita") **están reflejados en
 `firestore.rules`** (función `permisoEdicion()`) — no son solo un filtro de
-interfaz, Firestore los hace cumplir del lado del servidor.
+interfaz, Firestore los hace cumplir del lado del servidor. El tercer grupo
+("acciones": cámara, CSV, contraseña) es puramente de interfaz/dispositivo —
+no hay una escritura de Firestore equivalente que una regla pueda proteger,
+así que dependen de que el propio código de la app los respete.
 
 ## Firestore
 
@@ -203,6 +211,158 @@ quieres instalar el CLI o para una primera prueba rápida.
 ⚠️ Importante para cuando empaquetes como TWA: reCAPTCHA v3 sigue
 funcionando porque una TWA sigue siendo Chrome real cargando tu sitio, no un
 WebView aparte — no hace falta un proveedor distinto para Android.
+
+## Nota: cómo funcionan los QR de clientes
+
+- El QR de un cliente codifica siempre `PDLC-CLIENTE:` + el **ID del
+  documento** de ese cliente en Firestore. Ese ID se asigna una sola vez al
+  crear el cliente y no cambia — así que el QR tampoco cambia mientras no
+  borres y vuelvas a crear al cliente.
+- La generación es determinística (misma librería, mismo texto de entrada,
+  mismo tamaño): da igual en qué dispositivo lo generes o imprimas, siempre
+  sale el mismo patrón.
+- **No hay ninguna imagen de QR guardada en Firestore ni en ningún otro
+  lado.** Cada vez que se abre el modal de un cliente o se usa "Imprimir
+  seleccionados", el QR se dibuja al vuelo en un `<canvas>` temporal a partir
+  del ID — es cálculo local, no lectura ni escritura de datos. Imprimir 1 vez
+  o 500 veces da el mismo resultado y no modifica nada.
+
+## Observaciones sobre `rutas-repartidores.js`
+
+Notas técnicas que salieron de revisar el archivo a fondo, útiles para quien
+lo mantenga después:
+
+- **Dos colecciones relacionadas, no una.** Este archivo trabaja con
+  `rutas` (creada por `ruta.js` al "cargar camión": productos cargados +
+  entregas — lo que usan `guiaHTML`/`imprimirGuia`/`waGuiaLink` para el
+  comprobante) y con `rutas_meta`, su propia colección, para la asignación de
+  repartidor, GPS y checklist de paradas. Son complementarias: una ruta real
+  de trabajo normalmente tiene un documento en cada colección.
+- **Los enlaces de WhatsApp asumen número mexicano.** `waGuiaLink` y
+  `waVentaLink` anteponen `52` cuando el teléfono tiene 10 dígitos y no trae
+  ya un código de país. Si Productos de la Costa reparte fuera de México (o
+  algún cliente tiene número de otro país), esos enlaces van a salir mal.
+- **El seguimiento GPS en vivo (`iniciarSeguimiento`) no es "siempre
+  activo".** Usa `navigator.geolocation.watchPosition`, limitado a máximo 1
+  escritura cada 20 segundos. Esto solo funciona mientras el navegador
+  mantiene la pestaña/app activa — la mayoría de navegadores móviles (Chrome
+  incluido, así que también dentro de una TWA) suspenden estos watchers
+  cuando se apaga la pantalla o la app pasa a segundo plano. Para rastreo
+  verdaderamente continuo con la pantalla apagada haría falta un servicio en
+  segundo plano nativo, que una TWA por sí sola no da.
+- **Falta un permiso de "Compartir ubicación" en Permisos.** Se agregó el
+  toggle de Cámara, pero no uno específico para el GPS en vivo — hoy
+  cualquier repartidor con acceso al panel puede iniciar seguimiento. Si
+  quieres controlarlo por persona, es la misma mecánica que ya existe para
+  cámara/CSV/contraseña (`ACCIONES_INFO` en `app-core.js`).
+- **El respaldo (`generarRespaldo`) es manual y local, no automático.**
+  Descarga un `.json` con 9 colecciones completas al dispositivo de quien lo
+  genera, y guarda la fecha en `_meta/backups` (por eso el aviso "sin
+  respaldo hace N días" en la pantalla de inicio del panel). Si ese
+  dispositivo se pierde antes de respaldar el archivo en otro lado, no hay
+  copia. Para redundancia real conviene además programar las [exportaciones
+  automáticas de Firestore a Cloud
+  Storage](https://firebase.google.com/docs/firestore/manage-data/export-import)
+  desde Firebase Console — eso corre solo, sin depender de que alguien toque
+  un botón.
+- **Los QR ya funcionan offline.** Tanto la librería de escaneo
+  (`html5-qrcode`) como la de generación (`qrcode.min.js`, que se carga bajo
+  demanda) están en la lista de precache de `sw.js`, así que ver/imprimir/
+  escanear QR sigue funcionando sin conexión una vez que el service worker
+  las cacheó la primera vez.
+
+## Validación de ubicación en ventas de ruta
+
+Compara, sin bloquear nunca la venta, si una entrega se hizo cerca del
+domicilio registrado del cliente:
+
+1. **El cliente tiene una ubicación registrada** (`clientes/{id}.ubicacion`,
+   `{lat, lng, fecha}`): se captura al darlo de alta en el campo
+   (`rutas-repartidores.js`, automático al crear) o manualmente desde
+   Clientes en la app principal (`clientes.js`, botón "📍 Usar mi ubicación
+   actual").
+2. **Al completar una venta de ruta** — ya sea por escaneo de QR
+   (`guardarVentaRapida`) o al confirmar una entrega de una parada planeada
+   (`confirmarEntrega`) — se captura el GPS del repartidor en ese instante y
+   se compara contra la ubicación del cliente con la fórmula de Haversine
+   (`distanciaMetros` en `app-core.js`). Radio: `RADIO_VISITA_METROS = 150`
+   (el mismo que usa el proyecto Sello, por consistencia).
+3. **En la nota nunca se guarda la coordenada cruda del repartidor** — solo
+   el resultado: `ubicacionVenta: { ok: true|false|null, distanciaM }`.
+   `null` significa "no se pudo comparar" (cliente sin ubicación registrada,
+   o GPS no disponible en ese momento) — no es una alerta, es falta de datos.
+   Esto es intencional: no hay backend propio en esta app (ver la
+   conversación sobre API keys), así que un "cifrado" real no existe aquí —
+   simplemente no se guarda el dato sensible en primer lugar, que logra el
+   mismo objetivo de forma más simple y honesta.
+4. **Resumen para el admin**: dentro del panel de rutas → pestaña
+   "Respaldo" → sub-pestaña **📍 Ubicación**. Elige una fecha, ve cuántas
+   ventas concuerdan / no concuerdan / no tienen datos suficientes, y el
+   detalle de cada venta fuera de rango. Puramente informativo — la venta ya
+   se guardó, esto no la revierte ni la bloquea.
+
+### Dos bugs más que aparecieron al construir esto (ya corregidos)
+
+`guardarVentaRapida` y `confirmarEntrega` creaban la nota **sin el campo
+`capturadoPorUid`**, que la regla de `notas` exige para poder crear
+(`request.resource.data.capturadoPorUid == request.auth.uid`). Es decir:
+**la venta por escaneo de QR y la confirmación de entregas de ruta llevaban
+tiempo fallando al guardar**, con o sin este cambio de ubicación de por
+medio. Ya corregido — ambas funciones ahora sí incluyen ese campo.
+
+### Algo a tener en cuenta al probar (no es un bug, es el sistema de permisos funcionando)
+
+Si un repartidor completa una venta **a crédito** desde el escaneo de QR o al
+confirmar una entrega, esa acción también escribe en la colección
+`creditos` — y esa escritura exige el permiso "Editar créditos"
+(`permisoEdicion('creditos')` en `firestore.rules`), que **por default es
+`false` para repartidor**. Como ambas escrituras van en el mismo `batch`,
+si falta ese permiso **toda la venta falla, no solo el crédito** — el
+repartidor va a ver un error al intentar guardar. Si tus repartidores venden
+a crédito en la calle, actívales "Editar créditos" desde Configuración →
+Permisos; si las ventas a crédito solo deben pasar por oficina, déjalo así a
+propósito.
+
+## Mapa offline (zona fija, descargada una vez)
+
+Pestaña "🗺️ Mapa" del panel de rutas (admin) → sección **Mapa sin conexión**:
+
+1. Navega el mapa en vivo (pan/zoom) hasta cubrir la zona/ciudad de reparto.
+2. "📥 Descargar esta zona" — calcula todos los tiles (imágenes de mapa) de
+   esa zona en un rango de zoom (nivel actual hasta +3, entre 12 y 17), y los
+   descarga con 6 peticiones en paralelo. Antes de empezar te dice cuántos
+   tiles son y el peso aproximado.
+3. Los tiles se guardan en un cache del service worker aparte del cache del
+   "shell" de la app (`distribupanel-tiles-v1`), justo para que **no se
+   borren cada vez que actualizas la app** — el cache del shell sí se
+   reemplaza en cada versión nueva, este no.
+4. Una vez descargada, el mapa se ve sin internet dentro de esa zona — no
+   hace falta ningún cambio en cómo Leaflet pide los tiles: el service
+   worker los intercepta y responde desde el cache automáticamente.
+
+### Limitaciones a tener claras
+
+- **Es por dispositivo, no por cuenta.** El cache del service worker vive en
+  el navegador de cada aparato. Si quieres que el teléfono de un repartidor
+  tenga el mapa offline, ese teléfono necesita abrir esta pantalla y
+  descargar la zona — no se sincroniza solo porque tú la descargaste en la
+  oficina.
+- **Hoy la pestaña "Mapa" (y por lo tanto la descarga) es solo para
+  admin.** Si quieres que los repartidores puedan descargar el mapa desde
+  sus propios teléfonos (probablemente lo más útil, ya que son quienes
+  pierden señal en la calle), hay que abrirles acceso a esta pestaña —
+  ahora mismo no lo tienen. Es un cambio chico, pendiente de que lo pidas.
+- Se fijó el tile layer de Leaflet a un solo subdominio
+  (`a.tile.openstreetmap.org`, antes rotaba entre `{s}`) — necesario para
+  que las peticiones en vivo siempre coincidan con lo que se descargó
+  offline. Si el mapa se ve raro/lento estando en línea, no es un bug: es
+  este cambio a propósito.
+- La descarga usa el servidor gratuito de OpenStreetMap. Por su política de
+  uso, no conviene abusar de descargas masivas — por eso el límite de
+  ~3,500 tiles por descarga (te lo avisa si te pasas: acércate más con el
+  zoom). Si más adelante necesitas zonas grandes o muchos repartidores
+  descargando seguido, vale la pena migrar a un proveedor con soporte
+  offline dedicado (Mapbox/MapTiler, de pago).
 
 ## Roadmap / pendientes
 

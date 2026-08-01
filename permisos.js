@@ -21,7 +21,7 @@ function Permisos({currentUser}){
   const cambiar=async(u,grupo,clave,valor)=>{
     const key=u.id+grupo+clave;
     setGuardando(key); setErr('');
-    const base=grupo==='tabs'?permisoTabs(u):permisoEdita(u);
+    const base=grupo==='tabs'?permisoTabs(u):grupo==='edita'?permisoEdita(u):permisoAcciones(u);
     const nuevo={...base,[clave]:valor};
     try{
       await db.collection('usuarios').doc(u.id).update({['permisos.'+grupo]:nuevo});
@@ -43,6 +43,7 @@ function Permisos({currentUser}){
     {users&&users.map(u=>{
       const tabs=permisoTabs(u);
       const edita=permisoEdita(u);
+      const acciones=permisoAcciones(u);
       const open=abierto===u.id;
       return <Card key={u.id} style={{padding:0,overflow:'hidden'}}>
         <button onClick={()=>setAbierto(open?null:u.id)} style={{width:'100%',background:'none',border:'none',cursor:'pointer',padding:'12px 14px',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
@@ -70,11 +71,18 @@ function Permisos({currentUser}){
               <Toggle checked={!!edita[id]} disabled={guardando===u.id+'edita'+id} onChange={v=>cambiar(u,'edita',id,v)}/>
             </Row>
           ))}
+          <div style={{fontSize:10,color:'var(--ink-faint)',textTransform:'uppercase',letterSpacing:'.06em',fontFamily:'var(--font-mono)',fontWeight:600,margin:'14px 0 6px'}}>Otras acciones</div>
+          {ACCIONES_INFO.map(([id,ico,lbl])=>(
+            <Row key={id} style={{justifyContent:'space-between',padding:'7px 0',borderBottom:'1px solid var(--line)'}}>
+              <Row style={{gap:8}}><span>{ico}</span><span style={{fontSize:13}}>{lbl}</span></Row>
+              <Toggle checked={!!acciones[id]} disabled={guardando===u.id+'acciones'+id} onChange={v=>cambiar(u,'acciones',id,v)}/>
+            </Row>
+          ))}
         </div>}
       </Card>;
     })}
     <div style={{fontSize:11,color:'var(--ink-faint)',marginTop:10,lineHeight:1.5}}>
-      Estos interruptores controlan lo que cada persona ve en la app <strong>y</strong> lo que Firestore le deja guardar — están reflejados en <code>firestore.rules</code>. Si cambias esta lista de recursos (productos/clientes/créditos), recuerda actualizar también <code>permisoEdicion()</code> en las reglas.
+      "Ver pantalla" y "Editar formulario" están reflejados también en <code>firestore.rules</code> — Firestore los hace cumplir aunque alguien intente saltarse la app. "Otras acciones" (cámara, CSV, contraseña) son permisos de la interfaz/del dispositivo, no de Firestore: no hay nada que una regla de base de datos pueda restringir ahí, así que dependen de que la app los respete.
     </div>
   </div>;
 }

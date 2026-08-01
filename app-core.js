@@ -74,6 +74,21 @@ function Modal({title,onClose,children}){
 }
 
 /* ── Interruptor ON/OFF reutilizable ── */
+/* ── Validación de ubicación de venta (repartidor vs. domicilio del cliente) ──
+   Fórmula de Haversine: distancia en metros entre dos coordenadas. Se usa
+   para comparar dónde se hizo una venta contra la ubicación registrada del
+   cliente, sin exponer nunca la coordenada cruda del repartidor en la nota
+   (ver rutas-repartidores.js: guardarVentaRapida / confirmarEntrega). */
+function distanciaMetros(lat1,lng1,lat2,lng2){
+  const R=6371000, toRad=d=>d*Math.PI/180;
+  const dLat=toRad(lat2-lat1), dLng=toRad(lng2-lng1);
+  const a=Math.sin(dLat/2)**2 + Math.cos(toRad(lat1))*Math.cos(toRad(lat2))*Math.sin(dLng/2)**2;
+  return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
+}
+// Mismo radio que ya usa el proyecto Sello para su geocerca — así el criterio
+// de "¿llegó al cliente?" es consistente entre ambos proyectos.
+const RADIO_VISITA_METROS=150;
+
 const Toggle = ({checked,onChange,disabled=false})=>(
   <button
     onClick={()=>!disabled&&onChange(!checked)}
@@ -106,6 +121,19 @@ const EDICION_INFO = [
   ['clientes','👥','Editar / dar de alta clientes'],
   ['creditos','💳','Registrar abonos a créditos'],
 ];
+// Permisos sueltos que no son ni "ver pantalla" ni "editar formulario":
+// acciones puntuales del dispositivo o de la cuenta.
+const ACCIONES_INFO = [
+  ['camara','📷','Usar cámara (escanear QR de cliente)'],
+  ['csv','📄','Descargar reportes en CSV'],
+  ['password','🔑','Cambiar su propia contraseña'],
+];
+const ACCIONES_DEFAULT_ROL = {
+  admin:      {camara:true, csv:true,  password:true},
+  usuario:    {camara:false,csv:true,  password:true},
+  repartidor: {camara:true, csv:false, password:true},
+};
+const permisoAcciones = u => u?.role==='admin' ? ACCIONES_DEFAULT_ROL.admin : ({...(ACCIONES_DEFAULT_ROL[u?.role]||ACCIONES_DEFAULT_ROL.usuario), ...(u?.permisos?.acciones||{})});
 const TABS_DEFAULT_ROL = {
   // 'ruta' (cargar camión, ruta.js) es exclusiva del admin: es quien carga el
   // camión y arranca la ruta. 'gerencia' aquí es solo el default de lectura

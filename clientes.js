@@ -11,10 +11,20 @@ function Clientes({clientes,notas,creditos,currentUser}){
     .filter(c=>c.nombre.toLowerCase().includes(q.toLowerCase()));
   const save=async()=>{
     if(!form.nombre) return;
-    const item={nombre:form.nombre,telefono:form.telefono||'',domicilio:form.domicilio||'',activo:form.activo!==undefined?form.activo:true};
+    const item={nombre:form.nombre,telefono:form.telefono||'',domicilio:form.domicilio||'',activo:form.activo!==undefined?form.activo:true,ubicacion:form.ubicacion||null};
     if(form.id) await db.collection('clientes').doc(form.id).update(item);
     else await db.collection('clientes').add(item);
     setForm(null);
+  };
+  const [capturando,setCapturando]=useState(false);
+  const capturarUbicacion=()=>{
+    if(!navigator.geolocation){ alert('Este dispositivo no soporta ubicación.'); return; }
+    setCapturando(true);
+    navigator.geolocation.getCurrentPosition(
+      p=>{ setForm(f=>({...f,ubicacion:{lat:p.coords.latitude,lng:p.coords.longitude,fecha:new Date().toISOString()}})); setCapturando(false); },
+      ()=>{ alert('No se pudo obtener la ubicación. Revisa los permisos del navegador.'); setCapturando(false); },
+      {enableHighAccuracy:true,timeout:8000}
+    );
   };
   return <div style={{padding:'16px 12px'}}>
     <Row style={{justifyContent:'space-between',marginBottom:12}}>
@@ -34,6 +44,7 @@ function Clientes({clientes,notas,creditos,currentUser}){
             <span style={{fontWeight:700,fontSize:14}}>{c.nombre}</span>
             {!c.activo&&<Tag color="var(--ink-soft)">Inactivo</Tag>}
             {cmap[c.id]&&<Tag color="var(--warn-text)">💳 {fmt(cmap[c.id])}</Tag>}
+            {c.ubicacion?<Tag color="var(--ok-text)">📍 GPS</Tag>:<Tag color="var(--ink-faint)">📍 Sin GPS</Tag>}
           </Row>
           <div style={{fontSize:12,color:'var(--ink-soft)',marginTop:3}}>📱 {c.telefono||'—'}</div>
           <div style={{fontSize:12,color:'var(--ink-soft)'}}>📍 {c.domicilio||'—'}</div>
@@ -61,6 +72,16 @@ function Clientes({clientes,notas,creditos,currentUser}){
       <Lbl>Nombre</Lbl><Inp value={form.nombre} onChange={e=>setForm(f=>({...f,nombre:e.target.value}))} style={{marginBottom:10}}/>
       <Lbl>Teléfono</Lbl><Inp type="tel" value={form.telefono} onChange={e=>setForm(f=>({...f,telefono:e.target.value}))} style={{marginBottom:10}}/>
       <Lbl>Domicilio</Lbl><Inp value={form.domicilio} onChange={e=>setForm(f=>({...f,domicilio:e.target.value}))} style={{marginBottom:16}}/>
+      <Lbl>Ubicación GPS</Lbl>
+      <div style={{marginBottom:16}}>
+        {form.ubicacion
+          ?<Row style={{justifyContent:'space-between',background:'var(--ok-bg)',borderRadius:8,padding:'8px 10px'}}>
+            <span style={{fontSize:12,color:'var(--ok-text)'}}>✅ Ubicación guardada ({form.ubicacion.lat.toFixed(5)}, {form.ubicacion.lng.toFixed(5)})</span>
+            <button onClick={()=>setForm(f=>({...f,ubicacion:null}))} style={{background:'none',border:'none',color:'var(--danger-text)',cursor:'pointer',fontSize:11}}>Quitar</button>
+          </Row>
+          :<BOut onClick={capturarUbicacion} style={{width:'100%'}} disabled={capturando}>{capturando?'Obteniendo ubicación…':'📍 Usar mi ubicación actual'}</BOut>}
+        <div style={{fontSize:11,color:'var(--ink-faint)',marginTop:6,lineHeight:1.4}}>Ideal: captúrala parado en el domicilio del cliente. Se usa para validar, sin bloquear, que las ventas por ruta se hicieron cerca de aquí.</div>
+      </div>
       <BFill onClick={save} style={{width:'100%'}}>💾 Guardar</BFill>
     </Modal>}
   </div>;
