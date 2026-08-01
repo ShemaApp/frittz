@@ -1,107 +1,230 @@
-# Documentación — Productos de la Costa
+# Frittz — Productos de la Costa
 
-Esta carpeta es solo lectura: instrucciones y enlaces para que tú (o quien
-despliegue el proyecto) lo haga por su cuenta. Yo no ejecuté, desplegué ni
-configuré nada de Firebase — eso requiere acceso a tu cuenta de Google/Firebase
-Console, que yo no tengo.
+Panel de administración y reparto para Productos de la Costa: productos, clientes,
+pedidos, créditos, rutas de reparto y gerencia. PWA de solo-cliente (sin backend
+propio) sobre **React + Firebase Firestore**, sin paso de build — Babel se
+transpila en el navegador (`type="text/babel"`).
 
-## 1. Qué cambió en la estructura de archivos
+## Arquitectura
 
-Antes, la configuración de Firebase vivía mezclada dentro de `index.html`.
-Ahora:
+- **Sin bundler.** Cada `.js` es un `<script type="text/babel">` cargado en
+  orden desde `index.html`. React/ReactDOM/Firebase vienen de CDN.
+- **Firebase compat SDK** (`firebase-app-compat`, `firebase-firestore-compat`,
+  `firebase-auth-compat`) — ver `firebase-init.js`.
+- **PWA offline-first**: `sw.js` precachea el shell (todos los `.js`,
+  `index.html`, fuentes) para que la app cargue sin conexión; los datos siguen
+  viniendo de Firestore (que ya maneja su propia caché/offline local).
+- **`rutas-repartidores.js`** es un panel independiente que se monta en su
+  propio nodo del DOM (no vive dentro del árbol de `<App/>` de `app.js`) —
+  cubre ruteo, checklist de entrega, GPS, QR, conteo de inventario,
+  devoluciones y reportes/backup de admin.
 
+### Estructura de archivos
+
+| Archivo | Contenido |
+|---|---|
+| `firebase-init.js` | Config e inicialización de Firebase |
+| `app-core.js` | Átomos de UI compartidos (botones, inputs, `Toggle`, etc.) y el modelo de permisos (`permisoTabs`, `permisoEdita`) |
+| `auth.js` | Login, PIN local, alta del primer usuario como admin |
+| `app.js` | Shell principal: navegación por pestañas, `<App/>` |
+| `dashboard.js` | Pantalla de inicio |
+| `productos.js`, `clientes.js`, `pedidos.js`, `creditos.js`, `ruta.js` | Pantallas de cada pestaña |
+| `gerencia.js` | Reportes financieros |
+| `rutas-repartidores.js` | Panel de reparto avanzado (rutas, GPS, QR, inventario, devoluciones) |
+| `config.js` | Configuración: perfil, contraseña, PIN, usuarios, **permisos** |
+| `permisos.js` | Pantalla de gestión de permisos (admin) |
+| `firestore.rules` | Reglas de seguridad de Firestore |
+| `manifest.json`, `sw.js` | PWA (instalable, offline) |
+
+## Roles y permisos
+
+Tres roles: `admin`, `usuario` (staff de oficina), `repartidor`.
+
+Desde **Configuración → 🔐 Permisos** (solo admin) se puede conceder o
+retirar, por persona:
+
+- **Lectura de pantallas** (pestañas visibles: Productos, Pedido, Clientes,
+  Créditos, Ruta, Gerencia).
+- **Edición de formularios** (alta/edición de productos y clientes, registrar
+  abonos a créditos).
+
+Los valores por defecto están en `TABS_DEFAULT_ROL` / `EDITA_DEFAULT_ROL`
+(`app-core.js`); el admin los sobreescribe por usuario, y eso se guarda en
+`usuarios/{uid}.permisos`. **Estos mismos permisos están reflejados en
+`firestore.rules`** (función `permisoEdicion()`) — no son solo un filtro de
+interfaz, Firestore los hace cumplir del lado del servidor.
+
+## Firestore
+
+Colecciones: `productos`, `clientes`, `notas` (pedidos), `creditos`, `rutas`,
+`rutas_meta`, `devoluciones`, `inventario_historial`, `gastos`, `usuarios`,
+`_meta`. Todo lo que no está explícitamente listado en `firestore.rules` se
+deniega por defecto.
+
+Para desplegar cambios en las reglas:
+
+```bash
+firebase deploy --only firestore:rules
 ```
-index.html          → la app (React vía Babel en el navegador)
-firebase-init.js    → SOLO la config de Firebase + inicialización de Auth/Firestore
-sw.js               → service worker (caché offline de la PWA)
-manifest.json       → metadatos de instalación (íconos, colores, nombre)
-rutas-repartidores.js → módulo de rutas/repartidores (sin cambios)
+
+o pegando el contenido de `firestore.rules` en **Firebase Console → Firestore
+Database → Reglas**. Antes de publicar, pruébalas en la pestaña
+**Playground** de la consola.
+
+### Pendiente de seguridad (ver comentarios `TODO` en `firestore.rules`)
+
+- `rutas` / `rutas_meta`: cualquier persona autenticada puede editar la ruta
+  de cualquier repartidor, no solo la propia — falta que `ruta.js` guarde
+  `repartidorId` al crear la ruta para poder exigir ownership en las reglas.
+- **Firebase App Check** no está activado todavía. Es lo más importante que
+  falta antes de publicar en producción: evita que alguien use la
+  configuración pública de Firebase (`firebase-init.js`) fuera de la app real
+  para automatizar lecturas/escrituras.
+
+## Desarrollo local
+
+No hay build. Sirve la carpeta con cualquier servidor estático, por ejemplo:
+
+```bash
+npx serve .
+# o
+firebase serve --only hosting
 ```
 
-`index.html` carga `firebase-init.js` con un `<script src="./firebase-init.js">`
-normal (no es un módulo, es un script clásico) **antes** del bloque
-`<script type="text/babel">` que tiene el resto de la app. Por eso `auth` y
-`db` (definidos en `firebase-init.js`) quedan disponibles como si fueran
-variables globales para todo el resto del código — los `<script>` clásicos en
-una misma página comparten ese scope de nivel superior.
+Firestore requiere HTTPS o `localhost` para Firebase Auth — ambos funcionan
+para desarrollo.
 
-**Si en algún momento cambias de proyecto de Firebase** (por ejemplo, para el
-cliente final, o para separar "desarrollo" de "producción"), el único archivo
-que necesitas tocar es `firebase-init.js` → el objeto `firebaseConfig` al
-principio. Lo sacas de Firebase Console → ⚙️ Configuración del proyecto →
-tus apps → SDK setup and configuration.
+---
 
-No extraje las llamadas a Firestore (`db.collection(...)`) de cada pantalla
-(Productos, Clientes, etc.) a un archivo de "funciones" separado — son 34
-llamadas repartidas dentro de cada componente, y no hay una capa de acceso a
-datos centralizada que extraer. Si más adelante quieres esa capa (un solo
-archivo tipo `db.js` con funciones como `guardarProducto()`,
-`crearNota()`, etc.), es una refactorización más grande que puedo hacer, pero
-es un paso aparte — dímelo cuando quieras encararlo.
+## Empaquetado como app instalable (Android / TWA)
 
-## 2. El PIN de acceso rápido — qué es y qué NO es
+Una **TWA (Trusted Web Activity)** envuelve esta PWA en un `.apk`/`.aab`
+instalable desde Play Store, usando Chrome como motor — no es un WebView
+aparte, así que el rendimiento y las cookies/Firestore-cache son los mismos
+que en el navegador.
 
-Lo que agregué en el login (Configuración → 🔒 PIN) es un **candado local del
-dispositivo**, no un método de autenticación de Firebase:
+### Requisitos antes de empaquetar
 
-- Firebase ya mantiene la sesión iniciada entre visitas (persistencia local
-  del SDK). Antes, cualquiera que abriera la app en ese teléfono/tablet
-  entraba directo, sin pedir nada de nuevo.
-- El PIN se guarda **solo en ese dispositivo** (`localStorage`), como un hash
-  SHA-256 con sal — nunca en texto plano, nunca en Firebase.
-- Al abrir la app con una sesión ya iniciada, si ese dispositivo tiene un PIN
-  configurado, primero pide el PIN antes de mostrar cualquier dato. Si el PIN
-  falla o lo olvidas, hay un botón "Usar contraseña en su lugar" que cierra la
-  sesión y regresa al login normal de correo/contraseña.
-- Es opcional: cada usuario lo activa o no desde Configuración → PIN.
+1. **La PWA debe estar servida en HTTPS**, en el dominio final (no
+   `localhost`). Bubblewrap/PWABuilder leen `manifest.json` desde esa URL.
+2. **`manifest.json` completo** (ya actualizado en este entregable): `id`,
+   `name`, `start_url`, `scope`, `display: standalone`, `theme_color`,
+   `background_color`, e íconos `192`, `512` y `512 maskable`.
+3. **Los archivos de íconos deben existir de verdad** en `./icons/` en el
+   servidor — este repo referencia `icon-192.png`, `icon-512.png` y
+   `icon-512-maskable.png`, pero no los incluye. Bubblewrap falla si no los
+   encuentra en la URL real.
+4. **Service worker activo** (`sw.js`) — ya lo tienes.
+5. Corre una auditoría **Lighthouse → PWA** en Chrome DevTools sobre el sitio
+   ya desplegado; debe pasar el check de "installable".
 
-No agregué "patrón" (dibujo tipo Android) — mencionaste ambas opciones pero el
-PIN numérico fue lo que describiste con más detalle. Si también quieres el
-patrón como alternativa, es una pantalla adicional relativamente sencilla de
-agregar (mismo mecanismo de candado local, solo cambia la UI de entrada).
+### Paso a paso con Bubblewrap (recomendado)
 
-## 3. Documentación oficial de Firebase (para que tú la sigas)
+```bash
+npm install -g @bubblewrap/cli
+bubblewrap init --manifest="https://tu-dominio.com/manifest.json"
+```
 
-- Resumen de Firestore: https://firebase.google.com/docs/firestore
-- Reglas de seguridad — conceptos básicos: https://firebase.google.com/docs/rules/basics
-- Reglas de seguridad + Authentication: https://firebase.google.com/docs/rules/rules-and-auth
-- Condiciones de reglas de Firestore: https://firebase.google.com/docs/firestore/security/rules-conditions
-- Firebase Authentication: https://firebase.google.com/docs/auth
-- Firebase Hosting (para publicar `index.html` con HTTPS, dominio propio, etc.): https://firebase.google.com/docs/hosting
-- Configuración del SDK web: https://firebase.google.com/docs/web/setup
+Esto te va a preguntar (o puedes editar después en `twa-manifest.json`):
 
-El archivo `firestore.rules` que ya te entregué (de la sesión anterior) es el
-que subes en Firebase Console → Firestore Database → Reglas — cópialo y pega,
-no hace falta la CLI de Firebase para eso.
+- **Application ID** (paquete Android): usa dominio invertido, ej.
+  `mx.productosdelacosta.frittz`.
+- **App name / launcher name**.
+- Genera un **keystore** (`android.keystore`) — **guárdalo y respáldalo**;
+  si lo pierdes no puedes volver a firmar actualizaciones de la misma app.
 
-## 4. Camino a Play Store (si al cliente le gusta y quieren una app "de verdad")
+Luego:
 
-Buena noticia: como ya es una PWA instalable (manifest + service worker +
-íconos), **no hace falta reescribirla como app nativa**. El camino estándar de
-Google es empaquetarla como **Trusted Web Activity (TWA)**:
+```bash
+bubblewrap build
+```
 
-1. La app tiene que estar publicada en un dominio con **HTTPS** (Firebase
-   Hosting te lo da gratis y es lo más simple dado que ya usas Firebase).
-2. Verificar que el Lighthouse score de PWA sea aceptable (manifest, service
-   worker, offline, íconos 192/512 — la mayoría ya lo tienes).
-3. Usar **PWABuilder** (https://www.pwabuilder.com) — metes la URL de tu PWA
-   ya publicada, y te genera el paquete Android (usa la herramienta
-   **Bubblewrap** de Google por debajo). No necesitas escribir Kotlin/Java.
-4. Configurar **Digital Asset Links** (un archivo `assetlinks.json` en tu
-   dominio) para que Android confirme que la app y el sitio son del mismo
-   dueño — PWABuilder te guía en este paso.
-5. Subir el `.aab` generado a Google Play Console (cuenta de desarrollador,
-   pago único de $25 USD).
+Produce `app-release-signed.apk` (para probar en un dispositivo) y el `.aab`
+para subir a Play Store.
 
-Para iOS: Apple **no acepta PWAs empaquetadas** en el App Store (las rechaza
-como "sitio web repaquetado"). Si más adelante el cliente quiere estar en
-ambas tiendas, ahí sí se necesitaría una app nativa o un wrapper tipo
-Capacitor/Cordova — pero eso es una decisión para cuando llegue ese punto, no
-algo que haga falta resolver ahora.
+### Digital Asset Links (obligatorio para que no aparezca la barra de URL)
 
-## 5. Qué NO hice (a propósito, para no gastar de más)
+Sin esto, Android no confía en que tú controlas el dominio y muestra la app
+dentro de una barra de navegador normal (deja de sentirse como app nativa).
 
-- No creé cuenta ni proyecto nuevo de Firebase, no toqué Firebase Console.
-- No ejecuté ni desplegué nada (`firebase deploy`, Hosting, etc.).
-- No armé el paquete Android/TWA — eso se hace en pwabuilder.com con la URL
-  ya publicada, cuando decidas dar ese paso.
+1. Bubblewrap genera un `assetlinks.json` con el `sha256_cert_fingerprint` de
+   tu keystore.
+2. Súbelo, tal cual, a:
+   `https://tu-dominio.com/.well-known/assetlinks.json`
+3. Verifica que sea accesible públicamente (sin login) y con `Content-Type:
+   application/json`.
+4. Instala el `.apk` en un dispositivo Android real y confirma que abre **sin**
+   barra de URL — eso confirma que el asset link quedó bien.
+
+### Alternativa sin instalar nada: PWABuilder
+
+[pwabuilder.com](https://www.pwabuilder.com) hace lo mismo desde el navegador:
+metes la URL de tu PWA ya desplegada, te genera el paquete Android (con
+Bubblewrap por debajo) y el `assetlinks.json` listo para subir. Útil si no
+quieres instalar el CLI o para una primera prueba rápida.
+
+### Publicar en Play Store
+
+1. Cuenta de **Google Play Console** (pago único de registro).
+2. Sube el `.aab` generado.
+3. Llena la ficha de **Data safety**: esta app recolecta ubicación (GPS de
+   reparto), datos de clientes y de negocio en Firestore — necesitas una
+   **política de privacidad** publicada en una URL y enlazada ahí.
+4. Cada actualización: sube nueva versión, incrementa `versionCode` en
+   `twa-manifest.json`, y firma con el **mismo keystore**.
+
+---
+
+## App Check
+
+`firebase-init.js` ya trae el código para activar **Firebase App Check** con
+**reCAPTCHA v3**. Falta un solo paso manual para que quede funcionando:
+
+1. **Firebase Console → App Check → Apps** → registra esta app web → elige
+   proveedor **reCAPTCHA v3** → copia la *site key* pública que te da.
+2. Pégala en `firebase-init.js`, en la constante `APP_CHECK_SITE_KEY`
+   (reemplaza el placeholder `'PEGA_AQUI_TU_SITE_KEY_DE_RECAPTCHA_V3'`).
+3. En local (`localhost`), App Check usa automáticamente un *token de
+   depuración* — la consola del navegador te va a mostrar uno la primera vez
+   que abras la app; pégalo en **App Check → tu app → Manage debug tokens**
+   para poder seguir trabajando en desarrollo sin que se bloqueen las
+   peticiones.
+4. Deja correr la app así unos días. En **App Check → métricas** vas a ver
+   qué porcentaje de las peticiones a Firestore llegan "verificadas". Con la
+   site key puesta pero **sin** activar el candado de "Enforce", App Check
+   solo mide — no bloquea nada, así que es seguro dejarlo así mientras
+   confirmas que no rompe a nadie (por ejemplo, algún navegador raro sin
+   soporte para reCAPTCHA v3).
+5. Cuando el porcentaje verificado se vea sano, activa **Enforce** para
+   **Cloud Firestore** en **App Check → APIs**. A partir de ahí, cualquier
+   petición sin un token válido de App Check se rechaza — aunque tenga la
+   API key correcta.
+
+⚠️ Importante para cuando empaquetes como TWA: reCAPTCHA v3 sigue
+funcionando porque una TWA sigue siendo Chrome real cargando tu sitio, no un
+WebView aparte — no hace falta un proveedor distinto para Android.
+
+## Roadmap / pendientes
+
+- [x] Activar Firebase App Check *(código listo — falta pegar la site key de
+      reCAPTCHA v3 y, más adelante, activar "Enforce" — ver sección arriba)*.
+- [x] Separar "Ruta" (cargar camión, `ruta.js`) de "Rutas repartidores"
+      (`rutas-repartidores.js`): la primera es exclusiva de admin; la segunda
+      la ve el repartidor asignado (solo sus rutas) o admin (todas, para
+      reasignar si el repartidor no se presenta a trabajar). Ownership real
+      por `repartidorId` ya reflejado en `firestore.rules`.
+- [x] **Bug corregido**: `rutas-repartidores.js` ya guarda `usuarioUid` en sus
+      escrituras a `inventario_historial` (conteo de inventario y reingreso
+      por devolución). La regla de esa colección también se relajó de
+      "isStaff()" a "cualquier autenticado dueño del registro", porque ahora
+      un repartidor también puede generar estos registros.
+      ⚠️ Nota: esas dos acciones también actualizan `productos.stock` en el
+      mismo batch, y esa escritura sí sigue exigiendo el permiso "Editar
+      productos" (`permisoEdicion('productos')`). Por default un repartidor
+      NO lo tiene — si vas a dejar que un repartidor haga conteos o
+      devoluciones con reingreso, actívale ese permiso específico desde
+      Configuración → Permisos, o esas acciones le van a fallar.
+- [ ] Subir los archivos reales de `./icons/` al hosting.
+- [ ] Redactar y publicar política de privacidad (requisito de Play Store por
+      el uso de GPS).
+- [ ] Generar y respaldar el keystore de firma antes del primer build de TWA.

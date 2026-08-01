@@ -25,6 +25,45 @@ firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
 const db = firebase.firestore();
 
+// ── App Check ──
+// Verifica que las lecturas/escrituras a Firestore vengan de esta app real
+// (servida desde tu dominio), no de un script que copió firebaseConfig
+// (que es pública por diseño — ver conversación anterior). Sigue
+// funcionando dentro de una TWA porque la TWA sigue siendo Chrome real, no
+// un WebView aparte.
+//
+// Pasos para activarlo de verdad:
+//   1. Firebase Console → App Check → "Registrar" esta app web → elegir
+//      proveedor "reCAPTCHA v3" → copiar la site key pública que te da y
+//      pegarla abajo en APP_CHECK_SITE_KEY.
+//   2. En producción (tu dominio real) empieza a funcionar solo, no hay que
+//      tocar nada más.
+//   3. En desarrollo local (localhost / IP local) reCAPTCHA v3 no valida
+//      esos orígenes: App Check usa entonces un "token de depuración". La
+//      primera vez que abras la app en local vas a ver en la consola del
+//      navegador un mensaje con ese token — pégalo en Firebase Console →
+//      App Check → esta app → "Manage debug tokens" y podrás seguir
+//      trabajando en local sin que se bloqueen las peticiones.
+//   4. Una vez que confirmes (en Firebase Console → App Check → métricas)
+//      que las peticiones "verificadas" suben con normalidad, activa el
+//      candado "Enforce" para Cloud Firestore en App Check → APIs. Antes de
+//      eso App Check solo está *midiendo*, no bloqueando nada — es seguro
+//      dejarlo así unos días para confirmar que no rompe a nadie.
+const APP_CHECK_SITE_KEY = 'PEGA_AQUI_TU_SITE_KEY_DE_RECAPTCHA_V3';
+
+if (['localhost', '127.0.0.1'].includes(location.hostname)) {
+  self.FIREBASE_APPCHECK_DEBUG_TOKEN = true;
+}
+
+if (APP_CHECK_SITE_KEY.startsWith('PEGA_AQUI')) {
+  console.warn('⚠️ App Check no está activado todavía: falta pegar la site key de reCAPTCHA v3 en firebase-init.js (ver comentario arriba).');
+} else {
+  firebase.appCheck().activate(
+    new firebase.appCheck.ReCaptchaV3Provider(APP_CHECK_SITE_KEY),
+    /* isTokenAutoRefreshEnabled */ true
+  );
+}
+
 // Persistencia offline: cachea los datos de Firestore en IndexedDB para que
 // la app siga funcionando (leer productos, clientes, etc.) sin conexión.
 db.enablePersistence({ synchronizeTabs: true })

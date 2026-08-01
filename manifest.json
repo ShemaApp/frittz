@@ -1,15 +1,18 @@
 {
-  "id": "https://shemaapp.github.io/frittz/"
+  "id": "/",
   "name": "Productos de la Costa",
   "short_name": "P. Costa",
   "description": "Panel de administración: productos, clientes, pedidos, créditos y rutas de reparto.",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
+  "display_override": ["standalone"],
   "orientation": "portrait",
   "background_color": "#ECEDE7",
   "theme_color": "#1E211D",
   "lang": "es-MX",
+  "categories": ["business", "productivity"],
+  "prefer_related_applications": false,
   "icons": [
     {
       "src": "./icons/icon-192.png",
@@ -23,5 +26,11 @@
       "type": "image/png",
       "purpose": "any"
     },
+    {
+      "src": "./icons/icon-512-maskable.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
   ]
 }

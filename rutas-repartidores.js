@@ -680,7 +680,7 @@
           batch.set(dbx.collection('inventario_historial').doc(), {
             productoId: p.id, productoNombre: p.nombre, stockAnterior: p.stock, stockNuevo: nuevo, diferencia: nuevo - p.stock,
             motivo: conteoMotivo || 'Conteo físico de bodega',
-            usuarioNombre: currentUser.nombre || '', usuarioEmail: currentUser.email || '', fecha: new Date().toISOString(),
+            usuarioUid: currentUser.uid, usuarioNombre: currentUser.nombre || '', usuarioEmail: currentUser.email || '', fecha: new Date().toISOString(),
           });
         });
         await batch.commit();
@@ -708,7 +708,7 @@
           batch.update(dbx.collection('productos').doc(devProdSel.id), { stock: nuevo });
           batch.set(dbx.collection('inventario_historial').doc(), {
             productoId: devProdSel.id, productoNombre: devProdSel.nombre, stockAnterior: devProdSel.stock, stockNuevo: nuevo, diferencia: cant,
-            motivo: 'Devolución — ' + devMotivo, usuarioNombre: currentUser.nombre || '', usuarioEmail: currentUser.email || '', fecha: new Date().toISOString(),
+            motivo: 'Devolución — ' + devMotivo, usuarioUid: currentUser.uid, usuarioNombre: currentUser.nombre || '', usuarioEmail: currentUser.email || '', fecha: new Date().toISOString(),
           });
         }
         await batch.commit();
@@ -954,6 +954,11 @@
     useEffect(() => () => { if (watchIdRef.current) navigator.geolocation.clearWatch(watchIdRef.current); }, []);
 
     if (!currentUser) return null;
+    // Panel exclusivo de repartidor (sus propias rutas asignadas) y admin
+    // (todas, para reasignar o cubrir si el repartidor asignado no se
+    // presenta a trabajar). El personal de oficina ('usuario') no lo ve —
+    // ellos usan 'ruta.js' para cargar camión, y ese ya es admin-only.
+    if (currentUser.role !== 'admin' && currentUser.role !== 'repartidor') return null;
 
     const activas = rutas.filter(r => r.estado === 'pendiente' || r.estado === 'en_curso');
     const hist = rutas.filter(r => r.estado === 'completada' || r.estado === 'cancelada');

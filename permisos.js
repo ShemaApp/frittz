@@ -74,7 +74,7 @@ function Permisos({currentUser}){
       </Card>;
     })}
     <div style={{fontSize:11,color:'var(--ink-faint)',marginTop:10,lineHeight:1.5}}>
-      ⚠️ Esto oculta pantallas y botones en la app, pero por ahora no bloquea las escrituras en Firestore a nivel de servidor. Para que sea una barrera de seguridad real (importante antes de empaquetar la app), hace falta reflejar estos mismos permisos en <code>firestore.rules</code>.
+      Estos interruptores controlan lo que cada persona ve en la app <strong>y</strong> lo que Firestore le deja guardar — están reflejados en <code>firestore.rules</code>. Si cambias esta lista de recursos (productos/clientes/créditos), recuerda actualizar también <code>permisoEdicion()</code> en las reglas.
     </div>
   </div>;
 }

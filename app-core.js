@@ -107,9 +107,13 @@ const EDICION_INFO = [
   ['creditos','💳','Registrar abonos a créditos'],
 ];
 const TABS_DEFAULT_ROL = {
+  // 'ruta' (cargar camión, ruta.js) es exclusiva del admin: es quien carga el
+  // camión y arranca la ruta. 'gerencia' aquí es solo el default de lectura
+  // de esa pestaña para repartidor (ver rutas-repartidores.js para el panel
+  // de seguimiento que sí ven repartidor/admin).
   admin:      {productos:true,nota:true,clientes:true,creditos:true,ruta:true,gerencia:true},
-  usuario:    {productos:true,nota:true,clientes:true,creditos:true,ruta:true,gerencia:true},
-  repartidor: {productos:false,nota:true,clientes:false,creditos:false,ruta:true,gerencia:true},
+  usuario:    {productos:true,nota:true,clientes:true,creditos:true,ruta:false,gerencia:true},
+  repartidor: {productos:false,nota:true,clientes:false,creditos:false,ruta:false,gerencia:true},
 };
 const EDITA_DEFAULT_ROL = {
   admin:      {productos:true,clientes:true,creditos:true},
