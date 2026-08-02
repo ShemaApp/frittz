@@ -18,6 +18,37 @@ function RutaReparto({productos,clientes,rutas,currentUser}){
   const rutaActiva=rutas.find(r=>r.estado==='activa');
   const historial=rutas.filter(r=>r.id!==rutaActiva?.id);
 
+  /* ── Asignar ruta a un repartidor (rutas_meta) — solo admin ── */
+  const [usuarios,setUsuarios]=useState([]);
+  useEffect(()=>{
+    if(currentUser.role!=='admin') return;
+    const unsub=db.collection('usuarios').onSnapshot(snap=>setUsuarios(snap.docs.map(d=>({id:d.id,...d.data()}))),()=>{});
+    return unsub;
+  },[currentUser.role]);
+  const [progForm,setProgForm]=useState(null);
+  const [progSaving,setProgSaving]=useState(false);
+  const crearRutaAsignada=async()=>{
+    if(!progForm.repartidorId){ flash('⚠️ Elige a qué repartidor se la asignas'); return; }
+    setProgSaving(true);
+    try{
+      await db.collection('rutas_meta').add({
+        repartidorId:progForm.repartidorId,
+        repartidorNombre:progForm.repartidorNombre,
+        vehiculo:progForm.vehiculo||'',
+        zona:progForm.zona||'',
+        fechaProgramada:progForm.fechaProgramada?new Date(progForm.fechaProgramada).toISOString():'',
+        fechaRegresoProgramada:progForm.fechaRegresoProgramada?new Date(progForm.fechaRegresoProgramada).toISOString():'',
+        estado:'pendiente',
+        fechaCreacion:new Date().toISOString(),
+        paradas:progForm.paradas||[],
+        asignadaPorUid:currentUser.uid,asignadaPorNombre:currentUser.nombre,
+      });
+      setProgForm(null);
+      flash('✅ Ruta asignada a '+progForm.repartidorNombre);
+    }catch(e){ flash('❌ '+e.message); }
+    setProgSaving(false);
+  };
+
   /* ── Cargar camión (escaneo o manual) ── */
   const addToCart=p=>{
     setCart(c=>{
@@ -104,6 +135,35 @@ function RutaReparto({productos,clientes,rutas,currentUser}){
   return <div style={{padding:'16px 12px'}}>
     <div style={{fontSize:20,fontWeight:800,marginBottom:12}}>🚚 Ruta de reparto</div>
     {msg&&<div style={{background:'var(--ok-bg)',borderRadius:8,padding:'8px 12px',fontSize:13,color:'var(--ok-text)',marginBottom:12}}>{msg}</div>}
+
+    {currentUser.role==='admin'&&<Card>
+      <button onClick={()=>setProgForm(f=>f?null:{repartidorId:'',repartidorNombre:'',vehiculo:'',zona:'',fechaProgramada:'',fechaRegresoProgramada:'',paradas:[]})} style={{background:'none',border:'none',color:'var(--ink)',width:'100%',textAlign:'left',cursor:'pointer',padding:0}}>
+        <Row style={{justifyContent:'space-between'}}>
+          <span style={{fontWeight:700}}>📋 Asignar ruta a un repartidor</span>
+          {progForm?<CUp/>:<CDown/>}
+        </Row>
+      </button>
+      {progForm&&<div style={{marginTop:12}}>
+        <Lbl>Repartidor</Lbl>
+        <select value={progForm.repartidorId} onChange={e=>{ const u=usuarios.find(x=>x.id===e.target.value); setProgForm(f=>({...f,repartidorId:e.target.value,repartidorNombre:u?u.nombre:''})); }} style={{background:'var(--surface-2)',border:'1px solid var(--line-strong)',borderRadius:3,padding:'8px 10px',color:'var(--ink)',fontSize:13,width:'100%',boxSizing:'border-box',marginBottom:10}}>
+          <option value="">Selecciona…</option>
+          {usuarios.filter(u=>u.role==='repartidor').map(u=><option key={u.id} value={u.id}>{u.nombre}</option>)}
+        </select>
+        {usuarios.filter(u=>u.role==='repartidor').length===0&&<div style={{fontSize:11,color:'var(--warn-text)',marginBottom:10}}>No hay usuarios con rol "repartidor" todavía — créalos en Configuración → Usuarios.</div>}
+        <Lbl>Vehículo</Lbl>
+        <Inp value={progForm.vehiculo} onChange={e=>setProgForm(f=>({...f,vehiculo:e.target.value}))} placeholder="Camioneta blanca, placas…" style={{marginBottom:10}}/>
+        <Lbl>Zona / colonia</Lbl>
+        <Inp value={progForm.zona} onChange={e=>setProgForm(f=>({...f,zona:e.target.value}))} placeholder="Centro, Col. Reforma…" style={{marginBottom:10}}/>
+        <Lbl>Salida programada</Lbl>
+        <Inp type="datetime-local" value={progForm.fechaProgramada} onChange={e=>setProgForm(f=>({...f,fechaProgramada:e.target.value}))} style={{marginBottom:10}}/>
+        <Lbl>Regreso estimado (opcional)</Lbl>
+        <Inp type="datetime-local" value={progForm.fechaRegresoProgramada} onChange={e=>setProgForm(f=>({...f,fechaRegresoProgramada:e.target.value}))} style={{marginBottom:10}}/>
+        <div style={{borderTop:'1px solid var(--line-strong)',margin:'4px 0 14px'}}/>
+        <Lbl>Clientes y productos por visitar (opcional)</Lbl>
+        <ParadaBuilder clientes={clientes} productos={productos} paradas={progForm.paradas} onChange={ps=>setProgForm(f=>({...f,paradas:ps}))}/>
+        <BFill onClick={crearRutaAsignada} style={{width:'100%',marginTop:10}} disabled={progSaving}>{progSaving?'Guardando…':'✅ Asignar ruta'}</BFill>
+      </div>}
+    </Card>}
 
     {!rutaActiva&&<>
       <Card>

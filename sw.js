@@ -3,7 +3,7 @@
 // Los DATOS (productos, clientes, etc.) los maneja Firestore con enablePersistence()
 // en el propio HTML — este SW no toca esos datos.
 
-const CACHE_NAME = 'distribupanel-shell-v20'; // ⬆️ v20: repartidores.js ya no usa botón flotante + overlay propio, se muestra directo como pestaña
+const CACHE_NAME = 'distribupanel-shell-v22'; // ⬆️ v22: offline.html e íconos reales agregados (antes referenciados pero ausentes); maskable regenerado a 512x512 con zona segura; offline.html usa la marca/paleta real
 // Cache aparte para tiles de mapa offline: a propósito NO se borra cuando
 // sube la versión del shell (ver 'activate' más abajo) — si viviera en
 // CACHE_NAME, cada actualización de la app borraría el mapa descargado.

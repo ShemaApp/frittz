@@ -83,8 +83,6 @@
   const fbApp = firebase.app();
   const dbx = fbApp.firestore();
 
-  const { useState, useEffect, useRef } = React;
-
   const fDateTime = d => d ? new Date(d).toLocaleString('es-MX', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—';
   const fmtx = n => '$' + Number(n || 0).toFixed(2);
 
@@ -372,14 +370,12 @@
 
   function RepartidoresPanel({ productos, clientes, rutas: rutasReales, currentUser, onIrA }) {
     const [tab, setTab] = useState('activas');
-    const [usuarios, setUsuarios] = useState([]);
     const [rutas, setRutas] = useState([]);
     const [planEditFor, setPlanEditFor] = useState(null);
     const [expandPlan, setExpandPlan] = useState(null);
     const [waFor, setWaFor] = useState(null);
     const [waPhone, setWaPhone] = useState('');
     const [expandComp, setExpandComp] = useState(null);
-    const [form, setForm] = useState(null);
     const [msg, setMsg] = useState('');
     const [mapReady, setMapReady] = useState(false);
     const [mapaOffline, setMapaOffline] = useState(() => {
@@ -407,22 +403,18 @@
 
     // productos, clientes y la colección `rutas` (cargar camión) ya llegan
     // como props desde app.js — ese listener vive una sola vez ahí. Aquí
-    // solo se suscribe lo que es exclusivo de este panel: `rutas_meta` y
-    // `usuarios` (solo admin, para reasignar). Conteo/devoluciones e
-    // inventario_historial se movieron a inventario.js.
+    // solo se suscribe lo que es exclusivo de este panel: `rutas_meta`.
+    // Conteo/devoluciones e inventario_historial viven en inventario.js;
+    // usuarios (para asignar) y reportes/respaldo, en ruta.js / reportes.js.
     useEffect(() => {
       if (!currentUser) return;
       const unsub = dbx.collection('rutas_meta').orderBy('fechaCreacion', 'desc').limit(200)
         .onSnapshot(snap => setRutas(snap.docs.map(d => ({ id: d.id, ...d.data() }))), () => {});
-      let unsubU = () => {};
-      if (currentUser.role === 'admin') {
-        unsubU = dbx.collection('usuarios').onSnapshot(snap => setUsuarios(snap.docs.map(d => ({ id: d.id, ...d.data() }))), () => {});
-      }
       let unsubB = () => {};
       if (currentUser.role === 'admin') {
         unsubB = dbx.collection('_meta').doc('backups').onSnapshot(snap => setBackupMeta(snap.exists ? snap.data() : null), () => {});
       }
-      return () => { unsub(); unsubU(); unsubB(); };
+      return () => { unsub(); unsubB(); };
     }, [currentUser]);
 
     const actualizarParadas = async (rutaId, nuevasParadas) => {
@@ -570,25 +562,6 @@
       });
       if (pts.length) mapInstance.current.fitBounds(pts, { maxZoom: 14, padding: [30, 30] });
     }, [rutas, mapReady]);
-
-    const crear = async () => {
-      if (!form.repartidorNombre) { flash('⚠️ Falta el repartidor'); return; }
-      try {
-        await dbx.collection('rutas_meta').add({
-          repartidorId: form.repartidorId || currentUser.uid,
-          repartidorNombre: form.repartidorNombre,
-          vehiculo: form.vehiculo || '',
-          zona: form.zona || '',
-          fechaProgramada: form.fechaProgramada ? new Date(form.fechaProgramada).toISOString() : '',
-          fechaRegresoProgramada: form.fechaRegresoProgramada ? new Date(form.fechaRegresoProgramada).toISOString() : '',
-          estado: 'pendiente',
-          fechaCreacion: new Date().toISOString(),
-          paradas: form.paradas || [],
-        });
-        setForm(null);
-        flash('✅ Ruta programada');
-      } catch (e) { flash('❌ ' + e.message); }
-    };
 
     const iniciar = async r => {
       const loc = await getLoc();
@@ -838,8 +811,9 @@
 
           {tab === 'activas' && (
                 <>
-                  <button onClick={() => setForm({ repartidorId: currentUser.uid, repartidorNombre: currentUser.nombre, vehiculo: '', zona: '', fechaProgramada: '', fechaRegresoProgramada: '', paradas: [] })}
-                    style={{ width: '100%', background: 'var(--accent)', color: 'var(--surface-2)', border: 'none', borderRadius: 8, padding: 10, fontWeight: 700, marginBottom: 14, cursor: 'pointer' }}>+ Programar ruta</button>
+                  {currentUser.role !== 'admin' && (
+                    <div style={{ fontSize: 11, color: 'var(--ink-faint)', marginBottom: 14, textAlign: 'center' }}>Aquí verás las rutas que el admin te asigne desde "Ruta" → Asignar.</div>
+                  )}
                   {misRutas.length === 0 && <div style={{ textAlign: 'center', color: 'var(--ink-faint)', padding: '20px 0' }}>Sin rutas programadas</div>}
                   {misRutas.map(r => (
                     <div key={r.id} style={{ background: 'var(--surface)', borderRadius: 12, padding: 14, marginBottom: 10 }}>
@@ -1058,39 +1032,6 @@
                     );
                   })}
                 </>
-              )}
-
-              {form && (
-                <div style={{ position: 'fixed', inset: 0, background: '#1B1D19cc', zIndex: 300, display: 'flex', alignItems: 'flex-end' }}>
-                  <div style={{ background: 'var(--surface)', width: '100%', maxWidth: 420, margin: '0 auto', borderRadius: '18px 18px 0 0', padding: 20, maxHeight: '85vh', overflowY: 'auto' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
-                      <span style={{ fontSize: 16, fontWeight: 700 }}>Programar ruta</span>
-                      <button onClick={() => setForm(null)} style={{ background: 'none', border: 'none', color: 'var(--ink-soft)', fontSize: 20, cursor: 'pointer' }}>✕</button>
-                    </div>
-                    {currentUser.role === 'admin' ? (
-                      <>
-                        <div style={lblStyle}>Repartidor</div>
-                        <select value={form.repartidorId} onChange={e => { const u = usuarios.find(x => x.id === e.target.value); setForm(f => ({ ...f, repartidorId: e.target.value, repartidorNombre: u ? u.nombre : '' })); }} style={inputStyle}>
-                          {usuarios.map(u => <option key={u.id} value={u.id}>{u.nombre}</option>)}
-                        </select>
-                      </>
-                    ) : (
-                      <div style={{ fontSize: 13, marginBottom: 10, color: 'var(--accent)' }}>👤 {currentUser.nombre}</div>
-                    )}
-                    <div style={lblStyle}>Vehículo</div>
-                    <input value={form.vehiculo} onChange={e => setForm(f => ({ ...f, vehiculo: e.target.value }))} placeholder="Camioneta blanca, placas…" style={inputStyle} />
-                    <div style={lblStyle}>Zona / colonia</div>
-                    <input value={form.zona} onChange={e => setForm(f => ({ ...f, zona: e.target.value }))} placeholder="Centro, Col. Reforma…" style={inputStyle} />
-                    <div style={lblStyle}>Salida programada</div>
-                    <input type="datetime-local" value={form.fechaProgramada} onChange={e => setForm(f => ({ ...f, fechaProgramada: e.target.value }))} style={inputStyle} />
-                    <div style={lblStyle}>Regreso estimado (opcional)</div>
-                    <input type="datetime-local" value={form.fechaRegresoProgramada} onChange={e => setForm(f => ({ ...f, fechaRegresoProgramada: e.target.value }))} style={inputStyle} />
-                    <div style={{ borderTop: '1px solid var(--line-strong)', margin: '14px 0' }} />
-                    <div style={lblStyle}>Clientes y productos por visitar</div>
-                    <ParadaBuilder clientes={clientes} productos={productos} paradas={form.paradas} onChange={ps => setForm(f => ({ ...f, paradas: ps }))} />
-                    <button onClick={crear} style={{ width: '100%', background: 'var(--accent)', color: 'var(--surface-2)', border: 'none', borderRadius: 8, padding: 12, fontWeight: 700, cursor: 'pointer', marginTop: 6 }}>💾 Guardar</button>
-                  </div>
-                </div>
               )}
 
               {qrModalFor && (

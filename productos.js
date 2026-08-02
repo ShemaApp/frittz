@@ -31,6 +31,10 @@ function Productos({productos,currentUser,abrirForm,onAbrirFormConsumido}){
   const isAdmin=currentUser?.role==='admin';
   const puedeEditar=isAdmin||permisoEdita(currentUser).productos;
   const [sel,setSel]=useState([]);
+  const [selMode,setSelMode]=useState(false);
+  const [expandedId,setExpandedId]=useState(null);
+  const pressTimer=useRef(null);
+  const longPressed=useRef(false);
   const [q,setQ]=useState('');
   const [form,setForm]=useState(null);
   const [scanOpen,setScanOpen]=useState(false);
@@ -45,7 +49,24 @@ function Productos({productos,currentUser,abrirForm,onAbrirFormConsumido}){
   const togAll=()=>setSel(allSel?[]:list.map(p=>p.id));
   const delSel=async()=>{
     await Promise.all(sel.map(id=>db.collection('productos').doc(id).delete()));
-    setSel([]);
+    setSel([]); setSelMode(false);
+  };
+  const entrarSeleccion=id=>{ setSelMode(true); setSel([id]); setExpandedId(null); };
+  const salirSeleccion=()=>{ setSelMode(false); setSel([]); };
+  const startPress=id=>{
+    longPressed.current=false;
+    clearTimeout(pressTimer.current);
+    pressTimer.current=setTimeout(()=>{
+      longPressed.current=true;
+      if(navigator.vibrate) navigator.vibrate(12);
+      setExpandedId(eid=>eid===id?null:id);
+    },500);
+  };
+  const cancelPress=()=>clearTimeout(pressTimer.current);
+  const onCardTap=id=>{
+    if(longPressed.current){ longPressed.current=false; return; } // ya actuó el long-press, ignora el click fantasma que sigue
+    if(selMode){ togSel(id); return; }
+    if(expandedId===id) setExpandedId(null);
   };
   const logInventario=(productoId,productoNombre,stockAnterior,stockNuevo,motivo)=>{
     if(stockAnterior===stockNuevo) return Promise.resolve();
@@ -88,33 +109,46 @@ function Productos({productos,currentUser,abrirForm,onAbrirFormConsumido}){
       </Row>
     </Row>
     <Inp placeholder="🔍 Buscar..." value={q} onChange={e=>setQ(e.target.value)} style={{marginBottom:10}}/>
-    {isAdmin&&sel.length>0&&<Row style={{marginBottom:10,background:'var(--danger-bg)',borderRadius:8,padding:'8px 12px'}}>
+    <div style={{fontSize:11,color:'var(--ink-faint)',marginBottom:10}}>Mantén presionado un producto para editar, eliminar o seleccionar.</div>
+    {selMode&&<Row style={{marginBottom:10,background:'var(--danger-bg)',borderRadius:8,padding:'8px 12px'}}>
       <span style={{flex:1,fontSize:13,color:'var(--danger-text)'}}>{sel.length} seleccionado(s)</span>
       <BOut onClick={delSel} color="var(--danger-text)">🗑 Eliminar</BOut>
+      <BOut onClick={salirSeleccion}>Cancelar</BOut>
     </Row>}
-    {isAdmin&&<Row style={{paddingLeft:4,marginBottom:6}}>
+    {selMode&&<Row style={{paddingLeft:4,marginBottom:6}}>
       <button onClick={togAll} style={{background:'none',border:'none',color:allSel?'var(--accent-text)':'var(--ink-soft)',cursor:'pointer',padding:0,display:'flex'}}>
         {allSel?<ChkSq/>:<SqI/>}
       </button>
       <span style={{fontSize:11,color:'var(--ink-faint)'}}>Seleccionar todos</span>
     </Row>}
-    {list.map(p=><Card key={p.id} style={{display:'flex',alignItems:'flex-start',gap:10}}>
-      {isAdmin&&<button onClick={()=>togSel(p.id)} style={{background:'none',border:'none',color:sel.includes(p.id)?'var(--accent-text)':'var(--ink-faint)',cursor:'pointer',padding:0,marginTop:2,flexShrink:0,display:'flex'}}>
-        {sel.includes(p.id)?<ChkSq/>:<SqI/>}
-      </button>}
-      <div style={{flex:1,minWidth:0}}>
-        <Row style={{justifyContent:'space-between'}}>
-          <span style={{fontWeight:700,fontSize:14}}>{p.nombre}</span>
-          <span style={{fontWeight:800,color:'var(--accent-text)',fontSize:14}}>{fmt(p.precio)}</span>
-        </Row>
-        <Row style={{marginTop:4}}><Tag color={p.stock<10?'var(--danger-text)':'var(--ok-text)'}>{p.stock} {p.unidad}</Tag></Row>
-        {p.codigoBarras&&<div style={{fontSize:10,color:'var(--ink-faint)',marginTop:3}}>🏷️ {p.codigoBarras}</div>}
-      </div>
-      <Row style={{gap:4,flexShrink:0}}>
-        {puedeEditar&&<button onClick={()=>setForm({...p,precio:String(p.precio),stock:String(p.stock),codigoBarras:p.codigoBarras||'',motivo:''})} style={{background:'var(--info-bg)',border:'none',color:'var(--info-text)',borderRadius:6,padding:'5px 9px',cursor:'pointer'}}>✏️</button>}
-        {isAdmin&&<button onClick={()=>db.collection('productos').doc(p.id).delete()} style={{background:'var(--danger-bg)',border:'none',color:'var(--danger-text)',borderRadius:6,padding:'5px 9px',cursor:'pointer'}}>🗑</button>}
-      </Row>
-    </Card>)}
+    {list.map(p=>{
+      const expanded=expandedId===p.id;
+      return <Card key={p.id} style={{padding:0,overflow:'hidden'}}>
+        <div
+          onMouseDown={()=>startPress(p.id)} onMouseUp={cancelPress} onMouseLeave={cancelPress}
+          onTouchStart={()=>startPress(p.id)} onTouchEnd={cancelPress} onTouchMove={cancelPress}
+          onClick={()=>onCardTap(p.id)}
+          style={{display:'flex',alignItems:'flex-start',gap:10,padding:'12px 14px',cursor:'pointer',userSelect:'none',WebkitTapHighlightColor:'transparent',background:selMode&&sel.includes(p.id)?'var(--surface-2)':'none'}}
+        >
+          {selMode&&<span style={{color:sel.includes(p.id)?'var(--accent-text)':'var(--ink-faint)',marginTop:2,flexShrink:0,display:'flex'}}>{sel.includes(p.id)?<ChkSq/>:<SqI/>}</span>}
+          <div style={{flex:1,minWidth:0}}>
+            <Row style={{justifyContent:'space-between'}}>
+              <span style={{fontWeight:700,fontSize:14}}>{p.nombre}</span>
+              <span style={{fontWeight:800,color:'var(--accent-text)',fontSize:14}}>{fmt(p.precio)}</span>
+            </Row>
+            <Row style={{marginTop:4}}><Tag color={p.stock<10?'var(--danger-text)':'var(--ok-text)'}>{p.stock} {p.unidad}</Tag></Row>
+            {p.codigoBarras&&<div style={{fontSize:10,color:'var(--ink-faint)',marginTop:3}}>🏷️ {p.codigoBarras}</div>}
+          </div>
+        </div>
+        <div style={{maxHeight:expanded?120:0,overflow:'hidden',transition:'max-height .2s ease'}}>
+          <Row style={{gap:8,padding:'0 14px 12px'}}>
+            {puedeEditar&&<BOut onClick={()=>{setForm({...p,precio:String(p.precio),stock:String(p.stock),codigoBarras:p.codigoBarras||'',motivo:''});setExpandedId(null);}} style={{flex:1}}>✏️ Editar</BOut>}
+            {isAdmin&&<BOut onClick={()=>entrarSeleccion(p.id)} style={{flex:1}}>☑️ Seleccionar</BOut>}
+            {isAdmin&&<BOut onClick={()=>{ if(window.confirm(`¿Eliminar "${p.nombre}"? Esta acción no se puede deshacer.`)) db.collection('productos').doc(p.id).delete(); setExpandedId(null); }} color="var(--danger-text)" style={{flex:1}}>🗑️ Eliminar</BOut>}
+          </Row>
+        </div>
+      </Card>;
+    })}
     {form&&<Modal title={form.id?'Editar Producto':'Nuevo Producto'} onClose={()=>setForm(null)}>
       <Lbl>Nombre</Lbl>
       <Inp value={form.nombre} onChange={e=>setForm(f=>({...f,nombre:e.target.value}))} style={{marginBottom:10}}/>
