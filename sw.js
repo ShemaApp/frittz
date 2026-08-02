@@ -3,7 +3,7 @@
 // Los DATOS (productos, clientes, etc.) los maneja Firestore con enablePersistence()
 // en el propio HTML — este SW no toca esos datos.
 
-const CACHE_NAME = 'distribupanel-shell-v17'; // ⬆️ v17: rutas-repartidores.js pasa a ser pestaña de <App/> (ya no se auto-monta), + precachea firebase-app-check-compat.js (faltaba y podía tumbar el arranque sin buena señal)
+const CACHE_NAME = 'distribupanel-shell-v20'; // ⬆️ v20: repartidores.js ya no usa botón flotante + overlay propio, se muestra directo como pestaña
 // Cache aparte para tiles de mapa offline: a propósito NO se borra cuando
 // sube la versión del shell (ver 'activate' más abajo) — si viviera en
 // CACHE_NAME, cada actualización de la app borraría el mapa descargado.
@@ -27,6 +27,8 @@ const SHELL_URLS = [
   './config.js',
   './app.js',
   './rutas-repartidores.js',
+  './inventario.js',
+  './reportes.js',
   './gerencia.js',
   './permisos.js',
   './manifest.json',

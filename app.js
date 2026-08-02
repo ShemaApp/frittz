@@ -1,6 +1,7 @@
 /* ── App Root ── */
 function App(){
   const [tab,setTab]=useState('home');
+  const [navOpen,setNavOpen]=useState(false);
   const [prevTab,setPrevTab]=useState('home');
   const [currentUser,setCurrentUser]=useState(null);
   const [productos,setProductos]=useState([]);
@@ -87,7 +88,7 @@ function App(){
     return ()=>unsubs.forEach(u=>u());
   },[currentUser]);
 
-  const ALL_TABS=[['home','🏠','Inicio'],['productos','📦','Productos'],['nota','🧾','Pedido'],['clientes','👥','Clientes'],['creditos','💳','Créditos'],['ruta','🚚','Ruta'],['repartidores','🧭','Repartidores'],['gerencia','💰','Gerencia']];
+  const ALL_TABS=[['home','🏠','Inicio'],['productos','📦','Productos'],['nota','🧾','Pedido'],['clientes','👥','Clientes'],['creditos','💳','Créditos'],['ruta','🚚','Ruta'],['repartidores','🧭','Repartidores'],['inventario','📋','Inventario'],['reportes','📈','Reportes'],['gerencia','💰','Gerencia']];
   // Pestañas visibles: por defecto según el rol, con overrides por persona que
   // el admin concede o retira desde Configuración → Permisos (permisos.js).
   // 'home' siempre está disponible; los demás pasan por permisoTabs().
@@ -109,9 +110,14 @@ function App(){
   if(!currentUser) return <Login/>;
   if(locked) return <PinLock currentUser={currentUser} onUnlock={()=>setLocked(false)} onUsePassword={()=>auth.signOut()}/>;
 
-  return <div style={{minHeight:'100vh',position:'relative',paddingTop:53,paddingBottom:tab==='config'?24:72,background:'var(--bg)'}}>
+  return <div style={{minHeight:'100vh',position:'relative',paddingTop:53,paddingBottom:24,background:'var(--bg)'}}>
     <div style={{position:'fixed',top:0,left:'50%',transform:'translateX(-50%)',width:'100%',maxWidth:420,background:'var(--rail)',zIndex:100,height:50,display:'flex',alignItems:'center',justifyContent:'space-between',padding:'0 16px',boxSizing:'border-box'}}>
-      <div style={{fontSize:14,fontWeight:700,color:'var(--accent)',fontFamily:'var(--font-display)',textTransform:'uppercase',letterSpacing:'.02em'}}>🚚 Productos de la Costa</div>
+      <Row style={{gap:10}}>
+        {tab!=='config'&&<button onClick={()=>setNavOpen(o=>!o)} style={{background:'none',border:'none',color:'var(--rail-ink-faint)',cursor:'pointer',padding:'5px 3px',display:'flex',alignItems:'center'}}>
+          <Menu/>
+        </button>}
+        <div style={{fontSize:14,fontWeight:700,color:'var(--accent)',fontFamily:'var(--font-display)',textTransform:'uppercase',letterSpacing:'.02em'}}>🚚 Productos de la Costa</div>
+      </Row>
       <Row style={{gap:6}}>
         <span style={{fontSize:12,color:'var(--rail-ink-faint)'}}>Hola, {currentUser.nombre.split(' ')[0]}</span>
         <button onClick={goConfig} style={{background:tab==='config'?'var(--rail-border)':'none',border:'none',color:tab==='config'?'var(--accent)':'var(--rail-ink-faint)',cursor:'pointer',borderRadius:3,padding:'5px 7px',display:'flex',alignItems:'center'}}>
@@ -127,16 +133,21 @@ function App(){
     {tab==='clientes'&&<Clientes {...ctx} currentUser={currentUser}/>}
     {tab==='creditos'&&<Creditos {...ctx} currentUser={currentUser}/>}
     {tab==='ruta'&&<RutaReparto {...ctx} currentUser={currentUser}/>}
-    {tab==='repartidores'&&<RepartidoresPanel {...ctx} currentUser={currentUser}/>}
+    {tab==='repartidores'&&<RepartidoresPanel {...ctx} currentUser={currentUser} onIrA={setTab}/>}
+    {tab==='inventario'&&<Inventario {...ctx} currentUser={currentUser}/>}
+    {tab==='reportes'&&<Reportes {...ctx} currentUser={currentUser}/>}
     {tab==='gerencia'&&<Gerencia notas={notas} currentUser={currentUser}/>}
     {tab==='config'&&<Configuracion currentUser={currentUser} onBack={()=>setTab(prevTab)} onLogout={logout} abrirUsuarios={abrirUsuarios} onAbrirUsuariosConsumido={()=>setAbrirUsuarios(false)}/>}
-    {tab!=='config'&&<nav style={{position:'fixed',bottom:0,left:'50%',transform:'translateX(-50%)',width:'100%',maxWidth:420,background:'var(--rail)',borderTop:'1px solid var(--rail-border)',display:'flex',zIndex:200}}>
-      {TABS.map(([id,ico,lbl])=>(
-        <button key={id} onClick={()=>setTab(id)} style={{flex:1,padding:'10px 2px 7px',background:'none',border:'none',borderTop:tab===id?'2px solid var(--accent)':'2px solid transparent',color:tab===id?'var(--accent)':'var(--rail-ink-faint)',cursor:'pointer',display:'flex',flexDirection:'column',alignItems:'center',gap:1,fontSize:10,fontWeight:tab===id?700:400}}>
-          <span style={{fontSize:22,lineHeight:1}}>{ico}</span>{lbl}
-        </button>
-      ))}
-    </nav>}
+    {navOpen&&<div onClick={()=>setNavOpen(false)} style={{position:'fixed',inset:0,background:'#1B1D19aa',zIndex:190}}/>}
+    <div style={{position:'fixed',top:0,left:'50%',transform:'translateX(-50%)',width:'100%',maxWidth:420,height:'100vh',zIndex:200,pointerEvents:'none'}}>
+      <nav style={{position:'absolute',top:0,left:0,bottom:0,width:230,background:'var(--rail)',borderRight:'1px solid var(--rail-border)',boxShadow:navOpen?'4px 0 18px #1B1D1955':'none',transform:navOpen?'translateX(0)':'translateX(-100%)',transition:'transform .22s ease',display:'flex',flexDirection:'column',paddingTop:60,paddingBottom:16,boxSizing:'border-box',pointerEvents:'auto',overflowY:'auto'}}>
+        {TABS.map(([id,ico,lbl])=>(
+          <button key={id} onClick={()=>{setTab(id);setNavOpen(false);}} style={{display:'flex',alignItems:'center',gap:12,padding:'12px 18px',background:tab===id?'var(--rail-border)':'none',border:'none',borderLeft:tab===id?'3px solid var(--accent)':'3px solid transparent',color:tab===id?'var(--accent)':'var(--rail-ink-faint)',cursor:'pointer',textAlign:'left',fontSize:13,fontWeight:tab===id?700:400}}>
+            <span style={{fontSize:19,lineHeight:1,width:22,textAlign:'center'}}>{ico}</span>{lbl}
+          </button>
+        ))}
+      </nav>
+    </div>
   </div>;
 }
 

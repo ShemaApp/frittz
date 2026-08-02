@@ -51,6 +51,7 @@ const SqI   = ()=><Ic><rect x="3" y="3" width="18" height="18" rx="2"/></Ic>;
 const EyeI  = ()=><Ic size={16}><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></Ic>;
 const EyeX  = ()=><Ic size={16}><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></Ic>;
 const Gear  = ()=><Ic><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></Ic>;
+const Menu  = ()=><Ic><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></Ic>;
 
 /* ── UI Atoms ── */
 const Card  = ({children,style={}})=><div style={{background:'var(--surface)',border:'1px solid var(--line)',borderRadius:4,padding:'12px 14px',marginBottom:10,...style}}>{children}</div>;
@@ -115,6 +116,8 @@ const TABS_INFO = [
   ['creditos','💳','Créditos'],
   ['ruta','🚚','Ruta'],
   ['repartidores','🧭','Rutas repartidores'],
+  ['inventario','📋','Inventario'],
+  ['reportes','📈','Reportes'],
   ['gerencia','💰','Gerencia'],
 ];
 const EDICION_INFO = [
@@ -143,9 +146,9 @@ const TABS_DEFAULT_ROL = {
   // pero no 'usuario' de oficina — además de este permiso de pestaña, el
   // propio componente vuelve a validar el rol como defensa adicional.
   // 'gerencia' aquí es solo el default de lectura de esa pestaña.
-  admin:      {productos:true,nota:true,clientes:true,creditos:true,ruta:true,repartidores:true, gerencia:true},
-  usuario:    {productos:true,nota:true,clientes:true,creditos:true,ruta:false,repartidores:false,gerencia:true},
-  repartidor: {productos:false,nota:true,clientes:false,creditos:false,ruta:false,repartidores:true, gerencia:true},
+  admin:      {productos:true,nota:true,clientes:true,creditos:true,ruta:true,repartidores:true, inventario:true, reportes:true, gerencia:true},
+  usuario:    {productos:true,nota:true,clientes:true,creditos:true,ruta:false,repartidores:false,inventario:true, reportes:false,gerencia:true},
+  repartidor: {productos:false,nota:true,clientes:false,creditos:false,ruta:false,repartidores:true, inventario:false,reportes:false,gerencia:true},
 };
 const EDITA_DEFAULT_ROL = {
   admin:      {productos:true,clientes:true,creditos:true},

@@ -370,8 +370,7 @@
   }
 
 
-  function RepartidoresPanel({ productos, clientes, rutas: rutasReales, currentUser }) {
-    const [open, setOpen] = useState(false);
+  function RepartidoresPanel({ productos, clientes, rutas: rutasReales, currentUser, onIrA }) {
     const [tab, setTab] = useState('activas');
     const [usuarios, setUsuarios] = useState([]);
     const [rutas, setRutas] = useState([]);
@@ -402,48 +401,15 @@
     const [nuevoCliForm, setNuevoCliForm] = useState(null);
     const [ventaRapida, setVentaRapida] = useState(null); // {cliente, items, pago, ubicacion, saving}
     const [ventaProdSearch, setVentaProdSearch] = useState('');
-    const [invSubTab, setInvSubTab] = useState('conteo');
-    const [conteoDraft, setConteoDraft] = useState({});
-    const [conteoSearch, setConteoSearch] = useState('');
-    const [conteoMotivo, setConteoMotivo] = useState('Conteo físico de bodega');
-    const [conteoSaving, setConteoSaving] = useState(false);
-    const [devoluciones, setDevoluciones] = useState([]);
-    const [devProdSearch, setDevProdSearch] = useState('');
-    const [devProdSel, setDevProdSel] = useState(null);
-    const [devCliSearch, setDevCliSearch] = useState('');
-    const [devCliSel, setDevCliSel] = useState(null);
-    const [devCantidad, setDevCantidad] = useState(1);
-    const [devMotivo, setDevMotivo] = useState('dañado');
-    const [devAccion, setDevAccion] = useState('reingreso');
-    const [devSaving, setDevSaving] = useState(false);
-    const [respaldoSubTab, setRespaldoSubTab] = useState('respaldo');
-    const [ubicFecha, setUbicFecha] = useState(() => new Date().toISOString().slice(0, 10));
-    const [ubicNotas, setUbicNotas] = useState(null);
-    const [ubicLoading, setUbicLoading] = useState(false);
-    const [backupMeta, setBackupMeta] = useState(null);
-    const [backupGenerating, setBackupGenerating] = useState(false);
-    const [reporteRango, setReporteRango] = useState('semana');
-    const [reporteDesde, setReporteDesde] = useState('');
-    const [reporteHasta, setReporteHasta] = useState('');
-    const [reporteData, setReporteData] = useState(null);
-    const [reporteGenerating, setReporteGenerating] = useState(false);
-    const [reporteEmail, setReporteEmail] = useState('');
-    const [clientesQrGenerating, setClientesQrGenerating] = useState(false);
-    const [ventasSemanaGenerating, setVentasSemanaGenerating] = useState(false);
-    const [nominaVendedorId, setNominaVendedorId] = useState('');
-    const [nominaRango, setNominaRango] = useState('semana');
-    const [nominaDesde, setNominaDesde] = useState('');
-    const [nominaHasta, setNominaHasta] = useState('');
-    const [nominaData, setNominaData] = useState(null);
-    const [nominaGenerating, setNominaGenerating] = useState(false);
+    const [backupMeta, setBackupMeta] = useState(null); // liviano: solo para el recordatorio de respaldo en "Activas"; el panel completo vive en reportes.js
 
     const flash = m => { setMsg(m); setTimeout(() => setMsg(''), 3000); };
 
     // productos, clientes y la colección `rutas` (cargar camión) ya llegan
     // como props desde app.js — ese listener vive una sola vez ahí. Aquí
-    // solo se suscribe lo que es exclusivo de este panel: `rutas_meta`,
-    // `usuarios` (solo admin, para reasignar), `devoluciones` y el meta de
-    // respaldos (solo admin).
+    // solo se suscribe lo que es exclusivo de este panel: `rutas_meta` y
+    // `usuarios` (solo admin, para reasignar). Conteo/devoluciones e
+    // inventario_historial se movieron a inventario.js.
     useEffect(() => {
       if (!currentUser) return;
       const unsub = dbx.collection('rutas_meta').orderBy('fechaCreacion', 'desc').limit(200)
@@ -452,12 +418,11 @@
       if (currentUser.role === 'admin') {
         unsubU = dbx.collection('usuarios').onSnapshot(snap => setUsuarios(snap.docs.map(d => ({ id: d.id, ...d.data() }))), () => {});
       }
-      const unsubD = dbx.collection('devoluciones').orderBy('fecha', 'desc').limit(100).onSnapshot(snap => setDevoluciones(snap.docs.map(d => ({ id: d.id, ...d.data() }))), () => {});
       let unsubB = () => {};
       if (currentUser.role === 'admin') {
         unsubB = dbx.collection('_meta').doc('backups').onSnapshot(snap => setBackupMeta(snap.exists ? snap.data() : null), () => {});
       }
-      return () => { unsub(); unsubU(); unsubD(); unsubB(); };
+      return () => { unsub(); unsubU(); unsubB(); };
     }, [currentUser]);
 
     const actualizarParadas = async (rutaId, nuevasParadas) => {
@@ -572,7 +537,7 @@
       flash('🗑️ Mapa offline borrado');
     };
     useEffect(() => {
-      if (!open || tab !== 'mapa') return;
+      if (tab !== 'mapa') return;
       ensureLeaflet(() => {
         if (!window.L || !mapRef.current) return;
         setTimeout(() => {
@@ -584,7 +549,7 @@
           if (mapInstance.current) setTimeout(() => mapInstance.current.invalidateSize(), 100);
         }, 50);
       });
-    }, [open, tab]);
+    }, [tab]);
 
     useEffect(() => {
       if (!mapReady || !mapInstance.current) return;
@@ -783,58 +748,6 @@
       } catch (e) { flash('❌ ' + e.message); setVentaRapida(v => ({ ...v, saving: false })); }
     };
 
-    // ---- Conteo físico de inventario ----
-    const setConteo = (id, val) => setConteoDraft(d => ({ ...d, [id]: val }));
-    const cambiosConteo = productos.filter(p => conteoDraft[p.id] !== undefined && conteoDraft[p.id] !== '' && Number(conteoDraft[p.id]) !== p.stock);
-    const guardarConteo = async () => {
-      if (cambiosConteo.length === 0) { flash('⚠️ No hay cambios que guardar'); return; }
-      setConteoSaving(true);
-      try {
-        const batch = dbx.batch();
-        cambiosConteo.forEach(p => {
-          const nuevo = Number(conteoDraft[p.id]);
-          batch.update(dbx.collection('productos').doc(p.id), { stock: nuevo });
-          batch.set(dbx.collection('inventario_historial').doc(), {
-            productoId: p.id, productoNombre: p.nombre, stockAnterior: p.stock, stockNuevo: nuevo, diferencia: nuevo - p.stock,
-            motivo: conteoMotivo || 'Conteo físico de bodega',
-            usuarioUid: currentUser.uid, usuarioNombre: currentUser.nombre || '', usuarioEmail: currentUser.email || '', fecha: new Date().toISOString(),
-          });
-        });
-        await batch.commit();
-        flash('✅ Conteo guardado — ' + cambiosConteo.length + ' producto(s) ajustado(s)');
-        setConteoDraft({});
-      } catch (e) { flash('❌ ' + e.message); }
-      setConteoSaving(false);
-    };
-
-    // ---- Devoluciones y cambios ----
-    const registrarDevolucion = async () => {
-      if (!devProdSel) { flash('⚠️ Selecciona un producto'); return; }
-      const cant = Number(devCantidad);
-      if (!cant || cant < 1) { flash('⚠️ Cantidad inválida'); return; }
-      setDevSaving(true);
-      try {
-        const batch = dbx.batch();
-        batch.set(dbx.collection('devoluciones').doc(), {
-          fecha: new Date().toISOString(), productoId: devProdSel.id, productoNombre: devProdSel.nombre, cantidad: cant,
-          clienteId: devCliSel ? devCliSel.id : null, clienteNombre: devCliSel ? devCliSel.nombre : '',
-          motivo: devMotivo, accion: devAccion, usuarioNombre: currentUser.nombre || '', usuarioEmail: currentUser.email || '',
-        });
-        if (devAccion === 'reingreso') {
-          const nuevo = devProdSel.stock + cant;
-          batch.update(dbx.collection('productos').doc(devProdSel.id), { stock: nuevo });
-          batch.set(dbx.collection('inventario_historial').doc(), {
-            productoId: devProdSel.id, productoNombre: devProdSel.nombre, stockAnterior: devProdSel.stock, stockNuevo: nuevo, diferencia: cant,
-            motivo: 'Devolución — ' + devMotivo, usuarioUid: currentUser.uid, usuarioNombre: currentUser.nombre || '', usuarioEmail: currentUser.email || '', fecha: new Date().toISOString(),
-          });
-        }
-        await batch.commit();
-        flash(devAccion === 'reingreso' ? '✅ Devolución registrada — regresó a inventario' : '✅ Baja registrada');
-        setDevProdSel(null); setDevProdSearch(''); setDevCliSel(null); setDevCliSearch(''); setDevCantidad(1); setDevMotivo('dañado');
-      } catch (e) { flash('❌ ' + e.message); }
-      setDevSaving(false);
-    };
-
     // ---- Exportar CSV ----
     const exportarHistorialCSV = () => {
       const rows = [['Fecha creación', 'Repartidor', 'Vehículo', 'Zona', 'Estado', 'Salida real', 'Regreso real', 'Duración (min)', 'Paradas', 'Entregadas', 'Total vendido']];
@@ -868,202 +781,6 @@
       ? Math.floor((Date.now() - new Date(backupMeta.ultimoRespaldo).getTime()) / 86400000)
       : null;
 
-    const generarRespaldo = async () => {
-      setBackupGenerating(true);
-      try {
-        const colecciones = ['productos', 'clientes', 'notas', 'creditos', 'rutas', 'rutas_meta', 'devoluciones', 'inventario_historial', 'usuarios'];
-        const data = { generado: new Date().toISOString(), generadoPor: currentUser.nombre || currentUser.email };
-        for (const col of colecciones) {
-          const snap = await dbx.collection(col).get();
-          data[col] = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-        }
-        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url; a.download = 'respaldo_productos_de_la_costa_' + new Date().toISOString().slice(0, 10) + '.json';
-        document.body.appendChild(a); a.click(); document.body.removeChild(a);
-        setTimeout(() => URL.revokeObjectURL(url), 4000);
-        await dbx.collection('_meta').doc('backups').set({ ultimoRespaldo: new Date().toISOString(), por: currentUser.nombre || currentUser.email }, { merge: true });
-        flash('✅ Respaldo descargado');
-      } catch (e) { flash('❌ ' + e.message); }
-      setBackupGenerating(false);
-    };
-
-    // ---- Verificación de ubicación del día (solo admin) ----
-    const cargarUbicacionDia = async () => {
-      setUbicLoading(true);
-      try {
-        const desde = new Date(ubicFecha + 'T00:00:00').toISOString();
-        const hasta = new Date(ubicFecha + 'T23:59:59').toISOString();
-        const snap = await dbx.collection('notas').where('fecha', '>=', desde).where('fecha', '<=', hasta).get();
-        // Solo interesan las notas que pasaron por una validación de ubicación
-        // (ventas por ruta) — las del mostrador/oficina no traen este campo.
-        const notas = snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(n => n.ubicacionVenta);
-        notas.sort((a, b) => new Date(a.fecha) - new Date(b.fecha));
-        setUbicNotas(notas);
-      } catch (e) { flash('❌ ' + e.message); }
-      setUbicLoading(false);
-    };
-
-    // ---- Reporte de ventas ----
-    const rangoFechas = () => {
-      const hoy = new Date();
-      let desde, hasta;
-      if (reporteRango === 'hoy') {
-        desde = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate());
-        hasta = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate(), 23, 59, 59);
-      } else if (reporteRango === 'semana') {
-        desde = new Date(hoy); desde.setDate(hoy.getDate() - 7);
-        hasta = hoy;
-      } else if (reporteRango === 'mes') {
-        desde = new Date(hoy); desde.setDate(hoy.getDate() - 30);
-        hasta = hoy;
-      } else {
-        desde = reporteDesde ? new Date(reporteDesde) : new Date(hoy.getFullYear(), hoy.getMonth(), 1);
-        hasta = reporteHasta ? new Date(reporteHasta + 'T23:59:59') : hoy;
-      }
-      return { desde: desde.toISOString(), hasta: hasta.toISOString() };
-    };
-
-    const generarReporte = async () => {
-      setReporteGenerating(true);
-      try {
-        const { desde, hasta } = rangoFechas();
-        const snap = await dbx.collection('notas').where('fecha', '>=', desde).where('fecha', '<=', hasta).get();
-        const notas = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-        const total = notas.reduce((s, n) => s + (n.total || 0), 0);
-        const totalContado = notas.filter(n => n.formaPago === 'contado').reduce((s, n) => s + (n.total || 0), 0);
-        const totalCredito = notas.filter(n => n.formaPago === 'credito').reduce((s, n) => s + (n.total || 0), 0);
-        const porCliente = {};
-        const porProducto = {};
-        notas.forEach(n => {
-          porCliente[n.clienteNombre] = (porCliente[n.clienteNombre] || 0) + (n.total || 0);
-          (n.items || []).forEach(it => {
-            porProducto[it.nombre] = porProducto[it.nombre] || { cant: 0, total: 0 };
-            porProducto[it.nombre].cant += it.cant;
-            porProducto[it.nombre].total += (it.precio || 0) * it.cant;
-          });
-        });
-        const topClientes = Object.entries(porCliente).sort((a, b) => b[1] - a[1]).slice(0, 5);
-        const topProductos = Object.entries(porProducto).sort((a, b) => b[1].total - a[1].total).slice(0, 5);
-        setReporteData({ desde, hasta, notas, total, totalContado, totalCredito, count: notas.length, topClientes, topProductos });
-        flash('✅ Reporte generado');
-      } catch (e) { flash('❌ ' + e.message); }
-      setReporteGenerating(false);
-    };
-
-    const exportarReporteCSV = () => {
-      if (!reporteData) return;
-      const rows = [['Fecha', 'Cliente', 'Productos', 'Total', 'Forma de pago']];
-      reporteData.notas.forEach(n => {
-        rows.push([fDateTime(n.fecha), n.clienteNombre, (n.items || []).map(it => it.nombre + ' x' + it.cant).join(' | '), (n.total || 0).toFixed(2), n.formaPago]);
-      });
-      downloadCSV('reporte_ventas_' + Date.now() + '.csv', rows);
-    };
-
-    const enviarReportePorCorreo = () => {
-      if (!reporteData) return;
-      const clientesTxt = reporteData.topClientes.map(([n, t]) => `• ${n}: ${fmtx(t)}`).join('\n') || 'Sin datos';
-      const productosTxt = reporteData.topProductos.map(([n, d]) => `• ${n}: ${d.cant} unidades — ${fmtx(d.total)}`).join('\n') || 'Sin datos';
-      const cuerpo = `REPORTE DE VENTAS\n${fDateTime(reporteData.desde)} — ${fDateTime(reporteData.hasta)}\n\nPedidos: ${reporteData.count}\nTotal vendido: ${fmtx(reporteData.total)}\nContado: ${fmtx(reporteData.totalContado)}\nCrédito: ${fmtx(reporteData.totalCredito)}\n\nTOP CLIENTES\n${clientesTxt}\n\nTOP PRODUCTOS\n${productosTxt}`;
-      const link = `mailto:${encodeURIComponent(reporteEmail || '')}?subject=${encodeURIComponent('Reporte de ventas — Productos de la Costa')}&body=${encodeURIComponent(cuerpo)}`;
-      window.location.href = link;
-    };
-
-    // ---- Exportar clientes con su QR ----
-    const exportarClientesCSV = () => {
-      const rows = [['Nombre', 'Teléfono', 'Domicilio', 'Activo', 'Código QR']];
-      clientes.forEach(c => rows.push([c.nombre, c.telefono || '', c.domicilio || '', c.activo ? 'Sí' : 'No', qrTextForCliente(c.id)]));
-      downloadCSV('clientes_qr_' + Date.now() + '.csv', rows);
-    };
-    const exportarClientesQRImprimible = () => {
-      const activos = clientes.filter(c => c.activo);
-      if (activos.length === 0) { flash('⚠️ No hay clientes activos'); return; }
-      setClientesQrGenerating(true);
-      const results = {};
-      let pending = activos.length;
-      activos.forEach(c => {
-        renderQRDataURL(qrTextForCliente(c.id), 200, url => {
-          results[c.id] = url;
-          pending--;
-          if (pending === 0) {
-            const cards = activos.map(cl => `
-              <div style="border:1px solid #ccc;border-radius:8px;padding:12px;display:inline-block;width:220px;margin:8px;text-align:center;page-break-inside:avoid;vertical-align:top">
-                <div style="font-weight:700;font-size:13px;margin-bottom:2px">${cl.nombre}</div>
-                <div style="font-size:11px;color:#666;margin-bottom:8px">${cl.telefono || ''}${cl.domicilio ? ' · ' + cl.domicilio : ''}</div>
-                ${results[cl.id] ? `<img src="${results[cl.id]}" style="width:160px;height:160px"/>` : '<div>Sin QR</div>'}
-              </div>`).join('');
-            const html = `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"/><title>QR de clientes</title>
-              <style>*{box-sizing:border-box;font-family:system-ui,-apple-system,sans-serif}body{padding:16px;text-align:center}@media print{button{display:none}}</style>
-              </head><body><h2>QR de clientes (${activos.length})</h2>${cards}
-              <div><button onclick="window.print()" style="margin-top:20px;background:#E8A400;border:none;border-radius:8px;padding:10px 18px;font-weight:700;cursor:pointer">🖨️ Imprimir / Guardar como PDF</button></div>
-              </body></html>`;
-            const w = window.open('', '_blank');
-            if (!w) { flash('⚠️ Habilita las ventanas emergentes para imprimir.'); setClientesQrGenerating(false); return; }
-            w.document.write(html);
-            w.document.close();
-            setClientesQrGenerating(false);
-          }
-        });
-      });
-    };
-
-    // ---- Exportar ventas de los últimos 7 días ----
-    const exportarVentasSemanaCSV = async () => {
-      setVentasSemanaGenerating(true);
-      try {
-        const hoy = new Date();
-        const desde = new Date(hoy); desde.setDate(hoy.getDate() - 7);
-        const snap = await dbx.collection('notas').where('fecha', '>=', desde.toISOString()).where('fecha', '<=', hoy.toISOString()).get();
-        const notas = snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => new Date(a.fecha) - new Date(b.fecha));
-        const rows = [['Fecha', 'Cliente', 'Vendedor', 'Productos', 'Total', 'Forma de pago']];
-        notas.forEach(n => rows.push([fDateTime(n.fecha), n.clienteNombre, n.capturadoPorNombre || '', (n.items || []).map(it => it.nombre + ' x' + it.cant).join(' | '), (n.total || 0).toFixed(2), n.formaPago]));
-        downloadCSV('ventas_semana_' + Date.now() + '.csv', rows);
-        flash('✅ Ventas de la semana exportadas — ' + notas.length);
-      } catch (e) { flash('❌ ' + e.message); }
-      setVentasSemanaGenerating(false);
-    };
-
-    // ---- Formato de ventas del vendedor (para cálculo de sueldo) ----
-    const rangoFechasNomina = () => {
-      const hoy = new Date();
-      let desde, hasta;
-      if (nominaRango === 'semana') { desde = new Date(hoy); desde.setDate(hoy.getDate() - 7); hasta = hoy; }
-      else if (nominaRango === 'mes') { desde = new Date(hoy); desde.setDate(hoy.getDate() - 30); hasta = hoy; }
-      else { desde = nominaDesde ? new Date(nominaDesde) : new Date(hoy.getFullYear(), hoy.getMonth(), 1); hasta = nominaHasta ? new Date(nominaHasta + 'T23:59:59') : hoy; }
-      return { desde: desde.toISOString(), hasta: hasta.toISOString() };
-    };
-    const generarNomina = async () => {
-      if (!nominaVendedorId) { flash('⚠️ Selecciona un vendedor'); return; }
-      setNominaGenerating(true);
-      try {
-        const { desde, hasta } = rangoFechasNomina();
-        const snap = await dbx.collection('notas').where('capturadoPorUid', '==', nominaVendedorId).where('fecha', '>=', desde).where('fecha', '<=', hasta).get();
-        const notas = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-        const porDia = {};
-        notas.forEach(n => {
-          const key = new Date(n.fecha).toDateString();
-          porDia[key] = porDia[key] || { fecha: n.fecha, cant: 0, total: 0 };
-          porDia[key].cant += 1;
-          porDia[key].total += (n.total || 0);
-        });
-        const filas = Object.values(porDia).sort((a, b) => new Date(a.fecha) - new Date(b.fecha));
-        const vendedorNombre = (usuarios.find(u => u.id === nominaVendedorId) || {}).nombre || '';
-        setNominaData({ desde, hasta, vendedorNombre, filas, totalVentas: notas.length, totalVendido: notas.reduce((s, n) => s + (n.total || 0), 0) });
-        flash('✅ Formato generado — ' + filas.length + ' día(s) con ventas');
-      } catch (e) { flash('❌ ' + e.message); }
-      setNominaGenerating(false);
-    };
-    const exportarNominaCSV = () => {
-      if (!nominaData) return;
-      const rows = [['Vendedor', 'Fecha', 'Ventas realizadas', 'Total vendido', 'Horas trabajadas']];
-      nominaData.filas.forEach(f => {
-        const fechaCorta = new Date(f.fecha).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' });
-        rows.push([nominaData.vendedorNombre, fechaCorta, f.cant, f.total.toFixed(2), '']);
-      });
-      rows.push(['', 'TOTAL', nominaData.totalVentas, nominaData.totalVendido.toFixed(2), '']);
-      downloadCSV('sueldo_' + nominaData.vendedorNombre.replace(/\s+/g, '_') + '_' + Date.now() + '.csv', rows);
-    };
 
     const iniciarSeguimiento = r => {
       if (!navigator.geolocation) { flash('⚠️ Este dispositivo no soporta GPS'); return; }
@@ -1102,32 +819,24 @@
 
     return (
       <>
-        {!open && (
-          <button onClick={() => setOpen(true)} style={{ position: 'fixed', bottom: 84, right: 'max(14px, calc(50vw - 196px))', zIndex: 260, width: 52, height: 52, borderRadius: 26, background: 'var(--accent)', border: 'none', color: 'var(--accent-ink)', fontSize: 22, boxShadow: '0 4px 14px #1B1D1955', cursor: 'pointer' }}>🗺️</button>
-        )}
-        {open && (
-          <div style={{ position: 'fixed', inset: 0, background: 'var(--bg)', zIndex: 280, overflowY: 'auto' }}>
-            <div style={{ maxWidth: 420, margin: '0 auto', padding: '16px 12px 90px', color: 'var(--ink)', fontFamily: 'system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
-                <div style={{ fontSize: 20, fontWeight: 800 }}>🗺️ Repartidores y rutas</div>
-                <button onClick={() => setOpen(false)} style={{ background: 'none', border: 'none', color: 'var(--ink-soft)', fontSize: 22, cursor: 'pointer' }}>✕</button>
-              </div>
-              {msg && <div style={{ background: 'var(--ok-bg)', borderRadius: 8, padding: '8px 12px', fontSize: 13, color: 'var(--ok-text)', marginBottom: 12 }}>{msg}</div>}
-              {currentUser.role === 'admin' && diasDesdeUltimoRespaldo !== null && diasDesdeUltimoRespaldo >= 7 && (
-                <button onClick={() => { setTab('respaldo'); setRespaldoSubTab('respaldo'); }} style={{ width: '100%', textAlign: 'left', background: diasDesdeUltimoRespaldo >= 30 ? 'var(--danger-bg)' : 'var(--warn-bg)', border: 'none', borderRadius: 8, padding: '8px 12px', fontSize: 12, color: diasDesdeUltimoRespaldo >= 30 ? 'var(--danger-text)' : 'var(--warn-text)', marginBottom: 12, cursor: 'pointer' }}>
-                  {diasDesdeUltimoRespaldo >= 30 ? '🔴' : '🟡'} Sin respaldo hace {diasDesdeUltimoRespaldo} días — toca uno
-                </button>
-              )}
-              {currentUser.role === 'admin' && diasDesdeUltimoRespaldo === null && (
-                <button onClick={() => { setTab('respaldo'); setRespaldoSubTab('respaldo'); }} style={{ width: '100%', textAlign: 'left', background: 'var(--warn-bg)', border: 'none', borderRadius: 8, padding: '8px 12px', fontSize: 12, color: 'var(--warn-text)', marginBottom: 12, cursor: 'pointer' }}>🟡 Nunca se ha generado un respaldo — toca uno</button>
-              )}
-              <div style={{ display: 'flex', gap: 6, marginBottom: 14 }}>
-                {[['activas', 'Activas'], ['mapa', 'Mapa'], ['clientesqr', 'Clientes'], ['inventario', 'Inv.'], ['comprobantes', 'Comprob.'], ['historial', 'Historial'], ['respaldo', 'Respaldo']].filter(([v]) => (v !== 'mapa' && v !== 'respaldo') || currentUser.role === 'admin').map(([v, l]) => (
-                  <button key={v} onClick={() => setTab(v)} style={{ flex: 1, padding: '8px 1px', borderRadius: 8, border: 'none', background: tab === v ? 'var(--accent)' : 'var(--surface)', color: tab === v ? 'var(--surface-2)' : 'var(--ink-soft)', fontSize: 9, fontWeight: 700, cursor: 'pointer' }}>{l}</button>
-                ))}
-              </div>
+        <div style={{ padding: '16px 12px', color: 'var(--ink)' }}>
+          <div style={{ fontSize: 20, fontWeight: 800, marginBottom: 14 }}>🗺️ Repartidores y rutas</div>
+          {msg && <div style={{ background: 'var(--ok-bg)', borderRadius: 8, padding: '8px 12px', fontSize: 13, color: 'var(--ok-text)', marginBottom: 12 }}>{msg}</div>}
+          {currentUser.role === 'admin' && diasDesdeUltimoRespaldo !== null && diasDesdeUltimoRespaldo >= 7 && (
+            <button onClick={() => onIrA && onIrA('reportes')} style={{ width: '100%', textAlign: 'left', background: diasDesdeUltimoRespaldo >= 30 ? 'var(--danger-bg)' : 'var(--warn-bg)', border: 'none', borderRadius: 8, padding: '8px 12px', fontSize: 12, color: diasDesdeUltimoRespaldo >= 30 ? 'var(--danger-text)' : 'var(--warn-text)', marginBottom: 12, cursor: 'pointer' }}>
+              {diasDesdeUltimoRespaldo >= 30 ? '🔴' : '🟡'} Sin respaldo hace {diasDesdeUltimoRespaldo} días — toca uno
+            </button>
+          )}
+          {currentUser.role === 'admin' && diasDesdeUltimoRespaldo === null && (
+            <button onClick={() => onIrA && onIrA('reportes')} style={{ width: '100%', textAlign: 'left', background: 'var(--warn-bg)', border: 'none', borderRadius: 8, padding: '8px 12px', fontSize: 12, color: 'var(--warn-text)', marginBottom: 12, cursor: 'pointer' }}>🟡 Nunca se ha generado un respaldo — toca uno</button>
+          )}
+          <div style={{ display: 'flex', gap: 6, marginBottom: 14 }}>
+            {[['activas', 'Activas'], ['mapa', 'Mapa'], ['clientesqr', 'Clientes'], ['comprobantes', 'Comprob.'], ['historial', 'Historial']].filter(([v]) => v !== 'mapa' || currentUser.role === 'admin').map(([v, l]) => (
+              <button key={v} onClick={() => setTab(v)} style={{ flex: 1, padding: '8px 1px', borderRadius: 8, border: 'none', background: tab === v ? 'var(--accent)' : 'var(--surface)', color: tab === v ? 'var(--surface-2)' : 'var(--ink-soft)', fontSize: 9, fontWeight: 700, cursor: 'pointer' }}>{l}</button>
+            ))}
+          </div>
 
-              {tab === 'activas' && (
+          {tab === 'activas' && (
                 <>
                   <button onClick={() => setForm({ repartidorId: currentUser.uid, repartidorNombre: currentUser.nombre, vehiculo: '', zona: '', fechaProgramada: '', fechaRegresoProgramada: '', paradas: [] })}
                     style={{ width: '100%', background: 'var(--accent)', color: 'var(--surface-2)', border: 'none', borderRadius: 8, padding: 10, fontWeight: 700, marginBottom: 14, cursor: 'pointer' }}>+ Programar ruta</button>
@@ -1284,116 +993,6 @@
                 </>
               )}
 
-              {tab === 'inventario' && (
-                <>
-                  <div style={{ display: 'flex', gap: 6, marginBottom: 14 }}>
-                    {[['conteo', '📋 Conteo físico'], ['devoluciones', '↩️ Devoluciones']].map(([v, l]) => (
-                      <button key={v} onClick={() => setInvSubTab(v)} style={{ flex: 1, padding: '8px 4px', borderRadius: 8, border: 'none', background: invSubTab === v ? 'var(--accent)' : 'var(--surface)', color: invSubTab === v ? 'var(--surface-2)' : 'var(--ink-soft)', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>{l}</button>
-                    ))}
-                  </div>
-
-                  {invSubTab === 'conteo' && (
-                    <>
-                      <div style={{ fontSize: 11, color: 'var(--ink-faint)', marginBottom: 10 }}>Cuenta físicamente lo que hay en bodega y anota la cantidad real. Solo se guardan los productos donde el número cambió — queda registrado en el historial de inventario de Productos.</div>
-                      <input value={conteoSearch} onChange={e => setConteoSearch(e.target.value)} placeholder="🔍 Buscar producto…" style={inputStyle} />
-                      <div style={{ maxHeight: 320, overflowY: 'auto', marginBottom: 12 }}>
-                        {productos.filter(p => p.nombre.toLowerCase().includes(conteoSearch.toLowerCase())).map(p => {
-                          const val = conteoDraft[p.id];
-                          const diff = val !== undefined && val !== '' ? Number(val) - p.stock : 0;
-                          return (
-                            <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: '1px solid var(--line)' }}>
-                              <div style={{ flex: 1, minWidth: 0 }}>
-                                <div style={{ fontSize: 13, fontWeight: 600 }}>{p.nombre}</div>
-                                <div style={{ fontSize: 11, color: 'var(--ink-faint)' }}>Sistema: {p.stock} {p.unidad}{diff !== 0 && <span style={{ color: diff > 0 ? 'var(--ok)' : 'var(--danger-text)', fontWeight: 700 }}> · {diff > 0 ? '+' : ''}{diff}</span>}</div>
-                              </div>
-                              <input type="number" min="0" value={val === undefined ? '' : val} onChange={e => setConteo(p.id, e.target.value)} placeholder={String(p.stock)} style={{ width: 64, textAlign: 'center', fontSize: 13, background: 'var(--surface-2)', border: '1px solid ' + (diff !== 0 ? 'var(--accent)' : 'var(--line-strong)'), borderRadius: 6, color: 'var(--ink)', padding: '6px 2px' }} />
-                            </div>
-                          );
-                        })}
-                      </div>
-                      {cambiosConteo.length > 0 && (
-                        <div style={{ background: 'var(--surface)', borderRadius: 12, padding: 14, marginBottom: 12 }}>
-                          <div style={{ fontSize: 12, color: 'var(--accent)', fontWeight: 700, marginBottom: 8 }}>{cambiosConteo.length} producto(s) con diferencia</div>
-                          <div style={lblStyle}>Motivo (aplica a todos)</div>
-                          <input value={conteoMotivo} onChange={e => setConteoMotivo(e.target.value)} style={{ ...inputStyle, marginBottom: 12 }} />
-                          <button onClick={guardarConteo} disabled={conteoSaving} style={{ width: '100%', background: 'var(--accent)', color: 'var(--surface-2)', border: 'none', borderRadius: 8, padding: 12, fontWeight: 700, cursor: 'pointer', opacity: conteoSaving ? 0.6 : 1 }}>{conteoSaving ? 'Guardando…' : '💾 Guardar conteo (' + cambiosConteo.length + ')'}</button>
-                        </div>
-                      )}
-                    </>
-                  )}
-
-                  {invSubTab === 'devoluciones' && (
-                    <>
-                      <div style={{ background: 'var(--surface)', borderRadius: 12, padding: 14, marginBottom: 14 }}>
-                        <div style={lblStyle}>Producto</div>
-                        {devProdSel ? (
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--surface-2)', borderRadius: 8, padding: '8px 10px', marginBottom: 10 }}>
-                            <span style={{ fontSize: 13, color: 'var(--accent)', fontWeight: 700 }}>{devProdSel.nombre}</span>
-                            <button onClick={() => setDevProdSel(null)} style={{ background: 'none', border: 'none', color: 'var(--ink-soft)', cursor: 'pointer' }}>✕</button>
-                          </div>
-                        ) : (
-                          <>
-                            <input value={devProdSearch} onChange={e => setDevProdSearch(e.target.value)} placeholder="Buscar producto…" style={inputStyle} />
-                            <div style={{ maxHeight: 120, overflowY: 'auto', marginBottom: 10 }}>
-                              {productos.filter(p => p.nombre.toLowerCase().includes(devProdSearch.toLowerCase())).map(p => (
-                                <div key={p.id} onClick={() => setDevProdSel(p)} style={{ padding: '7px 8px', borderRadius: 6, cursor: 'pointer', fontSize: 13 }}>{p.nombre}</div>
-                              ))}
-                            </div>
-                          </>
-                        )}
-                        <div style={lblStyle}>Cliente (opcional)</div>
-                        {devCliSel ? (
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--surface-2)', borderRadius: 8, padding: '8px 10px', marginBottom: 10 }}>
-                            <span style={{ fontSize: 13, color: 'var(--accent)', fontWeight: 700 }}>{devCliSel.nombre}</span>
-                            <button onClick={() => setDevCliSel(null)} style={{ background: 'none', border: 'none', color: 'var(--ink-soft)', cursor: 'pointer' }}>✕</button>
-                          </div>
-                        ) : (
-                          <>
-                            <input value={devCliSearch} onChange={e => setDevCliSearch(e.target.value)} placeholder="Buscar cliente…" style={inputStyle} />
-                            {devCliSearch && (
-                              <div style={{ maxHeight: 120, overflowY: 'auto', marginBottom: 10 }}>
-                                {clientes.filter(c => c.activo && c.nombre.toLowerCase().includes(devCliSearch.toLowerCase())).map(c => (
-                                  <div key={c.id} onClick={() => setDevCliSel(c)} style={{ padding: '7px 8px', borderRadius: 6, cursor: 'pointer', fontSize: 13 }}>{c.nombre}</div>
-                                ))}
-                              </div>
-                            )}
-                          </>
-                        )}
-                        <div style={lblStyle}>Cantidad</div>
-                        <input type="number" min="1" value={devCantidad} onChange={e => setDevCantidad(e.target.value)} style={inputStyle} />
-                        <div style={lblStyle}>Motivo</div>
-                        <select value={devMotivo} onChange={e => setDevMotivo(e.target.value)} style={inputStyle}>
-                          <option value="dañado">Producto dañado</option>
-                          <option value="incorrecto">Se entregó incorrecto</option>
-                          <option value="rechazado">Rechazado por el cliente</option>
-                          <option value="caducado">Caducado / vencido</option>
-                          <option value="otro">Otro</option>
-                        </select>
-                        <div style={lblStyle}>Acción</div>
-                        <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
-                          {[['reingreso', '↩️ Regresa a inventario', 'var(--ok-bg)', 'var(--ok-text)'], ['baja', '🗑️ Baja (no se vende)', 'var(--danger-bg)', 'var(--danger-text)']].map(([v, l, bg, col]) => (
-                            <button key={v} onClick={() => setDevAccion(v)} style={{ flex: 1, padding: 9, borderRadius: 8, border: 'none', background: devAccion === v ? bg : 'var(--surface-2)', color: devAccion === v ? col : 'var(--ink-soft)', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>{l}</button>
-                          ))}
-                        </div>
-                        <button onClick={registrarDevolucion} disabled={devSaving} style={{ width: '100%', background: 'var(--accent)', color: 'var(--surface-2)', border: 'none', borderRadius: 8, padding: 12, fontWeight: 700, cursor: 'pointer', opacity: devSaving ? 0.6 : 1 }}>{devSaving ? 'Guardando…' : '💾 Registrar'}</button>
-                      </div>
-                      <div style={{ fontSize: 11, color: 'var(--ink-faint)', fontWeight: 700, marginBottom: 8 }}>RECIENTES</div>
-                      {devoluciones.length === 0 && <div style={{ textAlign: 'center', color: 'var(--ink-faint)', padding: '16px 0' }}>Sin devoluciones registradas</div>}
-                      {devoluciones.map(d => (
-                        <div key={d.id} style={{ background: 'var(--surface)', borderRadius: 12, padding: 12, marginBottom: 8 }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
-                            <span style={{ fontWeight: 700, fontSize: 13 }}>{d.productoNombre} x{d.cantidad}</span>
-                            <span style={{ background: (d.accion === 'reingreso' ? '#2E8B45' : '#C23B2E') + '22', color: d.accion === 'reingreso' ? '#2E8B45' : '#C23B2E', borderRadius: 20, padding: '2px 9px', fontSize: 11, fontWeight: 700 }}>{d.accion === 'reingreso' ? 'reingresó' : 'baja'}</span>
-                          </div>
-                          <div style={{ fontSize: 11, color: 'var(--ink-soft)' }}>{d.motivo}{d.clienteNombre ? ' · ' + d.clienteNombre : ''}</div>
-                          <div style={{ fontSize: 11, color: 'var(--ink-faint)', marginTop: 2 }}>{fDateTime(d.fecha)}</div>
-                        </div>
-                      ))}
-                    </>
-                  )}
-                </>
-              )}
-
               {tab === 'comprobantes' && (
                 <>
                   {rutasReales.length > 0 && (
@@ -1458,183 +1057,6 @@
                       </div>
                     );
                   })}
-                </>
-              )}
-
-              {tab === 'respaldo' && currentUser.role === 'admin' && (
-                <>
-                  <div style={{ display: 'flex', gap: 6, marginBottom: 14 }}>
-                    {[['respaldo', '💾 Respaldo'], ['ubicacion', '📍 Ubicación'], ['reporte', '📈 Reporte de ventas'], ['exportar', '📤 Exportar']].map(([v, l]) => (
-                      <button key={v} onClick={() => setRespaldoSubTab(v)} style={{ flex: 1, padding: '8px 4px', borderRadius: 8, border: 'none', background: respaldoSubTab === v ? 'var(--accent)' : 'var(--surface)', color: respaldoSubTab === v ? 'var(--surface-2)' : 'var(--ink-soft)', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>{l}</button>
-                    ))}
-                  </div>
-
-                  {respaldoSubTab === 'respaldo' && (
-                    <>
-                      <div style={{ background: 'var(--surface)', borderRadius: 12, padding: 16, marginBottom: 14 }}>
-                        <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 6 }}>Respaldo completo</div>
-                        <div style={{ fontSize: 12, color: 'var(--ink-soft)', marginBottom: 12 }}>Descarga un archivo con todos tus datos: productos, clientes, ventas, créditos, rutas, devoluciones e historial de inventario. Guárdalo en Drive, tu correo o donde prefieras.</div>
-                        <div style={{ fontSize: 12, color: diasDesdeUltimoRespaldo === null ? 'var(--warn-text)' : diasDesdeUltimoRespaldo >= 30 ? 'var(--danger-text)' : diasDesdeUltimoRespaldo >= 7 ? 'var(--warn-text)' : 'var(--ok-text)', marginBottom: 12 }}>
-                          {diasDesdeUltimoRespaldo === null ? '⚠️ Nunca se ha generado un respaldo' : `Último respaldo: hace ${diasDesdeUltimoRespaldo} día(s)${backupMeta.por ? ' · ' + backupMeta.por : ''}`}
-                        </div>
-                        <button onClick={generarRespaldo} disabled={backupGenerating} style={{ width: '100%', background: 'var(--accent)', color: 'var(--surface-2)', border: 'none', borderRadius: 8, padding: 12, fontWeight: 700, cursor: 'pointer', opacity: backupGenerating ? 0.6 : 1 }}>{backupGenerating ? 'Generando…' : '💾 Generar y descargar respaldo'}</button>
-                      </div>
-                      <div style={{ fontSize: 11, color: 'var(--ink-faint)' }}>Recomendado: hazlo cada semana, y guarda uno aparte cada fin de mes. Te avisamos aquí arriba cuando ya lleve más de 7 días.</div>
-                    </>
-                  )}
-
-                  {respaldoSubTab === 'ubicacion' && (() => {
-                    const ok = (ubicNotas || []).filter(n => n.ubicacionVenta.ok === true);
-                    const mal = (ubicNotas || []).filter(n => n.ubicacionVenta.ok === false);
-                    const sinDatos = (ubicNotas || []).filter(n => n.ubicacionVenta.ok === null);
-                    return <>
-                      <div style={{ fontSize: 11, color: 'var(--ink-faint)', marginBottom: 12, lineHeight: 1.5 }}>
-                        Compara dónde se hizo cada venta de ruta contra el domicilio registrado del cliente (radio de {RADIO_VISITA_METROS} m). Es solo informativo: nunca bloquea ni anula una venta.
-                      </div>
-                      <Row style={{ gap: 8, marginBottom: 12 }}>
-                        <input type="date" value={ubicFecha} onChange={e => setUbicFecha(e.target.value)} style={{ ...inputStyle, marginBottom: 0, flex: 1 }} />
-                        <button onClick={cargarUbicacionDia} disabled={ubicLoading} style={{ background: 'var(--accent)', color: 'var(--surface-2)', border: 'none', borderRadius: 8, padding: '0 16px', fontWeight: 700, cursor: 'pointer', opacity: ubicLoading ? 0.6 : 1 }}>{ubicLoading ? '…' : 'Ver'}</button>
-                      </Row>
-                      {ubicNotas === null && <div style={{ fontSize: 12, color: 'var(--ink-faint)', textAlign: 'center', padding: '20px 0' }}>Elige una fecha y toca "Ver".</div>}
-                      {ubicNotas !== null && ubicNotas.length === 0 && <div style={{ fontSize: 12, color: 'var(--ink-faint)', textAlign: 'center', padding: '20px 0' }}>Sin ventas de ruta con ubicación ese día.</div>}
-                      {ubicNotas !== null && ubicNotas.length > 0 && <>
-                        <Row style={{ gap: 8, marginBottom: 14 }}>
-                          <div style={{ flex: 1, background: 'var(--ok-bg)', borderRadius: 10, padding: '10px 8px', textAlign: 'center' }}>
-                            <div style={{ fontSize: 20, fontWeight: 800, color: 'var(--ok-text)' }}>{ok.length}</div>
-                            <div style={{ fontSize: 10, color: 'var(--ok-text)' }}>✅ Concuerdan</div>
-                          </div>
-                          <div style={{ flex: 1, background: 'var(--danger-bg)', borderRadius: 10, padding: '10px 8px', textAlign: 'center' }}>
-                            <div style={{ fontSize: 20, fontWeight: 800, color: 'var(--danger-text)' }}>{mal.length}</div>
-                            <div style={{ fontSize: 10, color: 'var(--danger-text)' }}>⚠️ No concuerdan</div>
-                          </div>
-                          <div style={{ flex: 1, background: 'var(--surface)', borderRadius: 10, padding: '10px 8px', textAlign: 'center' }}>
-                            <div style={{ fontSize: 20, fontWeight: 800, color: 'var(--ink-faint)' }}>{sinDatos.length}</div>
-                            <div style={{ fontSize: 10, color: 'var(--ink-faint)' }}>➖ Sin datos</div>
-                          </div>
-                        </Row>
-                        {mal.length > 0 && <>
-                          <div style={{ fontSize: 11, color: 'var(--danger-text)', fontWeight: 700, marginBottom: 8 }}>VENTAS FUERA DE RANGO</div>
-                          {mal.map(n => (
-                            <div key={n.id} style={{ background: 'var(--danger-bg)', borderRadius: 10, padding: '10px 12px', marginBottom: 6 }}>
-                              <Row style={{ justifyContent: 'space-between' }}>
-                                <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--danger-text)' }}>{n.clienteNombre}</span>
-                                <span style={{ fontSize: 12, color: 'var(--danger-text)' }}>{fmtx(n.total)}</span>
-                              </Row>
-                              <div style={{ fontSize: 11, color: 'var(--danger-text)', marginTop: 2 }}>{fDateTime(n.fecha)} · a {n.ubicacionVenta.distanciaM} m del domicilio registrado{n.capturadoPorNombre ? ' · ' + n.capturadoPorNombre : ''}</div>
-                            </div>
-                          ))}
-                        </>}
-                        {sinDatos.length > 0 && <div style={{ fontSize: 11, color: 'var(--ink-faint)', marginTop: mal.length ? 14 : 0 }}>"Sin datos" significa que el cliente no tiene ubicación registrada, o no se pudo obtener el GPS del repartidor en ese momento — no es evidencia de nada, solo falta información para comparar.</div>}
-                      </>}
-                    </>;
-                  })()}
-
-
-                  {respaldoSubTab === 'reporte' && (
-                    <>
-                      <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
-                        {[['hoy', 'Hoy'], ['semana', '7 días'], ['mes', '30 días'], ['custom', 'Rango']].map(([v, l]) => (
-                          <button key={v} onClick={() => setReporteRango(v)} style={{ flex: 1, padding: '7px 2px', borderRadius: 8, border: 'none', background: reporteRango === v ? 'var(--accent)' : 'var(--surface-2)', color: reporteRango === v ? 'var(--surface-2)' : 'var(--ink-soft)', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>{l}</button>
-                        ))}
-                      </div>
-                      {reporteRango === 'custom' && (
-                        <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
-                          <input type="date" value={reporteDesde} onChange={e => setReporteDesde(e.target.value)} style={{ ...inputStyle, marginBottom: 0, flex: 1 }} />
-                          <input type="date" value={reporteHasta} onChange={e => setReporteHasta(e.target.value)} style={{ ...inputStyle, marginBottom: 0, flex: 1 }} />
-                        </div>
-                      )}
-                      <button onClick={generarReporte} disabled={reporteGenerating} style={{ width: '100%', background: 'var(--accent)', color: 'var(--surface-2)', border: 'none', borderRadius: 8, padding: 10, fontWeight: 700, cursor: 'pointer', marginBottom: 14, opacity: reporteGenerating ? 0.6 : 1 }}>{reporteGenerating ? 'Generando…' : '📊 Generar reporte'}</button>
-
-                      {reporteData && (
-                        <div style={{ background: 'var(--surface)', borderRadius: 12, padding: 16, marginBottom: 14 }}>
-                          <div style={{ fontSize: 11, color: 'var(--ink-faint)', marginBottom: 10 }}>{fDateTime(reporteData.desde)} — {fDateTime(reporteData.hasta)}</div>
-                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 14 }}>
-                            <div><div style={{ fontSize: 11, color: 'var(--ink-soft)' }}>Total vendido</div><div style={{ fontSize: 20, fontWeight: 800, color: 'var(--accent)' }}>{fmtx(reporteData.total)}</div></div>
-                            <div><div style={{ fontSize: 11, color: 'var(--ink-soft)' }}>Pedidos</div><div style={{ fontSize: 20, fontWeight: 800 }}>{reporteData.count}</div></div>
-                            <div><div style={{ fontSize: 11, color: 'var(--ink-soft)' }}>Contado</div><div style={{ fontSize: 15, fontWeight: 700, color: 'var(--ok-text)' }}>{fmtx(reporteData.totalContado)}</div></div>
-                            <div><div style={{ fontSize: 11, color: 'var(--ink-soft)' }}>Crédito</div><div style={{ fontSize: 15, fontWeight: 700, color: 'var(--warn-text)' }}>{fmtx(reporteData.totalCredito)}</div></div>
-                          </div>
-                          {reporteData.topClientes.length > 0 && <>
-                            <div style={{ fontSize: 11, color: 'var(--ink-faint)', fontWeight: 700, marginBottom: 6 }}>TOP CLIENTES</div>
-                            {reporteData.topClientes.map(([n, t], i) => <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 4 }}><span>{n}</span><span style={{ color: 'var(--accent)', fontWeight: 700 }}>{fmtx(t)}</span></div>)}
-                          </>}
-                          {reporteData.topProductos.length > 0 && <>
-                            <div style={{ fontSize: 11, color: 'var(--ink-faint)', fontWeight: 700, margin: '10px 0 6px' }}>TOP PRODUCTOS</div>
-                            {reporteData.topProductos.map(([n, d], i) => <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 4 }}><span>{n} x{d.cant}</span><span style={{ color: 'var(--accent)', fontWeight: 700 }}>{fmtx(d.total)}</span></div>)}
-                          </>}
-                        </div>
-                      )}
-                      {reporteData && (
-                        <>
-                          <button onClick={exportarReporteCSV} style={{ width: '100%', background: 'var(--surface)', color: 'var(--ink-soft)', border: '1px solid var(--line-strong)', borderRadius: 8, padding: 10, fontWeight: 700, cursor: 'pointer', fontSize: 12, marginBottom: 10 }}>📤 Exportar CSV</button>
-                          <div style={lblStyle}>Correo destino (opcional)</div>
-                          <input value={reporteEmail} onChange={e => setReporteEmail(e.target.value)} placeholder="correo@ejemplo.com" style={inputStyle} />
-                          <div style={{ fontSize: 11, color: 'var(--ink-faint)', marginBottom: 10 }}>Abre tu app de correo con el resumen ya escrito — revisa y dale enviar. Si quieres adjuntar el CSV, descárgalo arriba y agrégalo ahí.</div>
-                          <button onClick={enviarReportePorCorreo} style={{ width: '100%', background: 'var(--accent)', color: 'var(--surface-2)', border: 'none', borderRadius: 8, padding: 12, fontWeight: 700, cursor: 'pointer' }}>📧 Preparar correo</button>
-                        </>
-                      )}
-                    </>
-                  )}
-
-                  {respaldoSubTab === 'exportar' && (
-                    <>
-                      <div style={{ background: 'var(--surface)', borderRadius: 12, padding: 16, marginBottom: 14 }}>
-                        <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 6 }}>👥 Clientes con su código QR</div>
-                        <div style={{ fontSize: 12, color: 'var(--ink-soft)', marginBottom: 12 }}>Genera una hoja imprimible con el QR de cada cliente activo (para pegar en su tienda), o descarga los datos en CSV.</div>
-                        <button onClick={exportarClientesQRImprimible} disabled={clientesQrGenerating} style={{ width: '100%', background: 'var(--accent)', color: 'var(--surface-2)', border: 'none', borderRadius: 8, padding: 10, fontWeight: 700, cursor: 'pointer', marginBottom: 8, opacity: clientesQrGenerating ? 0.6 : 1 }}>{clientesQrGenerating ? 'Generando…' : '🖨️ Generar hoja de QR imprimible'}</button>
-                        <button onClick={exportarClientesCSV} style={{ width: '100%', background: 'var(--surface-2)', color: 'var(--ink-soft)', border: '1px solid var(--line-strong)', borderRadius: 8, padding: 10, fontWeight: 700, cursor: 'pointer', fontSize: 12 }}>📤 CSV con datos + código QR</button>
-                      </div>
-
-                      <div style={{ background: 'var(--surface)', borderRadius: 12, padding: 16, marginBottom: 14 }}>
-                        <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 6 }}>📈 Ventas de la semana</div>
-                        <div style={{ fontSize: 12, color: 'var(--ink-soft)', marginBottom: 12 }}>Descarga todas las ventas de los últimos 7 días, una fila por pedido.</div>
-                        <button onClick={exportarVentasSemanaCSV} disabled={ventasSemanaGenerating} style={{ width: '100%', background: 'var(--accent)', color: 'var(--surface-2)', border: 'none', borderRadius: 8, padding: 10, fontWeight: 700, cursor: 'pointer', opacity: ventasSemanaGenerating ? 0.6 : 1 }}>{ventasSemanaGenerating ? 'Generando…' : '📤 Exportar ventas de esta semana (CSV)'}</button>
-                      </div>
-
-                      <div style={{ background: 'var(--surface)', borderRadius: 12, padding: 16 }}>
-                        <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 6 }}>💵 Formato de ventas para cálculo de sueldo</div>
-                        <div style={{ fontSize: 12, color: 'var(--ink-soft)', marginBottom: 12 }}>Ventas que hizo el vendedor por día. La columna "Horas trabajadas" queda en blanco para llenarla a mano.</div>
-                        <div style={lblStyle}>Vendedor</div>
-                        <select value={nominaVendedorId} onChange={e => { setNominaVendedorId(e.target.value); setNominaData(null); }} style={{ ...inputStyle }}>
-                          <option value="">Selecciona…</option>
-                          {usuarios.map(u => <option key={u.id} value={u.id}>{u.nombre}</option>)}
-                        </select>
-                        <div style={lblStyle}>Periodo</div>
-                        <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
-                          {[['semana', '7 días'], ['mes', '30 días'], ['custom', 'Rango']].map(([v, l]) => (
-                            <button key={v} onClick={() => { setNominaRango(v); setNominaData(null); }} style={{ flex: 1, padding: '7px 2px', borderRadius: 8, border: 'none', background: nominaRango === v ? 'var(--accent)' : 'var(--surface-2)', color: nominaRango === v ? 'var(--surface-2)' : 'var(--ink-soft)', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>{l}</button>
-                          ))}
-                        </div>
-                        {nominaRango === 'custom' && (
-                          <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
-                            <input type="date" value={nominaDesde} onChange={e => setNominaDesde(e.target.value)} style={{ ...inputStyle, marginBottom: 0, flex: 1 }} />
-                            <input type="date" value={nominaHasta} onChange={e => setNominaHasta(e.target.value)} style={{ ...inputStyle, marginBottom: 0, flex: 1 }} />
-                          </div>
-                        )}
-                        <button onClick={generarNomina} disabled={nominaGenerating} style={{ width: '100%', background: 'var(--accent)', color: 'var(--surface-2)', border: 'none', borderRadius: 8, padding: 10, fontWeight: 700, cursor: 'pointer', marginBottom: nominaData ? 12 : 0, opacity: nominaGenerating ? 0.6 : 1 }}>{nominaGenerating ? 'Generando…' : '📊 Generar formato'}</button>
-
-                        {nominaData && (
-                          <>
-                            <div style={{ background: 'var(--surface-2)', borderRadius: 8, padding: 12, marginBottom: 10 }}>
-                              <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 6 }}>{nominaData.vendedorNombre}</div>
-                              {nominaData.filas.length === 0 && <div style={{ fontSize: 12, color: 'var(--ink-faint)' }}>Sin ventas en este periodo</div>}
-                              {nominaData.filas.map((f, i) => (
-                                <Row key={i} style={{ justifyContent: 'space-between', fontSize: 12, marginBottom: 3 }}>
-                                  <span>{new Date(f.fecha).toLocaleDateString('es-MX', { day: '2-digit', month: 'short' })}</span>
-                                  <span style={{ color: 'var(--ink-soft)' }}>{f.cant} venta(s)</span>
-                                  <span style={{ fontWeight: 700, color: 'var(--accent)' }}>{fmtx(f.total)}</span>
-                                </Row>
-                              ))}
-                              <div style={{ borderTop: '1px solid var(--line-strong)', paddingTop: 6, marginTop: 6, display: 'flex', justifyContent: 'space-between', fontSize: 12, fontWeight: 700 }}>
-                                <span>Total ({nominaData.totalVentas} ventas)</span><span>{fmtx(nominaData.totalVendido)}</span>
-                              </div>
-                            </div>
-                            <button onClick={exportarNominaCSV} style={{ width: '100%', background: 'var(--surface-2)', color: 'var(--ink-soft)', border: '1px solid var(--line-strong)', borderRadius: 8, padding: 10, fontWeight: 700, cursor: 'pointer', fontSize: 12 }}>📤 Exportar CSV (con columna de horas en blanco)</button>
-                          </>
-                        )}
-                      </div>
-                    </>
-                  )}
                 </>
               )}
 
@@ -1744,9 +1166,7 @@
                   </div>
                 </div>
               )}
-            </div>
-          </div>
-        )}
+        </div>
       </>
     );
   }
