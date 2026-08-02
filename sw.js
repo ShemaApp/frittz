@@ -3,7 +3,7 @@
 // Los DATOS (productos, clientes, etc.) los maneja Firestore con enablePersistence()
 // en el propio HTML — este SW no toca esos datos.
 
-const CACHE_NAME = 'distribupanel-shell-v16'; // ⬆️ v16: mapa offline (descarga de tiles por zona, cache separado y persistente)
+const CACHE_NAME = 'distribupanel-shell-v17'; // ⬆️ v17: rutas-repartidores.js pasa a ser pestaña de <App/> (ya no se auto-monta), + precachea firebase-app-check-compat.js (faltaba y podía tumbar el arranque sin buena señal)
 // Cache aparte para tiles de mapa offline: a propósito NO se borra cuando
 // sube la versión del shell (ver 'activate' más abajo) — si viviera en
 // CACHE_NAME, cada actualización de la app borraría el mapa descargado.
@@ -39,6 +39,7 @@ const SHELL_URLS = [
   'https://cdn.jsdelivr.net/npm/firebase@10.13.0/firebase-app-compat.js',
   'https://cdn.jsdelivr.net/npm/firebase@10.13.0/firebase-auth-compat.js',
   'https://cdn.jsdelivr.net/npm/firebase@10.13.0/firebase-firestore-compat.js',
+  'https://cdn.jsdelivr.net/npm/firebase@10.13.0/firebase-app-check-compat.js',
   'https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js',
   'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css',
   'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js',
