@@ -10,6 +10,23 @@ function Configuracion({currentUser,onBack,onLogout,abrirUsuarios,onAbrirUsuario
   const hasPin=!!localStorage.getItem(pinKey(currentUser.uid));
   const [msg,setMsg]=useState('');
   const [err,setErr]=useState('');
+  const [expandedId,setExpandedId]=useState(null);
+  const pressTimer=useRef(null);
+  const longPressed=useRef(false);
+  const startPress=id=>{
+    longPressed.current=false;
+    clearTimeout(pressTimer.current);
+    pressTimer.current=setTimeout(()=>{
+      longPressed.current=true;
+      if(navigator.vibrate) navigator.vibrate(12);
+      setExpandedId(eid=>eid===id?null:id);
+    },500);
+  };
+  const cancelPress=()=>clearTimeout(pressTimer.current);
+  const onUserTap=id=>{
+    if(longPressed.current){ longPressed.current=false; return; } // ignora el click fantasma que sigue al long-press
+    if(expandedId===id) setExpandedId(null);
+  };
   const isAdmin=currentUser.role==='admin';
   const roleColor=r=>r==='admin'?'var(--admin)':r==='repartidor'?'var(--warn-text)':'var(--info-text)';
   const flash=(m,isErr=false)=>{ isErr?setErr(m):setMsg(m); setTimeout(()=>{setErr('');setMsg('');},4000); };
@@ -121,22 +138,35 @@ function Configuracion({currentUser,onBack,onLogout,abrirUsuarios,onAbrirUsuario
       <Row style={{justifyContent:'flex-end',marginBottom:10}}>
         <BFill onClick={()=>setForm({nombre:'',email:'',password:'',role:'usuario'})}>+ Nuevo usuario</BFill>
       </Row>
-      {users.map(u=><Card key={u.id}>
-        <Row style={{justifyContent:'space-between'}}>
-          <div>
-            <Row style={{gap:6,flexWrap:'wrap'}}>
-              <span style={{fontWeight:700,fontSize:14}}>{u.nombre}</span>
-              <Tag color={roleColor(u.role)}>{u.role}</Tag>
-              {u.id===currentUser.uid&&<Tag color="var(--ok-text)">Tú</Tag>}
+      <div style={{fontSize:11,color:'var(--ink-faint)',marginBottom:10}}>Mantén presionado un usuario para editarlo o eliminarlo.</div>
+      {users.map(u=>{
+        const expanded=expandedId===u.id;
+        return <Card key={u.id} style={{padding:0,overflow:'hidden'}}>
+          <div
+            onMouseDown={()=>startPress(u.id)} onMouseUp={cancelPress} onMouseLeave={cancelPress}
+            onTouchStart={()=>startPress(u.id)} onTouchEnd={cancelPress} onTouchMove={cancelPress}
+            onClick={()=>onUserTap(u.id)}
+            style={{padding:'12px 14px',cursor:'pointer',userSelect:'none',WebkitTapHighlightColor:'transparent'}}
+          >
+            <Row style={{justifyContent:'space-between'}}>
+              <div>
+                <Row style={{gap:6,flexWrap:'wrap'}}>
+                  <span style={{fontWeight:700,fontSize:14}}>{u.nombre}</span>
+                  <Tag color={roleColor(u.role)}>{u.role}</Tag>
+                  {u.id===currentUser.uid&&<Tag color="var(--ok-text)">Tú</Tag>}
+                </Row>
+                <div style={{fontSize:12,color:'var(--ink-soft)',marginTop:2}}>✉️ {u.email}</div>
+              </div>
             </Row>
-            <div style={{fontSize:12,color:'var(--ink-soft)',marginTop:2}}>✉️ {u.email}</div>
           </div>
-          <Row style={{gap:4}}>
-            <button onClick={()=>setForm({id:u.id,nombre:u.nombre,email:u.email,role:u.role})} style={{background:'var(--info-bg)',border:'none',color:'var(--info-text)',borderRadius:6,padding:'5px 9px',cursor:'pointer'}}>✏️</button>
-            {u.id!==currentUser.uid&&<button onClick={()=>delUser(u)} style={{background:'var(--danger-bg)',border:'none',color:'var(--danger-text)',borderRadius:6,padding:'5px 9px',cursor:'pointer'}}>🗑</button>}
-          </Row>
-        </Row>
-      </Card>)}
+          <div style={{maxHeight:expanded?80:0,overflow:'hidden',transition:'max-height .2s ease'}}>
+            <Row style={{gap:8,padding:'0 14px 12px'}}>
+              <BOut onClick={()=>{setForm({id:u.id,nombre:u.nombre,email:u.email,role:u.role});setExpandedId(null);}} style={{flex:1}}>✏️ Editar</BOut>
+              {u.id!==currentUser.uid&&<BOut onClick={()=>{ if(window.confirm(`¿Eliminar el perfil de "${u.nombre}"? Esta acción no se puede deshacer.`)){ delUser(u); } setExpandedId(null); }} color="var(--danger-text)" style={{flex:1}}>🗑 Eliminar</BOut>}
+            </Row>
+          </div>
+        </Card>;
+      })}
     </>}
     {sub==='permisos'&&isAdmin&&<Permisos currentUser={currentUser}/>}
     {form&&<Modal title={form.id?'Editar Usuario':'Nuevo Usuario'} onClose={()=>{setForm(null);setErr('');}}>

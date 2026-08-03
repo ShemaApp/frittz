@@ -18,6 +18,23 @@ function Gerencia({ currentUser, notas }) {
   const [form, setForm] = useState({ pagadoA: '', monto: '', motivo: '', formaPago: 'efectivo' });
   const [saving, setSaving] = useState(false);
   const [rango, setRango] = useState('semana'); // solo aplica a la vista de admin
+  const [expandedId, setExpandedId] = useState(null);
+  const pressTimer = useRef(null);
+  const longPressed = useRef(false);
+  const startPress = id => {
+    longPressed.current = false;
+    clearTimeout(pressTimer.current);
+    pressTimer.current = setTimeout(() => {
+      longPressed.current = true;
+      if (navigator.vibrate) navigator.vibrate(12);
+      setExpandedId(eid => eid === id ? null : id);
+    }, 500);
+  };
+  const cancelPress = () => clearTimeout(pressTimer.current);
+  const onGastoTap = id => {
+    if (longPressed.current) { longPressed.current = false; return; } // ignora el click fantasma que sigue al long-press
+    if (expandedId === id) setExpandedId(null);
+  };
   const [msg, setMsg] = useState('');
   const flash = m => { setMsg(m); setTimeout(() => setMsg(''), 2500); };
 
@@ -160,20 +177,38 @@ function Gerencia({ currentUser, notas }) {
       <div style={{ fontSize: 11, color: 'var(--ink-faint)', fontWeight: 700, marginBottom: 10 }}>{isAdmin ? 'TODOS LOS GASTOS' : 'TUS GASTOS REGISTRADOS'}</div>
       {gastos === null && <div style={{ fontSize: 13, color: 'var(--ink-faint)', textAlign: 'center', padding: '16px 0' }}>Cargando…</div>}
       {gastos && (isAdmin ? gastos : misGastos).length === 0 && <div style={{ fontSize: 13, color: 'var(--ink-faint)', textAlign: 'center', padding: '16px 0' }}>Sin gastos registrados aún</div>}
-      {gastos && (isAdmin ? gastos : misGastos).map(g => <div key={g.id} style={{ paddingBottom: 8, borderBottom: '1px solid var(--line)', marginBottom: 8 }}>
-        <Row style={{ justifyContent: 'space-between', marginBottom: 3 }}>
-          <span style={{ fontWeight: 700, fontSize: 13 }}>{g.pagadoA}</span>
-          <Row style={{ gap: 6 }}>
-            <Tag color={g.formaPago === 'tarjeta' ? 'var(--info-text)' : 'var(--ok-text)'}>{g.formaPago === 'tarjeta' ? '💳 Tarjeta' : '💵 Efectivo'}</Tag>
-            <span style={{ fontWeight: 700, color: 'var(--danger-text)' }}>{fmt(g.monto)}</span>
+      {isAdmin&&gastos&&(isAdmin?gastos:misGastos).length>0&&<div style={{fontSize:11,color:'var(--ink-faint)',marginBottom:10}}>Mantén presionado un gasto para eliminarlo.</div>}
+      {gastos && (isAdmin ? gastos : misGastos).map(g => {
+        const expanded=expandedId===g.id;
+        const fila=<>
+          <Row style={{ justifyContent: 'space-between', marginBottom: 3 }}>
+            <span style={{ fontWeight: 700, fontSize: 13 }}>{g.pagadoA}</span>
+            <Row style={{ gap: 6 }}>
+              <Tag color={g.formaPago === 'tarjeta' ? 'var(--info-text)' : 'var(--ok-text)'}>{g.formaPago === 'tarjeta' ? '💳 Tarjeta' : '💵 Efectivo'}</Tag>
+              <span style={{ fontWeight: 700, color: 'var(--danger-text)' }}>{fmt(g.monto)}</span>
+            </Row>
           </Row>
-        </Row>
-        {g.motivo && <div style={{ fontSize: 12, color: 'var(--ink-soft)' }}>{g.motivo}</div>}
-        <Row style={{ justifyContent: 'space-between', marginTop: 4 }}>
-          <span style={{ fontSize: 11, color: 'var(--ink-faint)' }}>{g.capturadoPorNombre} · {fDate(g.fecha)}</span>
-          {isAdmin && <button onClick={() => eliminar(g)} style={{ background: 'none', border: 'none', color: 'var(--danger-text)', cursor: 'pointer', fontSize: 11, padding: 0 }}>🗑 Eliminar</button>}
-        </Row>
-      </div>)}
+          {g.motivo && <div style={{ fontSize: 12, color: 'var(--ink-soft)' }}>{g.motivo}</div>}
+          <div style={{ fontSize: 11, color: 'var(--ink-faint)', marginTop: 4 }}>{g.capturadoPorNombre} · {fDate(g.fecha)}</div>
+        </>;
+        if(!isAdmin){
+          // Sin acción destructiva que ocultar para este rol — fila simple, sin long-press.
+          return <div key={g.id} style={{ paddingBottom: 8, borderBottom: '1px solid var(--line)', marginBottom: 8 }}>{fila}</div>;
+        }
+        return <div key={g.id} style={{borderBottom:'1px solid var(--line)',marginBottom:8}}>
+          <div
+            onMouseDown={()=>startPress(g.id)} onMouseUp={cancelPress} onMouseLeave={cancelPress}
+            onTouchStart={()=>startPress(g.id)} onTouchEnd={cancelPress} onTouchMove={cancelPress}
+            onClick={()=>onGastoTap(g.id)}
+            style={{paddingBottom:8,cursor:'pointer',userSelect:'none',WebkitTapHighlightColor:'transparent'}}
+          >{fila}</div>
+          <div style={{maxHeight:expanded?50:0,overflow:'hidden',transition:'max-height .2s ease'}}>
+            <Row style={{paddingBottom:8}}>
+              <BOut onClick={()=>{eliminar(g);setExpandedId(null);}} color="var(--danger-text)" style={{flex:1}}>🗑 Eliminar</BOut>
+            </Row>
+          </div>
+        </div>;
+      })}
     </Card>
   </div>;
 }
