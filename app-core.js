@@ -2,6 +2,10 @@ const { useState, useEffect, useRef } = React;
 
 const uid = ()=>Date.now().toString(36)+Math.random().toString(36).slice(2);
 
+// true si el snapshot trae al menos un documento con una escritura local
+// que todavía no se confirma con el servidor (offline o en cola de subida).
+const snapTienePendientes = snap => snap.docs.some(d => d.metadata.hasPendingWrites);
+
 // PIN de acceso rápido: candado LOCAL sobre una sesión de Firebase ya
 // iniciada (no reemplaza la contraseña, no se manda a Firebase). Se guarda
 // solo un hash+sal en localStorage de este dispositivo, por uid.
