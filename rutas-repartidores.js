@@ -409,7 +409,7 @@
     useEffect(() => {
       if (!currentUser) return;
       const unsub = dbx.collection('rutas_meta').orderBy('fechaCreacion', 'desc').limit(200)
-        .onSnapshot(snap => setRutas(snap.docs.map(d => ({ id: d.id, ...d.data() }))), () => {});
+        .onSnapshot({ includeMetadataChanges: true }, snap => setRutas(snap.docs.map(d => ({ id: d.id, ...d.data(), _pendiente: d.metadata.hasPendingWrites }))), () => {});
       let unsubB = () => {};
       if (currentUser.role === 'admin') {
         unsubB = dbx.collection('_meta').doc('backups').onSnapshot(snap => setBackupMeta(snap.exists ? snap.data() : null), () => {});
@@ -819,7 +819,10 @@
                     <div key={r.id} style={{ background: 'var(--surface)', borderRadius: 12, padding: 14, marginBottom: 10 }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
                         <span style={{ fontWeight: 700, fontSize: 14 }}>{r.repartidorNombre}</span>
-                        <span style={{ background: ESTADOS[r.estado].color + '22', color: ESTADOS[r.estado].color, borderRadius: 20, padding: '2px 9px', fontSize: 11, fontWeight: 700 }}>{ESTADOS[r.estado].label}</span>
+                        <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          {r._pendiente && <PendienteTag/>}
+                          <span style={{ background: ESTADOS[r.estado].color + '22', color: ESTADOS[r.estado].color, borderRadius: 20, padding: '2px 9px', fontSize: 11, fontWeight: 700 }}>{ESTADOS[r.estado].label}</span>
+                        </span>
                       </div>
                       <div style={{ fontSize: 12, color: 'var(--ink-soft)' }}>🚐 {r.vehiculo || '—'} · 📍 {r.zona || '—'}</div>
                       <div style={{ fontSize: 12, color: 'var(--ink-faint)', marginBottom: 8 }}>{r.estado === 'pendiente' ? 'Programada: ' + fDateTime(r.fechaProgramada) : 'Salió: ' + fDateTime(r.fechaSalidaReal)}</div>
@@ -983,7 +986,10 @@
                         <button onClick={() => setExpandComp(expandComp === r.id ? null : r.id)} style={{ background: 'none', border: 'none', color: 'var(--ink)', width: '100%', textAlign: 'left', cursor: 'pointer', padding: 0 }}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
                             <span style={{ fontSize: 12, color: 'var(--ink-soft)' }}>{fDateTime(r.fecha)}</span>
-                            <span style={{ background: (r.estado === 'activa' ? '#3E7CA6' : '#8B8F84') + '22', color: r.estado === 'activa' ? '#3E7CA6' : '#8B8F84', borderRadius: 20, padding: '2px 9px', fontSize: 11, fontWeight: 700 }}>{r.estado === 'activa' ? 'en curso' : 'cerrada'}</span>
+                            <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                              {r._pendiente && <PendienteTag/>}
+                              <span style={{ background: (r.estado === 'activa' ? '#3E7CA6' : '#8B8F84') + '22', color: r.estado === 'activa' ? '#3E7CA6' : '#8B8F84', borderRadius: 20, padding: '2px 9px', fontSize: 11, fontWeight: 700 }}>{r.estado === 'activa' ? 'en curso' : 'cerrada'}</span>
+                            </span>
                           </div>
                           <div style={{ fontSize: 13, fontWeight: 700 }}>{entregas.length} entrega(s) · <span style={{ color: 'var(--accent)' }}>{fmtx(totalVendido)}</span></div>
                         </button>
@@ -1025,7 +1031,10 @@
                       <div key={r.id} style={{ background: 'var(--surface)', borderRadius: 12, padding: 14, marginBottom: 10 }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
                           <span style={{ fontWeight: 700, fontSize: 14 }}>{r.repartidorNombre}</span>
-                          <span style={{ background: ESTADOS[r.estado].color + '22', color: ESTADOS[r.estado].color, borderRadius: 20, padding: '2px 9px', fontSize: 11, fontWeight: 700 }}>{ESTADOS[r.estado].label}</span>
+                          <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            {r._pendiente && <PendienteTag/>}
+                            <span style={{ background: ESTADOS[r.estado].color + '22', color: ESTADOS[r.estado].color, borderRadius: 20, padding: '2px 9px', fontSize: 11, fontWeight: 700 }}>{ESTADOS[r.estado].label}</span>
+                          </span>
                         </div>
                         <div style={{ fontSize: 12, color: 'var(--ink-soft)' }}>🚐 {r.vehiculo || '—'} · 📍 {r.zona || '—'} · ⏱ {dur}</div>
                       </div>

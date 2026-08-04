@@ -17,15 +17,11 @@ function CrearNota({productos,clientes,currentUser,ventaRapida,onVentaRapidaCons
     }
   },[ventaRapida]);
   const cliFilt=clientes.filter(c=>c.activo&&c.nombre.toLowerCase().includes(cliSearch.toLowerCase()));
-  const addCart=p=>setCart(c=>{ const ex=c.find(x=>x.id===p.id); return ex?c.map(x=>x.id===p.id?{...x,cant:(Number(x.cant)||0)+1}:x):[...c,{id:p.id,nombre:p.nombre,precio:p.precio,cant:1}]; });
-  const updQty=(id,v)=>{ setCart(c=>c.map(x=>x.id===id?{...x,cant:v}:x)); };
-  // Igual que el conteo físico: el campo se puede dejar vacío mientras se escribe,
-  // sin que el producto desaparezca de la lista. Solo lo que tiene una cantidad
-  // válida (>0) cuenta para el total y se guarda en el pedido.
-  const cartValido=cart.filter(x=>Number(x.cant)>0).map(x=>({...x,cant:Number(x.cant)}));
-  const total=cartValido.reduce((s,x)=>s+x.precio*x.cant,0);
+  const addCart=p=>setCart(c=>{ const ex=c.find(x=>x.id===p.id); return ex?c.map(x=>x.id===p.id?{...x,cant:x.cant+1}:x):[...c,{id:p.id,nombre:p.nombre,precio:p.precio,cant:1}]; });
+  const updQty=(id,v)=>{ if(v<1){setCart(c=>c.filter(x=>x.id!==id));return;} setCart(c=>c.map(x=>x.id===id?{...x,cant:v}:x)); };
+  const total=cart.reduce((s,x)=>s+x.precio*x.cant,0);
   const cliente=cliMode==='nuevo'?nuevoC:cliSel;
-  const canSave=cliente?.nombre&&cartValido.length>0;
+  const canSave=cliente?.nombre&&cart.length>0;
   const makeWA=(cl,items,tot,fp)=>{
     const lines=items.map(x=>`• ${x.nombre} x${x.cant} = ${fmt(x.precio*x.cant)}`).join('\n');
     const text=`🧾 *PEDIDO*\n👤 ${cl.nombre}\n\n${lines}\n\n💰 *Total: ${fmt(tot)}*\nPago: ${fp}`;
@@ -38,7 +34,7 @@ function CrearNota({productos,clientes,currentUser,ventaRapida,onVentaRapidaCons
     setSaving(true);
     try{
       const stockErrors=[];
-      cartValido.forEach(item=>{
+      cart.forEach(item=>{
         const producto=productos.find(p=>p.id===item.id);
         if(!producto||producto.stock<item.cant) stockErrors.push(`${item.nombre} (disponible: ${producto?.stock||0}, solicitado: ${item.cant})`);
       });
@@ -48,11 +44,11 @@ function CrearNota({productos,clientes,currentUser,ventaRapida,onVentaRapidaCons
         const ref=await db.collection('clientes').add({nombre:nuevoC.nombre,telefono:nuevoC.telefono||'',domicilio:'',activo:true});
         cl={id:ref.id,nombre:nuevoC.nombre,telefono:nuevoC.telefono||''};
       }
-      const nota={fecha:new Date().toISOString(),clienteId:cl.id,clienteNombre:cl.nombre,clienteTelefono:cl.telefono||'',items:cartValido.map(x=>({...x})),total,formaPago:pago,capturadoPorUid:currentUser.uid,capturadoPorNombre:currentUser.nombre};
+      const nota={fecha:new Date().toISOString(),clienteId:cl.id,clienteNombre:cl.nombre,clienteTelefono:cl.telefono||'',items:cart.map(x=>({...x})),total,formaPago:pago,capturadoPorUid:currentUser.uid,capturadoPorNombre:currentUser.nombre};
       const notaRef=await db.collection('notas').add(nota);
       if(pago==='credito') await db.collection('creditos').add({notaId:notaRef.id,clienteId:cl.id,clienteNombre:cl.nombre,fecha:nota.fecha,total,saldo:total,abonos:[]});
       const batch=db.batch();
-      cartValido.forEach(item=>{
+      cart.forEach(item=>{
         batch.update(db.collection('productos').doc(item.id),{stock:firebase.firestore.FieldValue.increment(-item.cant)});
       });
       await batch.commit();
@@ -102,7 +98,7 @@ function CrearNota({productos,clientes,currentUser,ventaRapida,onVentaRapidaCons
     <Card>
       <button onClick={()=>setProdOpen(o=>!o)} style={{background:'none',border:'none',color:'var(--ink)',width:'100%',textAlign:'left',cursor:'pointer',padding:0}}>
         <Row style={{justifyContent:'space-between'}}>
-          <span style={{fontWeight:700}}>📦 Productos {cartValido.length?`(${cartValido.reduce((s,x)=>s+x.cant,0)} artículos)`:''}</span>
+          <span style={{fontWeight:700}}>📦 Productos {cart.length?`(${cart.reduce((s,x)=>s+x.cant,0)} artículos)`:''}</span>
           {prodOpen?<CUp/>:<CDown/>}
         </Row>
       </button>
@@ -123,8 +119,12 @@ function CrearNota({productos,clientes,currentUser,ventaRapida,onVentaRapidaCons
           <div style={{fontSize:13,fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{item.nombre}</div>
           <div style={{fontSize:11,color:'var(--ink-faint)'}}>{fmt(item.precio)} c/u</div>
         </div>
-        <input type="number" min="0" value={item.cant===''||item.cant===undefined?'':item.cant} onChange={e=>updQty(item.id,e.target.value)} placeholder="0" style={{width:64,textAlign:'center',fontWeight:700,fontSize:14,background:'var(--surface-2)',border:'1px solid var(--line-strong)',borderRadius:6,color:'var(--ink)',padding:'6px 2px',flexShrink:0}}/>
-        <div style={{minWidth:62,textAlign:'right',fontWeight:700,color:'var(--accent-text)',fontSize:13}}>{fmt(item.precio*(Number(item.cant)||0))}</div>
+        <Row style={{gap:5,flexShrink:0}}>
+          <button onClick={()=>updQty(item.id,item.cant-1)} style={{background:'var(--surface-2)',border:'none',color:'var(--ink)',borderRadius:6,width:26,height:26,cursor:'pointer',fontSize:15}}>-</button>
+          <input type="number" min="1" value={item.cant} onChange={e=>{ const v=e.target.value; if(v===''){return;} const n=parseInt(v); if(!isNaN(n)&&n>=1) updQty(item.id,n); }} onBlur={e=>{ if(!e.target.value||parseInt(e.target.value)<1) updQty(item.id,1); }} style={{width:44,textAlign:'center',fontWeight:700,fontSize:14,background:'var(--surface-2)',border:'1px solid var(--line-strong)',borderRadius:6,color:'var(--ink)',padding:'4px 2px'}}/>
+          <button onClick={()=>updQty(item.id,item.cant+1)} style={{background:'var(--surface-2)',border:'none',color:'var(--ink)',borderRadius:6,width:26,height:26,cursor:'pointer',fontSize:15}}>+</button>
+        </Row>
+        <div style={{minWidth:62,textAlign:'right',fontWeight:700,color:'var(--accent-text)',fontSize:13}}>{fmt(item.precio*item.cant)}</div>
       </Row>)}
       <div style={{borderTop:'1px solid var(--line)',paddingTop:10,marginTop:4,marginBottom:12}}>
         <Row style={{justifyContent:'space-between'}}>

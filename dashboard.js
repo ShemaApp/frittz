@@ -85,7 +85,7 @@ function Dashboard({notas,productos,creditos,clientes,rutas,currentUser,onIrA,on
         <div style={{fontSize:11,color:'var(--ink-faint)',fontWeight:700,marginBottom:8}}>PEDIDOS DE HOY</div>
         {vhoy.map(n=><Row key={n.id} style={{justifyContent:'space-between',paddingBottom:8,borderBottom:'1px solid var(--line)',marginBottom:4}}>
           <div><div style={{fontSize:13,fontWeight:600}}>{n.clienteNombre}</div><div style={{fontSize:11,color:'var(--ink-faint)'}}>{n.items.length} prod. · {n.formaPago}</div></div>
-          <span style={{fontWeight:700,color:'var(--accent-text)'}}>{fmt(n.total)}</span>
+          <Row style={{gap:6}}>{n._pendiente&&<PendienteTag/>}<span style={{fontWeight:700,color:'var(--accent-text)'}}>{fmt(n.total)}</span></Row>
         </Row>)}
       </Card>}
     </>}

@@ -2,10 +2,6 @@ const { useState, useEffect, useRef } = React;
 
 const uid = ()=>Date.now().toString(36)+Math.random().toString(36).slice(2);
 
-// true si el snapshot trae al menos un documento con una escritura local
-// que todavía no se confirma con el servidor (offline o en cola de subida).
-const snapTienePendientes = snap => snap.docs.some(d => d.metadata.hasPendingWrites);
-
 // PIN de acceso rápido: candado LOCAL sobre una sesión de Firebase ya
 // iniciada (no reemplaza la contraseña, no se manda a Firebase). Se guarda
 // solo un hash+sal en localStorage de este dispositivo, por uid.
@@ -65,6 +61,11 @@ const Inp   = ({style={},...p})=><input style={{background:'var(--surface-2)',bo
 const Lbl   = ({children})=><div style={{fontSize:10,color:'var(--ink-faint)',marginBottom:3,textTransform:'uppercase',letterSpacing:'.06em',fontFamily:'var(--font-mono)',fontWeight:600}}>{children}</div>;
 const Row   = ({children,style={}})=><div style={{display:'flex',alignItems:'center',gap:8,...style}}>{children}</div>;
 const Tag   = ({children,color='var(--accent-text)',style={}})=><span style={{background:`color-mix(in srgb, ${color} 14%, white)`,color,border:`1px solid color-mix(in srgb, ${color} 45%, white)`,borderRadius:3,padding:'2px 8px',fontSize:11,fontWeight:700,fontFamily:'var(--font-mono)',...style}}>{children}</span>;
+
+// true si el snapshot trae al menos un documento con una escritura local
+// que todavía no se confirma con el servidor (offline o en cola).
+const snapTienePendientes = snap => snap.docs.some(d => d.metadata.hasPendingWrites);
+const PendienteTag = () => <Tag color="var(--warn-text)">⏳ Sin sincronizar</Tag>;
 
 function Modal({title,onClose,children}){
   return <div style={{position:'fixed',inset:0,background:'#1B1D19cc',zIndex:300,display:'flex',alignItems:'flex-end'}}>

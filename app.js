@@ -17,7 +17,7 @@ function App(){
   const [abrirUsuarios,setAbrirUsuarios]=useState(false);
   const [isOnline,setIsOnline]=useState(navigator.onLine);
   const [pendCounts,setPendCounts]=useState({productos:0,clientes:0,notas:0,creditos:0,rutas:0});
-  const totalPendientes=Object.values(pendCounts).reduce((s,n)=>s+n,0);
+  const [sincronizando,setSincronizando]=useState(false);
 
   useEffect(()=>{
     const on=()=>setIsOnline(true), off=()=>setIsOnline(false);
@@ -78,31 +78,46 @@ function App(){
       }catch(e){ console.error('Error al sembrar datos iniciales',e); }
     })();
     const errorHandler=(err)=>{ console.error('Firestore error:',err); setFirestoreError('⚠️ Error de conexión con la base de datos. Revisa tus permisos.'); };
-    const pend=(col,snap)=>setPendCounts(p=>({...p,[col]:snap.docs.filter(d=>d.metadata.hasPendingWrites).length}));
     const unsubs=[
       db.collection('productos').onSnapshot({includeMetadataChanges:true},snap=>{
-        setProductos(snap.docs.map(d=>({id:d.id,...d.data()})));
-        pend('productos',snap);
+        setProductos(snap.docs.map(d=>({id:d.id,...d.data(),_pendiente:d.metadata.hasPendingWrites})));
+        setPendCounts(p=>({...p,productos:snap.docs.filter(d=>d.metadata.hasPendingWrites).length}));
       },errorHandler),
       db.collection('clientes').onSnapshot({includeMetadataChanges:true},snap=>{
-        setClientes(snap.docs.map(d=>({id:d.id,...d.data()})));
-        pend('clientes',snap);
+        setClientes(snap.docs.map(d=>({id:d.id,...d.data(),_pendiente:d.metadata.hasPendingWrites})));
+        setPendCounts(p=>({...p,clientes:snap.docs.filter(d=>d.metadata.hasPendingWrites).length}));
       },errorHandler),
       db.collection('notas').orderBy('fecha','desc').limit(500).onSnapshot({includeMetadataChanges:true},snap=>{
-        setNotas(snap.docs.map(d=>({id:d.id,...d.data()})));
-        pend('notas',snap);
+        setNotas(snap.docs.map(d=>({id:d.id,...d.data(),_pendiente:d.metadata.hasPendingWrites})));
+        setPendCounts(p=>({...p,notas:snap.docs.filter(d=>d.metadata.hasPendingWrites).length}));
       },errorHandler),
       db.collection('creditos').onSnapshot({includeMetadataChanges:true},snap=>{
-        setCreditos(snap.docs.map(d=>({id:d.id,...d.data()})));
-        pend('creditos',snap);
+        setCreditos(snap.docs.map(d=>({id:d.id,...d.data(),_pendiente:d.metadata.hasPendingWrites})));
+        setPendCounts(p=>({...p,creditos:snap.docs.filter(d=>d.metadata.hasPendingWrites).length}));
       },errorHandler),
       db.collection('rutas').orderBy('fecha','desc').limit(100).onSnapshot({includeMetadataChanges:true},snap=>{
-        setRutas(snap.docs.map(d=>({id:d.id,...d.data()})));
-        pend('rutas',snap);
+        setRutas(snap.docs.map(d=>({id:d.id,...d.data(),_pendiente:d.metadata.hasPendingWrites})));
+        setPendCounts(p=>({...p,rutas:snap.docs.filter(d=>d.metadata.hasPendingWrites).length}));
       },errorHandler),
     ];
     return ()=>unsubs.forEach(u=>u());
   },[currentUser]);
+
+  const totalPendientes=Object.values(pendCounts).reduce((s,n)=>s+n,0);
+
+  // Confirma con el propio servidor (no solo con la caché local) que ya no
+  // queda ninguna escritura pendiente — es la garantía real de "todo subió",
+  // útil antes de cerrar una ruta o cerrar sesión al final del día.
+  const verificarSincronizado=()=>{
+    if(!isOnline){
+      alert('📡 Sin conexión — no se puede verificar la sincronización ahora mismo.\n\nTus cambios están guardados en este dispositivo y subirán solos en cuanto vuelva la señal. No cierres la app hasta entonces si quieres asegurarte.');
+      return Promise.resolve(false);
+    }
+    setSincronizando(true);
+    return db.waitForPendingWrites()
+      .then(()=>{ setSincronizando(false); return true; })
+      .catch(()=>{ setSincronizando(false); alert('⚠️ No se pudo confirmar la sincronización. Revisa tu conexión antes de cerrar.'); return false; });
+  };
 
   const ALL_TABS=[['home','🏠','Inicio'],['productos','📦','Productos'],['nota','🧾','Pedido'],['clientes','👥','Clientes'],['creditos','💳','Créditos'],['ruta','🚚','Ruta'],['repartidores','🧭','Repartidores'],['inventario','📋','Inventario'],['reportes','📈','Reportes'],['gerencia','💰','Gerencia']];
   // Pestañas visibles: por defecto según el rol, con overrides por persona que
@@ -119,15 +134,23 @@ function App(){
   },[currentUser]);
 
   const goConfig=()=>{ if(tab!=='config') setPrevTab(tab); setTab('config'); };
-  const logout=()=>{ auth.signOut(); setTab('nota'); };
-  const ctx={productos,clientes,notas,creditos,rutas};
+  const logout=async()=>{
+    if(totalPendientes>0){
+      const ok=await verificarSincronizado();
+      if(ok && !confirm('✅ Todo sincronizado. ¿Cerrar sesión?')) return;
+      if(!ok) return; // se quedó sin confirmar (sin señal o falló) — no cerramos sesión a ciegas
+    }
+    auth.signOut(); setTab('nota');
+  };
+  const ctx={productos,clientes,notas,creditos,rutas,isOnline,pendCounts,totalPendientes,verificarSincronizado,sincronizando};
+
+  const bannerVisible=!isOnline||totalPendientes>0;
 
   if(!authChecked) return <div style={{display:'flex',justifyContent:'center',alignItems:'center',height:'100vh',color:'var(--ink-faint)',fontSize:14,background:'var(--bg)'}}>Cargando…</div>;
   if(!currentUser) return <Login/>;
   if(locked) return <PinLock currentUser={currentUser} onUnlock={()=>setLocked(false)} onUsePassword={()=>auth.signOut()}/>;
 
-  const mostrarBanner=!isOnline||totalPendientes>0;
-  return <div style={{minHeight:'100vh',position:'relative',paddingTop:mostrarBanner?81:53,paddingBottom:24,background:'var(--bg)'}}>
+  return <div style={{minHeight:'100vh',position:'relative',paddingTop:bannerVisible?81:53,paddingBottom:24,background:'var(--bg)'}}>
     <div style={{position:'fixed',top:0,left:'50%',transform:'translateX(-50%)',width:'100%',maxWidth:420,background:'var(--rail)',zIndex:100,height:50,display:'flex',alignItems:'center',justifyContent:'space-between',padding:'0 16px',boxSizing:'border-box'}}>
       <Row style={{gap:10}}>
         {tab!=='config'&&<button onClick={()=>setNavOpen(o=>!o)} style={{background:'none',border:'none',color:'var(--rail-ink-faint)',cursor:'pointer',padding:'5px 3px',display:'flex',alignItems:'center'}}>
@@ -143,10 +166,10 @@ function App(){
       </Row>
     </div>
     <div style={{position:'fixed',top:50,left:'50%',transform:'translateX(-50%)',width:'100%',maxWidth:420,height:3,zIndex:100,background:'repeating-linear-gradient(-45deg,var(--accent),var(--accent) 10px,var(--rail) 10px,var(--rail) 20px)'}}/>
-    {mostrarBanner&&<div style={{position:'fixed',top:53,left:'50%',transform:'translateX(-50%)',width:'100%',maxWidth:420,zIndex:99,background:isOnline?'var(--warn-bg)':'var(--danger-bg)',color:isOnline?'var(--warn-text)':'var(--danger-text)',fontSize:12,fontWeight:600,textAlign:'center',padding:'6px 12px',boxSizing:'border-box'}}>
+    {bannerVisible&&<div style={{position:'fixed',top:53,left:'50%',transform:'translateX(-50%)',width:'100%',maxWidth:420,background:isOnline?'var(--warn-bg)':'var(--danger-bg)',color:isOnline?'var(--warn-text)':'var(--danger-text)',fontSize:12,textAlign:'center',padding:'6px 12px',zIndex:99,boxSizing:'border-box'}}>
       {isOnline
-        ? `⏳ Sincronizando ${totalPendientes} cambio${totalPendientes===1?'':'s'}…`
-        : `📡 Sin conexión — puedes seguir trabajando, se sincroniza solo${totalPendientes>0?` (${totalPendientes} en cola)`:''}`}
+        ? `⏳ Sincronizando ${totalPendientes} cambio(s)…`
+        : `📡 Sin conexión — puedes seguir trabajando, se sincroniza solo al volver la señal`}
     </div>}
     {firestoreError&&<div style={{margin:'0 12px 10px',background:'var(--danger-bg)',border:'1px solid var(--danger)55',borderRadius:4,padding:'8px 12px',fontSize:12,color:'var(--danger-text)'}}>{firestoreError}</div>}
     {tab==='home'&&<Dashboard {...ctx} currentUser={currentUser} onIrA={setTab} onVentaRapida={()=>{setVentaRapida(true);setTab('nota');}} onAgregarProducto={()=>{setAbrirFormProducto(true);setTab('productos');}} onAgregarUsuario={()=>{setAbrirUsuarios(true);goConfig();}}/>}

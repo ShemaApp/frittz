@@ -3,7 +3,7 @@
 // Los DATOS (productos, clientes, etc.) los maneja Firestore con enablePersistence()
 // en el propio HTML — este SW no toca esos datos.
 
-const CACHE_NAME = 'distribupanel-shell-v24'; // ⬆️ v24: banner de conexión + contador de operaciones en cola (app.js); en Pedidos, cantidad de producto sin botones +/-, editor libre igual que el conteo físico
+const CACHE_NAME = 'distribupanel-shell-v24'; // ⬆️ v24: indicador de conexión/pendientes de sincronizar (banner global + tags por fila) y verificación real de sincronización al cerrar ruta/sesión
 // Cache aparte para tiles de mapa offline: a propósito NO se borra cuando
 // sube la versión del shell (ver 'activate' más abajo) — si viviera en
 // CACHE_NAME, cada actualización de la app borraría el mapa descargado.

@@ -1,5 +1,5 @@
 /* ── Ruta de reparto ── */
-function RutaReparto({productos,clientes,rutas,currentUser}){
+function RutaReparto({productos,clientes,rutas,currentUser,verificarSincronizado,totalPendientes,isOnline,sincronizando}){
   const [scanOpen,setScanOpen]=useState(false);
   const [cart,setCart]=useState([]);
   const [msg,setMsg]=useState('');
@@ -127,6 +127,14 @@ function RutaReparto({productos,clientes,rutas,currentUser}){
   };
   const cerrarRuta=async()=>{
     if(!rutaActiva) return;
+    if(totalPendientes>0){
+      if(isOnline){
+        const ok=await verificarSincronizado();
+        if(!ok) return; // no se pudo confirmar todavía — mejor esperar antes de cerrar
+      }else if(!confirm('📡 Sigues sin conexión y hay cambios de hoy sin subir todavía. ¿Cerrar la ruta de todas formas? Se sincronizará solo en cuanto vuelva la señal.')){
+        return;
+      }
+    }
     if(!confirm('¿Cerrar esta ruta? Ya no podrás registrar más entregas en ella.')) return;
     await db.collection('rutas').doc(rutaActiva.id).update({estado:'cerrada'});
     flash('🏁 Ruta cerrada');
@@ -211,13 +219,13 @@ function RutaReparto({productos,clientes,rutas,currentUser}){
       <Card style={{borderLeft:'3px solid var(--accent-text)'}}>
         <Row style={{justifyContent:'space-between',marginBottom:8}}>
           <span style={{fontWeight:700,fontSize:14}}>📦 Camión cargado</span>
-          <Tag color="var(--accent-text)">Ruta activa</Tag>
+          <Row style={{gap:6}}>{rutaActiva._pendiente&&<PendienteTag/>}<Tag color="var(--accent-text)">Ruta activa</Tag></Row>
         </Row>
         {Object.entries(rutaActiva.items).map(([id,it])=><Row key={id} style={{justifyContent:'space-between',marginBottom:4}}>
           <span style={{fontSize:13}}>{it.nombre}</span>
           <span style={{fontSize:12,color:it.cantRestante===0?'var(--ink-faint)':'var(--ink-soft)'}}>{it.cantRestante} / {it.cantCargada} {it.unidad}</span>
         </Row>)}
-        <BOut onClick={cerrarRuta} color="var(--danger-text)" style={{width:'100%',marginTop:10}}>🏁 Cerrar ruta</BOut>
+        <BOut onClick={cerrarRuta} color="var(--danger-text)" style={{width:'100%',marginTop:10}} disabled={sincronizando}>{sincronizando?'Verificando sincronización…':'🏁 Cerrar ruta'}</BOut>
       </Card>
 
       <Card>
@@ -298,6 +306,7 @@ function RutaReparto({productos,clientes,rutas,currentUser}){
           <Row style={{justifyContent:'space-between',marginBottom:4}}>
             <span style={{fontSize:12,color:'var(--ink-soft)'}}>{fDate(r.fecha)}</span>
             <Row style={{gap:6}}>
+              {r._pendiente&&<PendienteTag/>}
               <Tag color={r.estado==='activa'?'var(--accent-text)':'var(--ink-faint)'}>{r.estado||'cerrada'}</Tag>
               <Tag color="var(--ok-text)">{(r.entregas||[]).length} entregas</Tag>
             </Row>
