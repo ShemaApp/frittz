@@ -7,7 +7,6 @@
 <link rel="manifest" href="./manifest.json"/>
 <meta name="theme-color" content="#1E211D"/>
 <link rel="icon" href="./icons/icon-192.png"/>
-<!-- iOS: Safari no lee manifest.json, necesita estas etiquetas aparte -->
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="P. Costa"/>
@@ -15,18 +14,9 @@
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
 <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600;700&display=swap" rel="stylesheet"/>
-<script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
-<script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/firebase@10.13.0/firebase-app-compat.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/firebase@10.13.0/firebase-auth-compat.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/firebase@10.13.0/firebase-firestore-compat.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/firebase@10.13.0/firebase-app-check-compat.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <style>
   *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
   :root{
-    /* ── Tokens: industrial / logística, tema claro ── */
     --bg:#ECEDE7; --surface:#FFFFFF; --surface-2:#F1F1EA;
     --ink:#1B1D19; --ink-soft:#585D53; --ink-faint:#8B8F84;
     --line:#DEE0D5; --line-strong:#C7C9BB;
@@ -45,27 +35,63 @@
   input:focus{outline:none!important;border-color:var(--accent-text)!important}
   button,select{font-family:inherit}
   *{-webkit-tap-highlight-color:transparent}
+  .loader{display:flex;justify-content:center;align-items:center;height:100vh;flex-direction:column;gap:12px;font-family:var(--font-body);color:var(--ink-soft)}
+  .spinner{width:40px;height:40px;border:4px solid var(--line-strong);border-top-color:var(--accent);border-radius:50%;animation:spin 0.8s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
 </style>
 </head>
 <body>
-<div id="root"><div style="display:flex;justify-content:center;align-items:center;height:100vh;color:var(--ink-soft);font-size:14px">Iniciando…</div></div>
-<script src="./firebase-init.js"></script>
-<script type="text/babel" src="./app-core.js"></script>
-<script type="text/babel" src="./auth.js"></script>
-<script type="text/babel" src="./dashboard.js"></script>
-<script type="text/babel" src="./productos.js"></script>
-<script type="text/babel" src="./clientes.js"></script>
-<script type="text/babel" src="./pedidos.js"></script>
-<script type="text/babel" src="./creditos.js"></script>
-<script type="text/babel" src="./ruta.js"></script>
-<script type="text/babel" src="./config.js"></script>
-<script type="text/babel" src="./app.js"></script>
-<script type="text/babel" src="./rutas-repartidores.js"></script>
-<script type="text/babel" src="./inventario.js"></script>
-<script type="text/babel" src="./reportes.js"></script>
-<script type="text/babel" src="./gerencia.js"></script>
-<script type="text/babel" src="./permisos.js"></script>
-<script>
+<div id="root">
+  <div class="loader">
+    <div class="spinner"></div>
+    <div style="font-size:14px;font-weight:500">Cargando aplicación...</div>
+  </div>
+</div>
+
+<!-- 1. Dependencias externas (CDN) con defer -->
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/firebase@10.13.0/firebase-app-compat.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/firebase@10.13.0/firebase-auth-compat.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/firebase@10.13.0/firebase-firestore-compat.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/firebase@10.13.0/firebase-app-check-compat.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<script defer src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+
+<!-- 2. Código compilado (pre-transformado) - SIN Babel -->
+<script defer src="./compiled/firebase-init.js"></script>
+<script defer src="./compiled/app-core.js"></script>
+<script defer src="./compiled/auth.js"></script>
+<script defer src="./compiled/dashboard.js"></script>
+<script defer src="./compiled/productos.js"></script>
+<script defer src="./compiled/clientes.js"></script>
+<script defer src="./compiled/pedidos.js"></script>
+<script defer src="./compiled/creditos.js"></script>
+<script defer src="./compiled/ruta.js"></script>
+<script defer src="./compiled/config.js"></script>
+<script defer src="./compiled/app.js"></script>
+<script defer src="./compiled/rutas-repartidores.js"></script>
+<script defer src="./compiled/inventario.js"></script>
+<script defer src="./compiled/reportes.js"></script>
+<script defer src="./compiled/gerencia.js"></script>
+<script defer src="./compiled/permisos.js"></script>
+
+<!-- 3. Inicialización -->
+<script defer>
+  document.addEventListener('DOMContentLoaded', () => {
+    const root = document.getElementById('root');
+    root.innerHTML = '';
+    
+    if (window.App && window.ReactDOM) {
+      window.ReactDOM.createRoot(root).render(window.React.createElement(window.App));
+    } else {
+      console.error('App no encontrada');
+      root.innerHTML = '<div style="padding:40px;text-align:center;color:var(--danger-text)">Error al cargar la aplicación</div>';
+    }
+  });
+
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
       navigator.serviceWorker.register('./sw.js')

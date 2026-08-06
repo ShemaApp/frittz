@@ -1,0 +1,64 @@
+name: Build and Deploy
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+    # 1. Descargar el código
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    # 2. Configurar Node.js
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+    
+    # 3. Instalar dependencias
+    - name: Install dependencies
+      run: npm ci
+      # npm ci es más rápido y usa package-lock.json
+    
+    # 4. Compilar con esbuild
+    - name: Build with esbuild
+      run: npm run build
+    
+    # 5. Verificar que se creó compiled/
+    - name: Verify compiled folder
+      run: |
+        ls -la compiled/
+        echo "✅ Archivos compilados:"
+        find compiled/ -name "*.js" -exec ls -lh {} \;
+    
+    # 6. Desplegar a GitHub Pages (opcional)
+    - name: Deploy to GitHub Pages
+      if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+      uses: peaceiris/actions-gh-pages@v3
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        publish_dir: ./
+        publish_branch: gh-pages
+        exclude_assets: |
+          .github
+          node_modules
+          *.js
+          !compiled/*.js
+          package.json
+          package-lock.json
+          build.js
+          .gitignore
+    
+    # 7. Subir los archivos compilados como artifact (para revisión)
+    - name: Upload compiled files as artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: compiled-files
+        path: compiled/

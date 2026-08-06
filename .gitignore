@@ -1,0 +1,7 @@
+node_modules/
+npm_debug.log*
+package_lock.json
+.env
+.firebase
+.DS_store
+compiled/
