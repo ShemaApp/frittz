@@ -1,1 +1,213 @@
-var x=Object.defineProperty;var p=Object.getOwnPropertySymbols;var g=Object.prototype.hasOwnProperty,f=Object.prototype.propertyIsEnumerable;var u=(e,t,a)=>t in e?x(e,t,{enumerable:!0,configurable:!0,writable:!0,value:a}):e[t]=a,r=(e,t)=>{for(var a in t||(t={}))g.call(t,a)&&u(e,a,t[a]);if(p)for(var a of p(t))f.call(t,a)&&u(e,a,t[a]);return e};var l=(e,t)=>{var a={};for(var i in e)g.call(e,i)&&t.indexOf(i)<0&&(a[i]=e[i]);if(e!=null&&p)for(var i of p(e))t.indexOf(i)<0&&f.call(e,i)&&(a[i]=e[i]);return a};const{useState,useEffect,useRef}=React,uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2),pinKey=e=>"pdc_pin_"+e,hashPin=async(e,t)=>{const a=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(e+":"+t));return Array.from(new Uint8Array(a)).map(i=>i.toString(16).padStart(2,"0")).join("")},savePin=async(e,t)=>{const a=uid()+uid(),i=await hashPin(t,a);localStorage.setItem(pinKey(e),JSON.stringify({hash:i,salt:a,len:t.length}))},clearPin=e=>localStorage.removeItem(pinKey(e)),fmt=e=>"$"+Number(e||0).toFixed(2),fDate=e=>new Date(e).toLocaleDateString("es-MX",{day:"2-digit",month:"short",year:"2-digit"}),S_PROD=[{identificaci\u00F3n:"p1",nombre:"Paquete jumbo",precio:250,existencias:298,unidad:"paquete",c\u00F3digo:"750000000010"},{identificaci\u00F3n:"p2",nombre:"Sueros",precio:290,existencias:300,unidad:"paquete (12 pzas)",c\u00F3digo:"750000000015"},{identificaci\u00F3n:"p3",nombre:"Papa ondulada",precio:13,existencias:5050,unidad:"pieza",c\u00F3digo:"750000000003"},{identificaci\u00F3n:"p4",nombre:"Paquete fiesta",precio:85,existencias:200,unidad:"paquete",c\u00F3digo:"01 526371137561 002"},{identificaci\u00F3n:"p5",nombre:"Paquete Maruchan",precio:185,existencias:299,unidad:"paquete (12 pzas)",c\u00F3digo:"750000000012"},{identificaci\u00F3n:"p6",nombre:"Amper Energy",precio:210,existencias:300,unidad:"12 pack",c\u00F3digo:"750000000014"},{identificaci\u00F3n:"p7",nombre:"Chicharr\xF3n de puerco",precio:27,existencias:500,unidad:"pieza",c\u00F3digo:"750000000004"},{identificaci\u00F3n:"p8",nombre:"Paquete grande",precio:30,existencias:200,unidad:"paquete",c\u00F3digo:"750000000008"},{identificaci\u00F3n:"p9",nombre:"Frituras",precio:10,existencias:1e4,unidad:"pieza",c\u00F3digo:"750000000001"},{identificaci\u00F3n:"p10",nombre:"Paquete mixto grande",precio:35,existencias:200,unidad:"paquete",c\u00F3digo:"750000000009"},{identificaci\u00F3n:"p11",nombre:"Bolis pack",precio:72,existencias:299,unidad:"Pqt",c\u00F3digo:"750000000005"},{identificaci\u00F3n:"p12",nombre:"Cacahuates",precio:15,existencias:4997,unidad:"pieza",c\u00F3digo:"750000000002"},{identificaci\u00F3n:"p13",nombre:"Bolis pieza",precio:6,existencias:9999,unidad:"pieza",c\u00F3digo:"750000000006"}],S_CLI=[{identificaci\u00F3n:"c1",nombre:"Do\xF1a Mar\xEDa los Sapos",direcci\u00F3n:"Campo los Sapos"},{identificaci\u00F3n:"c2",nombre:"Do\xF1a Luz",direcci\u00F3n:"Santa Cecilia"},{identificaci\u00F3n:"c3",nombre:"Do\xF1a Cecilia los Sapos",direcci\u00F3n:"Los sapos"}],Ic=({children:e,size:t=18})=>React.createElement("svg",{width:t,height:t,viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:"2",strokeLinecap:"round",strokeLinejoin:"round"},e),CDown=()=>React.createElement(Ic,null,React.createElement("polyline",{points:"6 9 12 15 18 9"})),CUp=()=>React.createElement(Ic,null,React.createElement("polyline",{points:"18 15 12 9 6 15"})),XI=({size:e=20})=>React.createElement(Ic,{size:e},React.createElement("line",{x1:"18",y1:"6",x2:"6",y2:"18"}),React.createElement("line",{x1:"6",y1:"6",x2:"18",y2:"18"})),ChkSq=()=>React.createElement(Ic,null,React.createElement("polyline",{points:"9 11 12 14 22 4"}),React.createElement("path",{d:"M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"})),SqI=()=>React.createElement(Ic,null,React.createElement("rect",{x:"3",y:"3",width:"18",height:"18",rx:"2"})),EyeI=()=>React.createElement(Ic,{size:16},React.createElement("path",{d:"M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"}),React.createElement("circle",{cx:"12",cy:"12",r:"3"})),EyeX=()=>React.createElement(Ic,{size:16},React.createElement("path",{d:"M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"}),React.createElement("line",{x1:"1",y1:"1",x2:"23",y2:"23"})),Gear=()=>React.createElement(Ic,null,React.createElement("circle",{cx:"12",cy:"12",r:"3"}),React.createElement("path",{d:"M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"})),Menu=()=>React.createElement(Ic,null,React.createElement("line",{x1:"3",y1:"6",x2:"21",y2:"6"}),React.createElement("line",{x1:"3",y1:"12",x2:"21",y2:"12"}),React.createElement("line",{x1:"3",y1:"18",x2:"21",y2:"18"})),Card=({children:e,style:t={}})=>React.createElement("div",{style:r({background:"var(--surface)",border:"1px solid var(--line)",borderRadius:4,padding:"12px 14px",marginBottom:10},t)},e),BFill=o=>{var c=o,{children:e,onClick:t,bg:a="var(--accent)",color:i="var(--accent-ink)",style:s={}}=c,n=l(c,["children","onClick","bg","color","style"]);return React.createElement("button",r({onClick:t,style:r({background:a,color:i,border:"none",borderRadius:3,padding:"9px 14px",cursor:"pointer",fontSize:13,fontWeight:700,fontFamily:"var(--font-display)",textTransform:"uppercase",letterSpacing:".03em"},s)},n),e)},BOut=n=>{var o=n,{children:e,onClick:t,color:a="var(--accent-text)",style:i={}}=o,s=l(o,["children","onClick","color","style"]);return React.createElement("button",r({onClick:t,style:r({background:"transparent",color:a,border:`1.5px solid ${a}`,borderRadius:3,padding:"8px 14px",cursor:"pointer",fontSize:13,fontWeight:600,fontFamily:"var(--font-display)",textTransform:"uppercase",letterSpacing:".03em"},i)},s),e)},Inp=a=>{var i=a,{style:e={}}=i,t=l(i,["style"]);return React.createElement("input",r({style:r({background:"var(--surface-2)",border:"1px solid var(--line-strong)",borderRadius:3,padding:"8px 10px",color:"var(--ink)",fontSize:13,width:"100%",boxSizing:"border-box"},e)},t))},Lbl=({children:e})=>React.createElement("div",{style:{fontSize:10,color:"var(--ink-faint)",marginBottom:3,textTransform:"uppercase",letterSpacing:".06em",fontFamily:"var(--font-mono)",fontWeight:600}},e),Row=({children:e,style:t={}})=>React.createElement("div",{style:r({display:"flex",alignItems:"center",gap:8},t)},e),Tag=({children:e,color:t="var(--accent-text)",style:a={}})=>React.createElement("span",{style:r({background:`color-mix(in srgb, ${t} 14%, white)`,color:t,border:`1px solid color-mix(in srgb, ${t} 45%, white)`,borderRadius:3,padding:"2px 8px",fontSize:11,fontWeight:700,fontFamily:"var(--font-mono)"},a)},e),snapTienePendientes=e=>e.docs.some(t=>t.metadata.hasPendingWrites),PendienteTag=()=>React.createElement(Tag,{color:"var(--warn-text)"},"\u23F3 Sin sincronizar");function Modal({title:e,onClose:t,children:a}){return React.createElement("div",{style:{position:"fixed",inset:0,background:"#1B1D19cc",zIndex:300,display:"flex",alignItems:"flex-end"}},React.createElement("div",{style:{background:"var(--surface)",width:"100%",maxWidth:420,margin:"0 auto",borderRadius:"6px 6px 0 0",padding:20,paddingTop:16,maxHeight:"90vh",overflowY:"auto",borderTop:"4px solid var(--accent)"}},React.createElement(Row,{style:{justifyContent:"space-between",marginBottom:16}},React.createElement("span",{style:{fontSize:15,fontWeight:700,fontFamily:"var(--font-display)",textTransform:"uppercase",letterSpacing:".02em"}},e),React.createElement("button",{onClick:t,style:{background:"none",border:"none",color:"var(--ink-soft)",cursor:"pointer",display:"flex"}},React.createElement(XI,null))),a))}function distanciaMetros(e,t,a,i){const n=m=>m*Math.PI/180,o=n(a-e),c=n(i-t),d=Math.sin(o/2)**2+Math.cos(n(e))*Math.cos(n(a))*Math.sin(c/2)**2;return 6371e3*2*Math.atan2(Math.sqrt(d),Math.sqrt(1-d))}const RADIO_VISITA_METROS=150,Toggle=({checked:e,onChange:t,disabled:a=!1})=>React.createElement("button",{onClick:()=>!a&&t(!e),disabled:a,"aria-pressed":e,style:{width:44,height:26,borderRadius:13,border:"none",padding:2,flexShrink:0,background:e?"var(--ok)":"var(--line-strong)",cursor:a?"default":"pointer",position:"relative",transition:"background .15s",opacity:a?.5:1}},React.createElement("div",{style:{width:22,height:22,borderRadius:"50%",background:"#fff",transform:e?"translateX(18px)":"translateX(0)",transition:"transform .15s",boxShadow:"0 1px 2px rgba(0,0,0,.3)"}})),TABS_INFO=[["productos","\u{1F4E6}","Productos"],["nota","\u{1F9FE}","Pedido"],["clientes","\u{1F465}","Clientes"],["creditos","\u{1F4B3}","Cr\xE9ditos"],["ruta","\u{1F69A}","Ruta"],["repartidores","\u{1F9ED}","Rutas repartidores"],["inventario","\u{1F4CB}","Inventario"],["reportes","\u{1F4C8}","Reportes"],["gerencia","\u{1F4B0}","Gerencia"]],EDICION_INFO=[["productos","\u{1F4E6}","Editar / dar de alta productos"],["clientes","\u{1F465}","Editar / dar de alta clientes"],["creditos","\u{1F4B3}","Registrar abonos a cr\xE9ditos"]],ACCIONES_INFO=[["camara","\u{1F4F7}","Usar c\xE1mara (escanear QR de cliente)"],["csv","\u{1F4C4}","Descargar reportes en CSV"],["gps","\u{1F4CD}","Compartir ubicaci\xF3n en vivo (GPS)"],["password","\u{1F511}","Cambiar su propia contrase\xF1a"]],ACCIONES_DEFAULT_ROL={admin:{camara:!0,csv:!0,gps:!0,password:!0},usuario:{camara:!1,csv:!0,gps:!1,password:!0},repartidor:{camara:!0,csv:!1,gps:!0,password:!0}},permisoAcciones=e=>{var t;return(e==null?void 0:e.role)==="admin"?ACCIONES_DEFAULT_ROL.admin:r(r({},ACCIONES_DEFAULT_ROL[e==null?void 0:e.role]||ACCIONES_DEFAULT_ROL.usuario),((t=e==null?void 0:e.permisos)==null?void 0:t.acciones)||{})},TABS_DEFAULT_ROL={admin:{productos:!0,nota:!0,clientes:!0,creditos:!0,ruta:!0,repartidores:!0,inventario:!0,reportes:!0,gerencia:!0},usuario:{productos:!0,nota:!0,clientes:!0,creditos:!0,ruta:!1,repartidores:!1,inventario:!0,reportes:!1,gerencia:!0},repartidor:{productos:!1,nota:!0,clientes:!1,creditos:!1,ruta:!1,repartidores:!0,inventario:!1,reportes:!1,gerencia:!0}},EDITA_DEFAULT_ROL={admin:{productos:!0,clientes:!0,creditos:!0},usuario:{productos:!0,clientes:!0,creditos:!0},repartidor:{productos:!1,clientes:!1,creditos:!1}},permisoTabs=e=>{var t;return r(r({},TABS_DEFAULT_ROL[e==null?void 0:e.role]||TABS_DEFAULT_ROL.usuario),((t=e==null?void 0:e.permisos)==null?void 0:t.tabs)||{})},permisoEdita=e=>{var t;return(e==null?void 0:e.role)==="admin"?EDITA_DEFAULT_ROL.admin:r(r({},EDITA_DEFAULT_ROL[e==null?void 0:e.role]||EDITA_DEFAULT_ROL.usuario),((t=e==null?void 0:e.permisos)==null?void 0:t.edita)||{})};function PwInp({value:e,onChange:t,placeholder:a}){const[i,s]=useState(!1);return React.createElement("div",{style:{position:"relative",marginBottom:10}},React.createElement(Inp,{type:i?"text":"password",value:e,onChange:t,placeholder:a||"\u2022\u2022\u2022\u2022\u2022\u2022",style:{paddingRight:38}}),React.createElement("button",{onClick:()=>s(n=>!n),style:{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",color:"var(--ink-faint)",cursor:"pointer",padding:0,display:"flex"}},React.createElement(i?EyeX:EyeI,null)))}function BarcodeScanner({onDetected:e,onClose:t}){const[a]=useState(()=>"scanner-"+uid()),[i,s]=useState("");return useEffect(()=>{if(typeof Html5Qrcode=="undefined"){s("No se pudo cargar la librer\xEDa de escaneo. Revisa tu conexi\xF3n a internet.");return}let n=null,o=!1,c=!1;return(async()=>{try{n=new Html5Qrcode(a),await n.start({facingMode:"environment"},{fps:10,qrbox:{width:260,height:130}},d=>{o||c||(o=!0,n.stop().then(()=>n.clear()).catch(()=>{}),e(d))},()=>{})}catch(d){c||s("No se pudo acceder a la c\xE1mara. Revisa los permisos del navegador.")}})(),()=>{if(c=!0,n&&!o){o=!0;try{n.stop().then(()=>n.clear()).catch(()=>{})}catch(d){}}}},[]),React.createElement(Modal,{title:"\u{1F4F7} Escanear c\xF3digo de barras",onClose:t},i?React.createElement("div",{style:{fontSize:13,color:"var(--danger-text)",textAlign:"center",padding:"24px 0"}},i):React.createElement("div",{id:a,style:{width:"100%",borderRadius:4,overflow:"hidden",background:"#000"}}),React.createElement("div",{style:{fontSize:11,color:"var(--ink-faint)",textAlign:"center",marginTop:10}},"Apunta la c\xE1mara al c\xF3digo de barras del producto"))}
+const { useState, useEffect, useRef } = React;
+
+const uid = ()=>Date.now().toString(36)+Math.random().toString(36).slice(2);
+
+// PIN de acceso rápido: candado LOCAL sobre una sesión de Firebase ya
+// iniciada (no reemplaza la contraseña, no se manda a Firebase). Se guarda
+// solo un hash+sal en localStorage de este dispositivo, por uid.
+const pinKey = uid_ => 'pdc_pin_'+uid_;
+const hashPin = async (pin,salt)=>{
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(pin+':'+salt));
+  return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
+};
+const savePin = async (uid_,pin)=>{
+  const salt = uid()+uid();
+  const hash = await hashPin(pin,salt);
+  localStorage.setItem(pinKey(uid_), JSON.stringify({hash,salt,len:pin.length}));
+};
+const clearPin = uid_ => localStorage.removeItem(pinKey(uid_));
+const fmt = n=>'$'+Number(n||0).toFixed(2);
+const fDate = d=>new Date(d).toLocaleDateString('es-MX',{day:'2-digit',month:'short',year:'2-digit'});
+// S_PROD y S_CLI se usan solo como datos semilla la primera vez que Firestore está vacío
+const S_PROD = [
+  {identificación: 'p1', nombre: 'Paquete jumbo', precio: 250.00, existencias: 298, unidad: 'paquete', código: '750000000010'},
+  {identificación: 'p2', nombre: 'Sueros', precio: 290.00, existencias: 300, unidad: 'paquete (12 pzas)', código: '750000000015'},
+  {identificación: 'p3', nombre: 'Papa ondulada', precio: 13.00, existencias: 5050, unidad: 'pieza', código: '750000000003'},
+  {identificación: 'p4', nombre: 'Paquete fiesta', precio: 85.00, existencias: 200, unidad: 'paquete', código: '01 526371137561 002'},
+  {identificación: 'p5', nombre: 'Paquete Maruchan', precio: 185.00, existencias: 299, unidad: 'paquete (12 pzas)', código: '750000000012'},
+  {identificación: 'p6', nombre: 'Amper Energy', precio: 210.00, existencias: 300, unidad: '12 pack', código: '750000000014'},
+  {identificación: 'p7', nombre: 'Chicharrón de puerco', precio: 27.00, existencias: 500, unidad: 'pieza', código: '750000000004'},
+  {identificación: 'p8', nombre: 'Paquete grande', precio: 30.00, existencias: 200, unidad: 'paquete', código: '750000000008'},
+  {identificación: 'p9', nombre: 'Frituras', precio: 10.00, existencias: 10000, unidad: 'pieza', código: '750000000001'},
+  {identificación: 'p10', nombre: 'Paquete mixto grande', precio: 35.00, existencias: 200, unidad: 'paquete', código: '750000000009'},
+  {identificación: 'p11', nombre: 'Bolis pack', precio: 72.00, existencias: 299, unidad: 'Pqt', código: '750000000005'},
+  {identificación: 'p12', nombre: 'Cacahuates', precio: 15.00, existencias: 4997, unidad: 'pieza', código: '750000000002'},
+  {identificación: 'p13', nombre: 'Bolis pieza', precio: 6.00, existencias: 9999, unidad: 'pieza', código: '750000000006'}
+];
+
+const S_CLI = [
+  {identificación: 'c1', nombre: 'Doña María los Sapos', dirección: 'Campo los Sapos'},
+  {identificación: 'c2', nombre: 'Doña Luz', dirección: 'Santa Cecilia'},
+  {identificación: 'c3', nombre: 'Doña Cecilia los Sapos', dirección: 'Los sapos'}
+];
+
+/* ── Icons ── */
+const Ic = ({children,size=18})=><svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">{children}</svg>;
+const CDown = ()=><Ic><polyline points="6 9 12 15 18 9"/></Ic>;
+const CUp   = ()=><Ic><polyline points="18 15 12 9 6 15"/></Ic>;
+const XI    = ({size=20})=><Ic size={size}><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></Ic>;
+const ChkSq = ()=><Ic><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></Ic>;
+const SqI   = ()=><Ic><rect x="3" y="3" width="18" height="18" rx="2"/></Ic>;
+const EyeI  = ()=><Ic size={16}><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></Ic>;
+const EyeX  = ()=><Ic size={16}><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></Ic>;
+const Gear  = ()=><Ic><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></Ic>;
+const Menu  = ()=><Ic><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></Ic>;
+
+/* ── UI Atoms ── */
+const Card  = ({children,style={}})=><div style={{background:'var(--surface)',border:'1px solid var(--line)',borderRadius:4,padding:'12px 14px',marginBottom:10,...style}}>{children}</div>;
+const BFill = ({children,onClick,bg='var(--accent)',color='var(--accent-ink)',style={},...p})=><button onClick={onClick} style={{background:bg,color,border:'none',borderRadius:3,padding:'9px 14px',cursor:'pointer',fontSize:13,fontWeight:700,fontFamily:'var(--font-display)',textTransform:'uppercase',letterSpacing:'.03em',...style}} {...p}>{children}</button>;
+const BOut  = ({children,onClick,color='var(--accent-text)',style={},...p})=><button onClick={onClick} style={{background:'transparent',color,border:`1.5px solid ${color}`,borderRadius:3,padding:'8px 14px',cursor:'pointer',fontSize:13,fontWeight:600,fontFamily:'var(--font-display)',textTransform:'uppercase',letterSpacing:'.03em',...style}} {...p}>{children}</button>;
+const Inp   = ({style={},...p})=><input style={{background:'var(--surface-2)',border:'1px solid var(--line-strong)',borderRadius:3,padding:'8px 10px',color:'var(--ink)',fontSize:13,width:'100%',boxSizing:'border-box',...style}} {...p}/>;
+const Lbl   = ({children})=><div style={{fontSize:10,color:'var(--ink-faint)',marginBottom:3,textTransform:'uppercase',letterSpacing:'.06em',fontFamily:'var(--font-mono)',fontWeight:600}}>{children}</div>;
+const Row   = ({children,style={}})=><div style={{display:'flex',alignItems:'center',gap:8,...style}}>{children}</div>;
+const Tag   = ({children,color='var(--accent-text)',style={}})=><span style={{background:`color-mix(in srgb, ${color} 14%, white)`,color,border:`1px solid color-mix(in srgb, ${color} 45%, white)`,borderRadius:3,padding:'2px 8px',fontSize:11,fontWeight:700,fontFamily:'var(--font-mono)',...style}}>{children}</span>;
+
+// true si el snapshot trae al menos un documento con una escritura local
+// que todavía no se confirma con el servidor (offline o en cola).
+const snapTienePendientes = snap => snap.docs.some(d => d.metadata.hasPendingWrites);
+const PendienteTag = () => <Tag color="var(--warn-text)">⏳ Sin sincronizar</Tag>;
+
+function Modal({title,onClose,children}){
+  return <div style={{position:'fixed',inset:0,background:'#1B1D19cc',zIndex:300,display:'flex',alignItems:'flex-end'}}>
+    <div style={{background:'var(--surface)',width:'100%',maxWidth:420,margin:'0 auto',borderRadius:'6px 6px 0 0',padding:20,paddingTop:16,maxHeight:'90vh',overflowY:'auto',borderTop:'4px solid var(--accent)'}}>
+      <Row style={{justifyContent:'space-between',marginBottom:16}}>
+        <span style={{fontSize:15,fontWeight:700,fontFamily:'var(--font-display)',textTransform:'uppercase',letterSpacing:'.02em'}}>{title}</span>
+        <button onClick={onClose} style={{background:'none',border:'none',color:'var(--ink-soft)',cursor:'pointer',display:'flex'}}><XI/></button>
+      </Row>
+      {children}
+    </div>
+  </div>;
+}
+
+/* ── Interruptor ON/OFF reutilizable ── */
+/* ── Validación de ubicación de venta (repartidor vs. domicilio del cliente) ──
+   Fórmula de Haversine: distancia en metros entre dos coordenadas. Se usa
+   para comparar dónde se hizo una venta contra la ubicación registrada del
+   cliente, sin exponer nunca la coordenada cruda del repartidor en la nota
+   (ver rutas-repartidores.js: guardarVentaRapida / confirmarEntrega). */
+function distanciaMetros(lat1,lng1,lat2,lng2){
+  const R=6371000, toRad=d=>d*Math.PI/180;
+  const dLat=toRad(lat2-lat1), dLng=toRad(lng2-lng1);
+  const a=Math.sin(dLat/2)**2 + Math.cos(toRad(lat1))*Math.cos(toRad(lat2))*Math.sin(dLng/2)**2;
+  return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
+}
+// Mismo radio que ya usa el proyecto Sello para su geocerca — así el criterio
+// de "¿llegó al cliente?" es consistente entre ambos proyectos.
+const RADIO_VISITA_METROS=150;
+
+const Toggle = ({checked,onChange,disabled=false})=>(
+  <button
+    onClick={()=>!disabled&&onChange(!checked)}
+    disabled={disabled}
+    aria-pressed={checked}
+    style={{width:44,height:26,borderRadius:13,border:'none',padding:2,flexShrink:0,
+      background:checked?'var(--ok)':'var(--line-strong)',
+      cursor:disabled?'default':'pointer',position:'relative',
+      transition:'background .15s',opacity:disabled?0.5:1}}>
+    <div style={{width:22,height:22,borderRadius:'50%',background:'#fff',
+      transform:checked?'translateX(18px)':'translateX(0)',
+      transition:'transform .15s',boxShadow:'0 1px 2px rgba(0,0,0,.3)'}}/>
+  </button>
+);
+
+/* ── Modelo de permisos por pantalla/formulario ──
+   Cada usuario puede tener overrides en usuarios/{uid}.permisos, que se
+   combinan sobre los valores por defecto de su rol. Un admin siempre ve y
+   edita todo, sin excepción. */
+const TABS_INFO = [
+  ['productos','📦','Productos'],
+  ['nota','🧾','Pedido'],
+  ['clientes','👥','Clientes'],
+  ['creditos','💳','Créditos'],
+  ['ruta','🚚','Ruta'],
+  ['repartidores','🧭','Rutas repartidores'],
+  ['inventario','📋','Inventario'],
+  ['reportes','📈','Reportes'],
+  ['gerencia','💰','Gerencia'],
+];
+const EDICION_INFO = [
+  ['productos','📦','Editar / dar de alta productos'],
+  ['clientes','👥','Editar / dar de alta clientes'],
+  ['creditos','💳','Registrar abonos a créditos'],
+];
+// Permisos sueltos que no son ni "ver pantalla" ni "editar formulario":
+// acciones puntuales del dispositivo o de la cuenta.
+const ACCIONES_INFO = [
+  ['camara','📷','Usar cámara (escanear QR de cliente)'],
+  ['csv','📄','Descargar reportes en CSV'],
+  ['gps','📍','Compartir ubicación en vivo (GPS)'],
+  ['password','🔑','Cambiar su propia contraseña'],
+];
+const ACCIONES_DEFAULT_ROL = {
+  admin:      {camara:true, csv:true,  gps:true,  password:true},
+  usuario:    {camara:false,csv:true,  gps:false, password:true},
+  repartidor: {camara:true, csv:false, gps:true,  password:true},
+};
+const permisoAcciones = u => u?.role==='admin' ? ACCIONES_DEFAULT_ROL.admin : ({...(ACCIONES_DEFAULT_ROL[u?.role]||ACCIONES_DEFAULT_ROL.usuario), ...(u?.permisos?.acciones||{})});
+const TABS_DEFAULT_ROL = {
+  // 'ruta' (cargar camión, ruta.js) es exclusiva del admin: es quien carga el
+  // camión y arranca la ruta. 'repartidores' (rutas-repartidores.js) es el
+  // panel de seguimiento/GPS/QR/inventario que sí ven repartidor y admin,
+  // pero no 'usuario' de oficina — además de este permiso de pestaña, el
+  // propio componente vuelve a validar el rol como defensa adicional.
+  // 'gerencia' aquí es solo el default de lectura de esa pestaña.
+  admin:      {productos:true,nota:true,clientes:true,creditos:true,ruta:true,repartidores:true, inventario:true, reportes:true, gerencia:true},
+  usuario:    {productos:true,nota:true,clientes:true,creditos:true,ruta:false,repartidores:false,inventario:true, reportes:false,gerencia:true},
+  repartidor: {productos:false,nota:true,clientes:false,creditos:false,ruta:false,repartidores:true, inventario:false,reportes:false,gerencia:true},
+};
+const EDITA_DEFAULT_ROL = {
+  admin:      {productos:true,clientes:true,creditos:true},
+  usuario:    {productos:true,clientes:true,creditos:true},
+  repartidor: {productos:false,clientes:false,creditos:false},
+};
+const permisoTabs = u => ({...(TABS_DEFAULT_ROL[u?.role]||TABS_DEFAULT_ROL.usuario), ...(u?.permisos?.tabs||{})});
+const permisoEdita = u => u?.role==='admin' ? EDITA_DEFAULT_ROL.admin : ({...(EDITA_DEFAULT_ROL[u?.role]||EDITA_DEFAULT_ROL.usuario), ...(u?.permisos?.edita||{})});
+
+function PwInp({value,onChange,placeholder}){
+  const [show,setShow]=useState(false);
+  return <div style={{position:'relative',marginBottom:10}}>
+    <Inp type={show?'text':'password'} value={value} onChange={onChange} placeholder={placeholder||'••••••'} style={{paddingRight:38}}/>
+    <button onClick={()=>setShow(v=>!v)} style={{position:'absolute',right:10,top:'50%',transform:'translateY(-50%)',background:'none',border:'none',color:'var(--ink-faint)',cursor:'pointer',padding:0,display:'flex'}}>
+      {show?<EyeX/>:<EyeI/>}
+    </button>
+  </div>;
+}
+
+/* ── Escáner de código de barras (cámara) ── */
+function BarcodeScanner({onDetected,onClose}){
+  const [elId]=useState(()=>'scanner-'+uid());
+  const [err,setErr]=useState('');
+  useEffect(()=>{
+    if(typeof Html5Qrcode==='undefined'){ setErr('No se pudo cargar la librería de escaneo. Revisa tu conexión a internet.'); return; }
+    let scanner=null, stopped=false, cancelled=false;
+    (async()=>{
+      try{
+        scanner=new Html5Qrcode(elId);
+        await scanner.start(
+          {facingMode:'environment'},
+          {fps:10,qrbox:{width:260,height:130}},
+          (decodedText)=>{
+            if(stopped||cancelled) return;
+            stopped=true;
+            scanner.stop().then(()=>scanner.clear()).catch(()=>{});
+            onDetected(decodedText);
+          },
+          ()=>{}
+        );
+      }catch(e){ if(!cancelled) setErr('No se pudo acceder a la cámara. Revisa los permisos del navegador.'); }
+    })();
+    return ()=>{
+      cancelled=true;
+      if(scanner&&!stopped){
+        stopped=true;
+        try{ scanner.stop().then(()=>scanner.clear()).catch(()=>{}); }catch(e){}
+      }
+    };
+  },[]);
+  return <Modal title="📷 Escanear código de barras" onClose={onClose}>
+    {err
+      ?<div style={{fontSize:13,color:'var(--danger-text)',textAlign:'center',padding:'24px 0'}}>{err}</div>
+      :<div id={elId} style={{width:'100%',borderRadius:4,overflow:'hidden',background:'#000'}}/>}
+    <div style={{fontSize:11,color:'var(--ink-faint)',textAlign:'center',marginTop:10}}>Apunta la cámara al código de barras del producto</div>
+  </Modal>;
+}

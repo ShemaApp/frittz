@@ -1,10 +1,146 @@
-var Y=Object.defineProperty,_=Object.defineProperties;var Q=Object.getOwnPropertyDescriptors;var A=Object.getOwnPropertySymbols;var V=Object.prototype.hasOwnProperty,q=Object.prototype.propertyIsEnumerable;var j=(a,i,r)=>i in a?Y(a,i,{enumerable:!0,configurable:!0,writable:!0,value:r}):a[i]=r,p=(a,i)=>{for(var r in i||(i={}))V.call(i,r)&&j(a,r,i[r]);if(A)for(var r of A(i))q.call(i,r)&&j(a,r,i[r]);return a},m=(a,i)=>_(a,Q(i));function CrearNota({productos:a,clientes:i,currentUser:r,ventaRapida:$,onVentaRapidaConsumida:I}){const[w,z]=useState(!0),[P,T]=useState(!1),[v,W]=useState("buscar"),[N,U]=useState(""),[f,D]=useState(null),[s,k]=useState({nombre:"",telefono:""}),[c,C]=useState([]),[y,L]=useState("efectivo"),[u,F]=useState(null),[S,E]=useState(!1);useEffect(()=>{$&&(W("nuevo"),k({nombre:"Venta mostrador",telefono:""}),z(!1),T(!0),I&&I())},[$]);const M=i.filter(t=>t.activo&&t.nombre.toLowerCase().includes(N.toLowerCase())),G=t=>C(e=>e.find(o=>o.id===t.id)?e.map(o=>o.id===t.id?m(p({},o),{cant:o.cant+1}):o):[...e,{id:t.id,nombre:t.nombre,precio:t.precio,cant:1}]),x=(t,e)=>{if(e<1){C(n=>n.filter(o=>o.id!==t));return}C(n=>n.map(o=>o.id===t?m(p({},o),{cant:e}):o))},h=c.reduce((t,e)=>t+e.precio*e.cant,0),g=v==="nuevo"?s:f,B=(g==null?void 0:g.nombre)&&c.length>0,O=(t,e,n,o)=>{const R=e.map(b=>`\u2022 ${b.nombre} x${b.cant} = ${fmt(b.precio*b.cant)}`).join(`
-`),l=`\u{1F9FE} *PEDIDO*
-\u{1F464} ${t.nombre}
-
-${R}
-
-\u{1F4B0} *Total: ${fmt(n)}*
-Pago: ${o}`;let d=(t.telefono||"").replace(/\D/g,"");return!d.startsWith("52")&&d.length<=10&&(d="52"+d),`https://wa.me/${d}?text=${encodeURIComponent(l)}`},H=async()=>{if(B){E(!0);try{const t=[];if(c.forEach(l=>{const d=a.find(b=>b.id===l.id);(!d||d.stock<l.cant)&&t.push(`${l.nombre} (disponible: ${(d==null?void 0:d.stock)||0}, solicitado: ${l.cant})`)}),t.length>0){alert(`\u274C Stock insuficiente:
-`+t.join(`
-`)),E(!1);return}let e=f;v==="nuevo"&&(e={id:(await db.collection("clientes").add({nombre:s.nombre,telefono:s.telefono||"",domicilio:"",activo:!0})).id,nombre:s.nombre,telefono:s.telefono||""});const n={fecha:new Date().toISOString(),clienteId:e.id,clienteNombre:e.nombre,clienteTelefono:e.telefono||"",items:c.map(l=>p({},l)),total:h,formaPago:y,capturadoPorUid:r.uid,capturadoPorNombre:r.nombre},o=await db.collection("notas").add(n);y==="credito"&&await db.collection("creditos").add({notaId:o.id,clienteId:e.id,clienteNombre:e.nombre,fecha:n.fecha,total:h,saldo:h,abonos:[]});const R=db.batch();c.forEach(l=>{R.update(db.collection("productos").doc(l.id),{stock:firebase.firestore.FieldValue.increment(-l.cant)})}),await R.commit(),F({nota:m(p({},n),{id:o.id}),cl:e}),C([]),D(null),k({nombre:"",telefono:""}),W("buscar")}catch(t){alert("Error al guardar el pedido: "+t.message)}E(!1)}};return u?React.createElement("div",{style:{padding:24,textAlign:"center"}},React.createElement("div",{style:{fontSize:52,marginBottom:8}},"\u2705"),React.createElement("div",{style:{fontSize:18,fontWeight:700,marginBottom:4}},"Pedido guardado"),React.createElement("div",{style:{color:"var(--ink-soft)",marginBottom:24}},u.cl.nombre," \xB7 ",fmt(u.nota.total)),u.cl.telefono&&React.createElement(BFill,{onClick:()=>window.open(O(u.cl,u.nota.items,u.nota.total,u.nota.formaPago),"_blank"),bg:"#25d366",style:{width:"100%",marginBottom:12,fontSize:15}},"\u{1F4F2} Enviar ticket por WhatsApp"),React.createElement(BOut,{onClick:()=>F(null),color:"var(--accent-text)",style:{width:"100%"}},"+ Nuevo pedido")):React.createElement("div",{style:{padding:"16px 12px"}},React.createElement("div",{style:{fontSize:20,fontWeight:800,marginBottom:12}},"\u{1F9FE} Crear Pedido"),React.createElement(Card,null,React.createElement("button",{onClick:()=>z(t=>!t),style:{background:"none",border:"none",color:"var(--ink)",width:"100%",textAlign:"left",cursor:"pointer",padding:0}},React.createElement(Row,{style:{justifyContent:"space-between"}},React.createElement("span",{style:{fontWeight:700}},"\u{1F464} Cliente ",v==="nuevo"&&s.nombre||f?"\u2705":""),React.createElement(w?CUp:CDown,null)),!w&&f&&React.createElement("div",{style:{fontSize:12,color:"var(--accent-text)",marginTop:2}},f.nombre," \xB7 ",f.telefono),!w&&v==="nuevo"&&s.nombre&&React.createElement("div",{style:{fontSize:12,color:"var(--accent-text)",marginTop:2}},s.nombre)),w&&React.createElement("div",{style:{marginTop:12}},React.createElement(Row,{style:{gap:6,marginBottom:10}},[["buscar","Existente"],["nuevo","Nuevo"]].map(([t,e])=>React.createElement("button",{key:t,onClick:()=>W(t),style:{flex:1,padding:"7px",borderRadius:8,border:"none",background:v===t?"var(--accent)":"var(--surface-2)",color:v===t?"var(--ink)":"var(--ink-soft)",fontSize:12,fontWeight:700,cursor:"pointer"}},e))),v==="buscar"?React.createElement(React.Fragment,null,React.createElement(Inp,{placeholder:"Buscar cliente\u2026",value:N,onChange:t=>U(t.target.value),style:{marginBottom:8}}),React.createElement("div",{style:{maxHeight:170,overflowY:"auto"}},M.map(t=>React.createElement("div",{key:t.id,onClick:()=>{D(t),z(!1)},style:{padding:"9px 10px",borderRadius:8,cursor:"pointer",background:(f==null?void 0:f.id)===t.id?"var(--info-bg)":"transparent",marginBottom:3}},React.createElement("div",{style:{fontWeight:600,fontSize:13}},t.nombre),React.createElement("div",{style:{fontSize:11,color:"var(--ink-soft)"}},"\u{1F4F1} ",t.telefono))))):React.createElement(React.Fragment,null,React.createElement(Inp,{placeholder:"Nombre *",value:s.nombre,onChange:t=>k(e=>m(p({},e),{nombre:t.target.value})),style:{marginBottom:8}}),React.createElement(Inp,{placeholder:"Tel\xE9fono",type:"tel",value:s.telefono,onChange:t=>k(e=>m(p({},e),{telefono:t.target.value}))})))),React.createElement(Card,null,React.createElement("button",{onClick:()=>T(t=>!t),style:{background:"none",border:"none",color:"var(--ink)",width:"100%",textAlign:"left",cursor:"pointer",padding:0}},React.createElement(Row,{style:{justifyContent:"space-between"}},React.createElement("span",{style:{fontWeight:700}},"\u{1F4E6} Productos ",c.length?`(${c.reduce((t,e)=>t+e.cant,0)} art\xEDculos)`:""),React.createElement(P?CUp:CDown,null))),P&&React.createElement("div",{style:{marginTop:12,maxHeight:220,overflowY:"auto"}},a.map(t=>React.createElement(Row,{key:t.id,style:{justifyContent:"space-between",padding:"9px 0",borderBottom:"1px solid var(--line)"}},React.createElement("div",null,React.createElement("div",{style:{fontSize:13,fontWeight:600}},t.nombre),React.createElement("div",{style:{fontSize:11,color:"var(--accent-text)"}},fmt(t.precio)," / ",t.unidad)),React.createElement(BFill,{onClick:()=>G(t),style:{padding:"5px 12px",fontSize:12}},"+ Agregar"))))),c.length>0&&React.createElement(Card,null,React.createElement("div",{style:{fontSize:11,color:"var(--ink-faint)",fontWeight:700,marginBottom:10}},"RESUMEN DEL PEDIDO"),c.map(t=>React.createElement(Row,{key:t.id,style:{justifyContent:"space-between",marginBottom:10}},React.createElement("div",{style:{flex:1,minWidth:0}},React.createElement("div",{style:{fontSize:13,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},t.nombre),React.createElement("div",{style:{fontSize:11,color:"var(--ink-faint)"}},fmt(t.precio)," c/u")),React.createElement(Row,{style:{gap:5,flexShrink:0}},React.createElement("button",{onClick:()=>x(t.id,t.cant-1),style:{background:"var(--surface-2)",border:"none",color:"var(--ink)",borderRadius:6,width:26,height:26,cursor:"pointer",fontSize:15}},"-"),React.createElement("input",{type:"number",min:"1",value:t.cant,onChange:e=>{const n=e.target.value;if(n==="")return;const o=parseInt(n);!isNaN(o)&&o>=1&&x(t.id,o)},onBlur:e=>{(!e.target.value||parseInt(e.target.value)<1)&&x(t.id,1)},style:{width:44,textAlign:"center",fontWeight:700,fontSize:14,background:"var(--surface-2)",border:"1px solid var(--line-strong)",borderRadius:6,color:"var(--ink)",padding:"4px 2px"}}),React.createElement("button",{onClick:()=>x(t.id,t.cant+1),style:{background:"var(--surface-2)",border:"none",color:"var(--ink)",borderRadius:6,width:26,height:26,cursor:"pointer",fontSize:15}},"+")),React.createElement("div",{style:{minWidth:62,textAlign:"right",fontWeight:700,color:"var(--accent-text)",fontSize:13}},fmt(t.precio*t.cant)))),React.createElement("div",{style:{borderTop:"1px solid var(--line)",paddingTop:10,marginTop:4,marginBottom:12}},React.createElement(Row,{style:{justifyContent:"space-between"}},React.createElement("span",{style:{fontWeight:700,fontSize:15}},"Total"),React.createElement("span",{style:{fontSize:22,fontWeight:800,color:"var(--accent-text)"}},fmt(h)))),React.createElement(Row,{style:{gap:8,marginBottom:12}},[["efectivo","\u{1F4B5} Efectivo","var(--ok-bg)","var(--ok-text)"],["transferencia","\u{1F3E6} Transferencia","var(--info-bg)","var(--info-text)"],["credito","\u{1F4CB} Cr\xE9dito","var(--warn-bg)","var(--warn-text)"]].map(([t,e,n,o])=>React.createElement("button",{key:t,onClick:()=>L(t),style:{flex:1,padding:"9px 2px",borderRadius:8,border:"none",background:y===t?n:"var(--surface-2)",color:y===t?o:"var(--ink-soft)",fontSize:11,fontWeight:700,cursor:"pointer"}},e))),React.createElement(Row,{style:{gap:8}},React.createElement(BFill,{onClick:H,bg:B&&!S?"var(--accent)":"var(--line-strong)",color:B&&!S?"var(--ink)":"var(--ink-faint)",style:{flex:1},disabled:!B||S},S?"Guardando\u2026":"\u{1F4BE} Guardar pedido"),(g==null?void 0:g.telefono)&&React.createElement(BFill,{onClick:()=>window.open(O(g,c,h,y),"_blank"),bg:"#25d366",style:{padding:"8px 16px",fontSize:18}},"\u{1F4F2}"))))}
+/* ── Crear Nota ── */
+function CrearNota({productos,clientes,currentUser,ventaRapida,onVentaRapidaConsumida}){
+  const [cliOpen,setCliOpen]=useState(true);
+  const [prodOpen,setProdOpen]=useState(false);
+  const [cliMode,setCliMode]=useState('buscar');
+  const [cliSearch,setCliSearch]=useState('');
+  const [cliSel,setCliSel]=useState(null);
+  const [nuevoC,setNuevoC]=useState({nombre:'',telefono:''});
+  const [cart,setCart]=useState([]);
+  const [pago,setPago]=useState('efectivo');
+  const [done,setDone]=useState(null);
+  const [saving,setSaving]=useState(false);
+  useEffect(()=>{
+    if(ventaRapida){
+      setCliMode('nuevo'); setNuevoC({nombre:'Venta mostrador',telefono:''}); setCliOpen(false); setProdOpen(true);
+      onVentaRapidaConsumida&&onVentaRapidaConsumida();
+    }
+  },[ventaRapida]);
+  const cliFilt=clientes.filter(c=>c.activo&&c.nombre.toLowerCase().includes(cliSearch.toLowerCase()));
+  const addCart=p=>setCart(c=>{ const ex=c.find(x=>x.id===p.id); return ex?c.map(x=>x.id===p.id?{...x,cant:x.cant+1}:x):[...c,{id:p.id,nombre:p.nombre,precio:p.precio,cant:1}]; });
+  const updQty=(id,v)=>{ if(v<1){setCart(c=>c.filter(x=>x.id!==id));return;} setCart(c=>c.map(x=>x.id===id?{...x,cant:v}:x)); };
+  const total=cart.reduce((s,x)=>s+x.precio*x.cant,0);
+  const cliente=cliMode==='nuevo'?nuevoC:cliSel;
+  const canSave=cliente?.nombre&&cart.length>0;
+  const makeWA=(cl,items,tot,fp)=>{
+    const lines=items.map(x=>`• ${x.nombre} x${x.cant} = ${fmt(x.precio*x.cant)}`).join('\n');
+    const text=`🧾 *PEDIDO*\n👤 ${cl.nombre}\n\n${lines}\n\n💰 *Total: ${fmt(tot)}*\nPago: ${fp}`;
+    let telefono=(cl.telefono||'').replace(/\D/g,'');
+    if(!telefono.startsWith('52')&&telefono.length<=10) telefono='52'+telefono;
+    return `https://wa.me/${telefono}?text=${encodeURIComponent(text)}`;
+  };
+  const guardar=async()=>{
+    if(!canSave) return;
+    setSaving(true);
+    try{
+      const stockErrors=[];
+      cart.forEach(item=>{
+        const producto=productos.find(p=>p.id===item.id);
+        if(!producto||producto.stock<item.cant) stockErrors.push(`${item.nombre} (disponible: ${producto?.stock||0}, solicitado: ${item.cant})`);
+      });
+      if(stockErrors.length>0){ alert('❌ Stock insuficiente:\n'+stockErrors.join('\n')); setSaving(false); return; }
+      let cl=cliSel;
+      if(cliMode==='nuevo'){
+        const ref=await db.collection('clientes').add({nombre:nuevoC.nombre,telefono:nuevoC.telefono||'',domicilio:'',activo:true});
+        cl={id:ref.id,nombre:nuevoC.nombre,telefono:nuevoC.telefono||''};
+      }
+      const nota={fecha:new Date().toISOString(),clienteId:cl.id,clienteNombre:cl.nombre,clienteTelefono:cl.telefono||'',items:cart.map(x=>({...x})),total,formaPago:pago,capturadoPorUid:currentUser.uid,capturadoPorNombre:currentUser.nombre};
+      const notaRef=await db.collection('notas').add(nota);
+      if(pago==='credito') await db.collection('creditos').add({notaId:notaRef.id,clienteId:cl.id,clienteNombre:cl.nombre,fecha:nota.fecha,total,saldo:total,abonos:[]});
+      const batch=db.batch();
+      cart.forEach(item=>{
+        batch.update(db.collection('productos').doc(item.id),{stock:firebase.firestore.FieldValue.increment(-item.cant)});
+      });
+      await batch.commit();
+      setDone({nota:{...nota,id:notaRef.id},cl});
+      setCart([]); setCliSel(null); setNuevoC({nombre:'',telefono:''}); setCliMode('buscar');
+    }catch(e){ alert('Error al guardar el pedido: '+e.message); }
+    setSaving(false);
+  };
+  if(done) return <div style={{padding:24,textAlign:'center'}}>
+    <div style={{fontSize:52,marginBottom:8}}>✅</div>
+    <div style={{fontSize:18,fontWeight:700,marginBottom:4}}>Pedido guardado</div>
+    <div style={{color:'var(--ink-soft)',marginBottom:24}}>{done.cl.nombre} · {fmt(done.nota.total)}</div>
+    {done.cl.telefono&&<BFill onClick={()=>window.open(makeWA(done.cl,done.nota.items,done.nota.total,done.nota.formaPago),'_blank')} bg="#25d366" style={{width:'100%',marginBottom:12,fontSize:15}}>📲 Enviar ticket por WhatsApp</BFill>}
+    <BOut onClick={()=>setDone(null)} color="var(--accent-text)" style={{width:'100%'}}>+ Nuevo pedido</BOut>
+  </div>;
+  return <div style={{padding:'16px 12px'}}>
+    <div style={{fontSize:20,fontWeight:800,marginBottom:12}}>🧾 Crear Pedido</div>
+    <Card>
+      <button onClick={()=>setCliOpen(o=>!o)} style={{background:'none',border:'none',color:'var(--ink)',width:'100%',textAlign:'left',cursor:'pointer',padding:0}}>
+        <Row style={{justifyContent:'space-between'}}>
+          <span style={{fontWeight:700}}>👤 Cliente {((cliMode==='nuevo'&&nuevoC.nombre)||cliSel)?'✅':''}</span>
+          {cliOpen?<CUp/>:<CDown/>}
+        </Row>
+        {!cliOpen&&cliSel&&<div style={{fontSize:12,color:'var(--accent-text)',marginTop:2}}>{cliSel.nombre} · {cliSel.telefono}</div>}
+        {!cliOpen&&cliMode==='nuevo'&&nuevoC.nombre&&<div style={{fontSize:12,color:'var(--accent-text)',marginTop:2}}>{nuevoC.nombre}</div>}
+      </button>
+      {cliOpen&&<div style={{marginTop:12}}>
+        <Row style={{gap:6,marginBottom:10}}>
+          {[['buscar','Existente'],['nuevo','Nuevo']].map(([v,l])=>(
+            <button key={v} onClick={()=>setCliMode(v)} style={{flex:1,padding:'7px',borderRadius:8,border:'none',background:cliMode===v?'var(--accent)':'var(--surface-2)',color:cliMode===v?'var(--ink)':'var(--ink-soft)',fontSize:12,fontWeight:700,cursor:'pointer'}}>{l}</button>
+          ))}
+        </Row>
+        {cliMode==='buscar'?<>
+          <Inp placeholder="Buscar cliente…" value={cliSearch} onChange={e=>setCliSearch(e.target.value)} style={{marginBottom:8}}/>
+          <div style={{maxHeight:170,overflowY:'auto'}}>
+            {cliFilt.map(c=><div key={c.id} onClick={()=>{setCliSel(c);setCliOpen(false);}} style={{padding:'9px 10px',borderRadius:8,cursor:'pointer',background:cliSel?.id===c.id?'var(--info-bg)':'transparent',marginBottom:3}}>
+              <div style={{fontWeight:600,fontSize:13}}>{c.nombre}</div>
+              <div style={{fontSize:11,color:'var(--ink-soft)'}}>📱 {c.telefono}</div>
+            </div>)}
+          </div>
+        </>:<>
+          <Inp placeholder="Nombre *" value={nuevoC.nombre} onChange={e=>setNuevoC(x=>({...x,nombre:e.target.value}))} style={{marginBottom:8}}/>
+          <Inp placeholder="Teléfono" type="tel" value={nuevoC.telefono} onChange={e=>setNuevoC(x=>({...x,telefono:e.target.value}))}/>
+        </>}
+      </div>}
+    </Card>
+    <Card>
+      <button onClick={()=>setProdOpen(o=>!o)} style={{background:'none',border:'none',color:'var(--ink)',width:'100%',textAlign:'left',cursor:'pointer',padding:0}}>
+        <Row style={{justifyContent:'space-between'}}>
+          <span style={{fontWeight:700}}>📦 Productos {cart.length?`(${cart.reduce((s,x)=>s+x.cant,0)} artículos)`:''}</span>
+          {prodOpen?<CUp/>:<CDown/>}
+        </Row>
+      </button>
+      {prodOpen&&<div style={{marginTop:12,maxHeight:220,overflowY:'auto'}}>
+        {productos.map(p=><Row key={p.id} style={{justifyContent:'space-between',padding:'9px 0',borderBottom:'1px solid var(--line)'}}>
+          <div>
+            <div style={{fontSize:13,fontWeight:600}}>{p.nombre}</div>
+            <div style={{fontSize:11,color:'var(--accent-text)'}}>{fmt(p.precio)} / {p.unidad}</div>
+          </div>
+          <BFill onClick={()=>addCart(p)} style={{padding:'5px 12px',fontSize:12}}>+ Agregar</BFill>
+        </Row>)}
+      </div>}
+    </Card>
+    {cart.length>0&&<Card>
+      <div style={{fontSize:11,color:'var(--ink-faint)',fontWeight:700,marginBottom:10}}>RESUMEN DEL PEDIDO</div>
+      {cart.map(item=><Row key={item.id} style={{justifyContent:'space-between',marginBottom:10}}>
+        <div style={{flex:1,minWidth:0}}>
+          <div style={{fontSize:13,fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{item.nombre}</div>
+          <div style={{fontSize:11,color:'var(--ink-faint)'}}>{fmt(item.precio)} c/u</div>
+        </div>
+        <Row style={{gap:5,flexShrink:0}}>
+          <button onClick={()=>updQty(item.id,item.cant-1)} style={{background:'var(--surface-2)',border:'none',color:'var(--ink)',borderRadius:6,width:26,height:26,cursor:'pointer',fontSize:15}}>-</button>
+          <input type="number" min="1" value={item.cant} onChange={e=>{ const v=e.target.value; if(v===''){return;} const n=parseInt(v); if(!isNaN(n)&&n>=1) updQty(item.id,n); }} onBlur={e=>{ if(!e.target.value||parseInt(e.target.value)<1) updQty(item.id,1); }} style={{width:44,textAlign:'center',fontWeight:700,fontSize:14,background:'var(--surface-2)',border:'1px solid var(--line-strong)',borderRadius:6,color:'var(--ink)',padding:'4px 2px'}}/>
+          <button onClick={()=>updQty(item.id,item.cant+1)} style={{background:'var(--surface-2)',border:'none',color:'var(--ink)',borderRadius:6,width:26,height:26,cursor:'pointer',fontSize:15}}>+</button>
+        </Row>
+        <div style={{minWidth:62,textAlign:'right',fontWeight:700,color:'var(--accent-text)',fontSize:13}}>{fmt(item.precio*item.cant)}</div>
+      </Row>)}
+      <div style={{borderTop:'1px solid var(--line)',paddingTop:10,marginTop:4,marginBottom:12}}>
+        <Row style={{justifyContent:'space-between'}}>
+          <span style={{fontWeight:700,fontSize:15}}>Total</span>
+          <span style={{fontSize:22,fontWeight:800,color:'var(--accent-text)'}}>{fmt(total)}</span>
+        </Row>
+      </div>
+      <Row style={{gap:8,marginBottom:12}}>
+        {[['efectivo','💵 Efectivo','var(--ok-bg)','var(--ok-text)'],['transferencia','🏦 Transferencia','var(--info-bg)','var(--info-text)'],['credito','📋 Crédito','var(--warn-bg)','var(--warn-text)']].map(([v,l,bg,col])=>(
+          <button key={v} onClick={()=>setPago(v)} style={{flex:1,padding:'9px 2px',borderRadius:8,border:'none',background:pago===v?bg:'var(--surface-2)',color:pago===v?col:'var(--ink-soft)',fontSize:11,fontWeight:700,cursor:'pointer'}}>{l}</button>
+        ))}
+      </Row>
+      <Row style={{gap:8}}>
+        <BFill onClick={guardar} bg={canSave&&!saving?'var(--accent)':'var(--line-strong)'} color={canSave&&!saving?'var(--ink)':'var(--ink-faint)'} style={{flex:1}} disabled={!canSave||saving}>{saving?'Guardando…':'💾 Guardar pedido'}</BFill>
+        {cliente?.telefono&&<BFill onClick={()=>window.open(makeWA(cliente,cart,total,pago),'_blank')} bg="#25d366" style={{padding:'8px 16px',fontSize:18}}>📲</BFill>}
+      </Row>
+    </Card>}
+  </div>;
+}

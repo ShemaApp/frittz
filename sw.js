@@ -1,6 +1,6 @@
-// sw.js — Frittz (versión optimizada sin Babel)
-const CACHE_NAME = 'frittz-v27-compiled';
-const TILES_CACHE = 'frittz-tiles-v1';
+// sw.js — Productos de la Costa (versión optimizada sin Babel)
+const CACHE_NAME = 'pdc-v2-compiled';
+const TILES_CACHE = 'pdc-tiles-v1';
 const TILE_HOST = 'tile.openstreetmap.org';
 
 const SHELL_URLS = [
@@ -11,10 +11,9 @@ const SHELL_URLS = [
   './icons/icon-192.png',
   './icons/icon-512.png',
   './icons/icon-512-maskable.png',
-  // Archivos compilados
+  // Archivos compilados (NUEVOS)
   './compiled/firebase-init.js',
   './compiled/app-core.js',
-  './compiled/app.js',
   './compiled/auth.js',
   './compiled/dashboard.js',
   './compiled/productos.js',
@@ -23,6 +22,7 @@ const SHELL_URLS = [
   './compiled/creditos.js',
   './compiled/ruta.js',
   './compiled/config.js',
+  './compiled/app.js',
   './compiled/rutas-repartidores.js',
   './compiled/inventario.js',
   './compiled/reportes.js',
@@ -63,14 +63,12 @@ self.addEventListener('fetch', event => {
   const { request } = event;
   if (request.method !== 'GET') return;
 
-  // No interceptar Firebase
   if (request.url.includes('firestore.googleapis.com') ||
       request.url.includes('identitytoolkit.googleapis.com') ||
       request.url.includes('securetoken.googleapis.com')) {
     return;
   }
 
-  // Tiles de mapa
   if (request.url.includes(TILE_HOST)) {
     event.respondWith(
       caches.open(TILES_CACHE).then(cache =>
@@ -86,7 +84,6 @@ self.addEventListener('fetch', event => {
     return;
   }
 
-  // Navegación
   if (request.mode === 'navigate') {
     event.respondWith(
       fetch(request).then(res => {
@@ -100,7 +97,6 @@ self.addEventListener('fetch', event => {
     return;
   }
 
-  // Assets estáticos
   event.respondWith(
     caches.match(request).then(cached => {
       const fetchPromise = fetch(request).then(res => {
@@ -111,4 +107,4 @@ self.addEventListener('fetch', event => {
       return cached || fetchPromise;
     })
   );
-});
+})

@@ -1,15 +1,13 @@
 {
-  "name": "frittz-productos-de-la-costa",
+  "name": "productos-de-la-costa",
   "version": "2.0.0",
-  "description": "Panel de administración y reparto - Optimizado sin Babel",
+  "description": "Sistema de gestión optimizado - Sin Babel en navegador",
   "scripts": {
     "build": "node build.js",
-    "watch": "node build.js --watch"
+    "watch": "node build.js --watch",
+    "deploy": "npm run build && echo '✅ Listo para desplegar'"
   },
   "devDependencies": {
     "esbuild": "^0.20.0"
-  },
-  "engines": {
-    "node": ">=16.0.0"
   }
 }
