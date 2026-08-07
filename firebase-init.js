@@ -6,7 +6,6 @@
 //
 // Si mueves este proyecto a un dominio/hosting distinto de Firebase, este es
 // el ÚNICO archivo que necesitas tocar para apuntar a otro proyecto de Firebase.
-import { initializeApp } from "firebase/app";
 
 const firebaseConfig = {
     apiKey: "AIzaSyDjWoF96LAykPqYlhvxGU57WXAdumEKhak",
