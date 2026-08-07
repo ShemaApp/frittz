@@ -27,8 +27,6 @@ files.forEach(file => {
     esbuild.buildSync({
       entryPoints: [inputPath],
       outfile: outputPath,
-      format: 'iife',
-      globalName: file.replace(/-/g, '_'),
       platform: 'browser',
       target: ['es2017'],
       loader: { '.js': 'jsx' },
