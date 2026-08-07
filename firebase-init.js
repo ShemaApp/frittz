@@ -51,7 +51,7 @@ const db = firebase.firestore();
 //      dejarlo así unos días para confirmar que no rompe a nadie.
 const APP_CHECK_SITE_KEY = '6Led-nktAAAAAEQK6YGI3wzaSI0pEOmCw1iDGG45';
 
-if (['localhost', '127.0.0.1'].includes(location.hostname)) {
+if (['localhost', '127.0.0.1', 'shemaapp.github.io'].includes(location.hostname)) {
   self.FIREBASE_APPCHECK_DEBUG_TOKEN = true;
 }
 
