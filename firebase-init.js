@@ -49,10 +49,10 @@ const db = firebase.firestore();
 //      candado "Enforce" para Cloud Firestore en App Check → APIs. Antes de
 //      eso App Check solo está *midiendo*, no bloqueando nada — es seguro
 //      dejarlo así unos días para confirmar que no rompe a nadie.
-const APP_CHECK_SITE_KEY = 'PEGA_AQUI_TU_SITE_KEY_DE_RECAPTCHA_V3';
+const APP_CHECK_SITE_KEY = '6Led-nktAAAAAEQK6YGI3wzaSI0pEOmcw1iDGG45';
 
 if (['localhost', '127.0.0.1'].includes(location.hostname)) {
-  self.FIREBASE_APPCHECK_DEBUG_TOKEN = true;
+  window.FIREBASE_APPCHECK_DEBUG_TOKEN = true;
 }
 
 if (APP_CHECK_SITE_KEY.startsWith('PEGA_AQUI')) {
@@ -66,11 +66,17 @@ if (APP_CHECK_SITE_KEY.startsWith('PEGA_AQUI')) {
 
 // Persistencia offline: cachea los datos de Firestore en IndexedDB para que
 // la app siga funcionando (leer productos, clientes, etc.) sin conexión.
-db.enablePersistence({ synchronizeTabs: true })
+function activarPersistenciaOffline() {
+    db.enablePersistence({ synchronizeTabs: true })
+        .then(()=> {
+               console.log('✅ Persistencia offline de Firestore activada con éxito.');
+    })
   .catch(err => {
     if (err.code === 'failed-precondition') {
-      console.warn('Persistencia offline: solo se puede activar en una pestaña a la vez.');
-    } else if (err.code === 'unimplemented') {
-      console.warn('Este navegador no soporta persistencia offline.');
-    }
-  });
+        console.warn('⚠️ Persistencia offline: Múltiples pestañas abiertas. Solo se activa en la primera pestaña.');
+      } else if (err.code === 'unimplemented') {
+        console.warn('❌ Persistencia offline: Este navegador no soporta IndexedDB (ej. navegación privada estricta).');
+      } else {
+        console.error('Error al activar persistencia:', err);
+      }
+    });
