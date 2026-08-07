@@ -9,7 +9,6 @@ const files = [
 
 console.log('🔨 Compilando archivos JSX...\n');
 
-// Asegurar que existe la carpeta compiled/
 if (!fs.existsSync('compiled')) {
   fs.mkdirSync('compiled', { recursive: true });
 }
@@ -17,12 +16,12 @@ if (!fs.existsSync('compiled')) {
 files.forEach(file => {
   const inputPath = `${file}.js`;
   const outputPath = `compiled/${file}.js`;
-  
+
   if (!fs.existsSync(inputPath)) {
     console.log(`⚠️ ${inputPath} no encontrado, saltando...`);
     return;
   }
-  
+
   try {
     esbuild.buildSync({
       entryPoints: [inputPath],
@@ -37,7 +36,7 @@ files.forEach(file => {
       sourcemap: false,
       logLevel: 'silent'
     });
-    
+
     const stats = fs.statSync(outputPath);
     const size = (stats.size / 1024).toFixed(1);
     console.log(`✅ ${file}.js → compiled/${file}.js (${size}KB)`);
