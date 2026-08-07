@@ -49,7 +49,7 @@ const db = firebase.firestore();
 //      candado "Enforce" para Cloud Firestore en App Check → APIs. Antes de
 //      eso App Check solo está *midiendo*, no bloqueando nada — es seguro
 //      dejarlo así unos días para confirmar que no rompe a nadie.
-const APP_CHECK_SITE_KEY = 'PEGA_AQUI_TU_SITE_KEY_DE_RECAPTCHA_V3';
+const APP_CHECK_SITE_KEY = '6Led-nktAAAAAEQK6YGI3wzaSI0pEOmCw1iDGG45';
 
 if (['localhost', '127.0.0.1'].includes(location.hostname)) {
   self.FIREBASE_APPCHECK_DEBUG_TOKEN = true;
