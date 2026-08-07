@@ -1,5 +1,5 @@
 // sw.js — Frittz (versión optimizada sin Babel)
-const CACHE_NAME = 'frittz-v2-compiled';
+const CACHE_NAME = 'frittz-v27-compiled';
 const TILES_CACHE = 'frittz-tiles-v1';
 const TILE_HOST = 'tile.openstreetmap.org';
 
