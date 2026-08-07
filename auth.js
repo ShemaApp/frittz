@@ -1,4 +1,3 @@
-const { useState, useEffect } = React;
 function Login() {
   const [email, setEmail] = useState('');
   const [pw, setPw] = useState('');
