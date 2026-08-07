@@ -14,6 +14,7 @@ const SHELL_URLS = [
   // Archivos compilados
   './compiled/firebase-init.js',
   './compiled/app-core.js',
+  './compiled/app.js',
   './compiled/auth.js',
   './compiled/dashboard.js',
   './compiled/productos.js',
@@ -22,7 +23,6 @@ const SHELL_URLS = [
   './compiled/creditos.js',
   './compiled/ruta.js',
   './compiled/config.js',
-  './compiled/app.js',
   './compiled/rutas-repartidores.js',
   './compiled/inventario.js',
   './compiled/reportes.js',
