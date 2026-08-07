@@ -1,15 +1,419 @@
-var Re=Object.defineProperty,De=Object.defineProperties;var Ce=Object.getOwnPropertyDescriptors;var H=Object.getOwnPropertySymbols;var ze=Object.prototype.hasOwnProperty,Te=Object.prototype.propertyIsEnumerable;var Y=(b,c,u)=>c in b?Re(b,c,{enumerable:!0,configurable:!0,writable:!0,value:u}):b[c]=u,m=(b,c)=>{for(var u in c||(c={}))ze.call(c,u)&&Y(b,u,c[u]);if(H)for(var u of H(c))Te.call(c,u)&&Y(b,u,c[u]);return b},x=(b,c)=>De(b,Ce(c));function Reportes({productos:b,clientes:c,currentUser:u}){const[F,_]=useState(""),v=e=>{_(e),setTimeout(()=>_(""),3e3)},[y,X]=useState("respaldo"),[$,J]=useState([]),[w,K]=useState(null);useEffect(()=>{const e=db.collection("usuarios").onSnapshot(a=>J(a.docs.map(o=>m({id:o.id},o.data()))),()=>{}),t=db.collection("_meta").doc("backups").onSnapshot(a=>K(a.exists?a.data():null),()=>{});return()=>{e(),t()}},[]);const[C,U]=useState(!1),k=w&&w.ultimoRespaldo?Math.floor((Date.now()-new Date(w.ultimoRespaldo).getTime())/864e5):null,Z=async()=>{U(!0);try{const e=["productos","clientes","notas","creditos","rutas","rutas_meta","devoluciones","inventario_historial","usuarios"],t={generado:new Date().toISOString(),generadoPor:u.nombre||u.email};for(const n of e){const f=await db.collection(n).get();t[n]=f.docs.map(s=>m({id:s.id},s.data()))}const a=new Blob([JSON.stringify(t,null,2)],{type:"application/json"}),o=URL.createObjectURL(a),i=document.createElement("a");i.href=o,i.download="respaldo_productos_de_la_costa_"+new Date().toISOString().slice(0,10)+".json",document.body.appendChild(i),i.click(),document.body.removeChild(i),setTimeout(()=>URL.revokeObjectURL(o),4e3),await db.collection("_meta").doc("backups").set({ultimoRespaldo:new Date().toISOString(),por:u.nombre||u.email},{merge:!0}),v("\u2705 Respaldo descargado")}catch(e){v("\u274C "+e.message)}U(!1)},[z,ee]=useState(()=>new Date().toISOString().slice(0,10)),[h,te]=useState(null),[T,A]=useState(!1),oe=async()=>{A(!0);try{const e=new Date(z+"T00:00:00").toISOString(),t=new Date(z+"T23:59:59").toISOString(),o=(await db.collection("notas").where("fecha",">=",e).where("fecha","<=",t).get()).docs.map(i=>m({id:i.id},i.data())).filter(i=>i.ubicacionVenta);o.sort((i,n)=>new Date(i.fecha)-new Date(n.fecha)),te(o)}catch(e){v("\u274C "+e.message)}A(!1)},[S,ae]=useState("semana"),[B,ne]=useState(""),[V,ie]=useState(""),[r,re]=useState(null),[N,L]=useState(!1),[M,se]=useState(""),de=()=>{const e=new Date;let t,a;return S==="hoy"?(t=new Date(e.getFullYear(),e.getMonth(),e.getDate()),a=new Date(e.getFullYear(),e.getMonth(),e.getDate(),23,59,59)):S==="semana"?(t=new Date(e),t.setDate(e.getDate()-7),a=e):S==="mes"?(t=new Date(e),t.setDate(e.getDate()-30),a=e):(t=B?new Date(B):new Date(e.getFullYear(),e.getMonth(),1),a=V?new Date(V+"T23:59:59"):e),{desde:t.toISOString(),hasta:a.toISOString()}},le=async()=>{L(!0);try{const{desde:e,hasta:t}=de(),o=(await db.collection("notas").where("fecha",">=",e).where("fecha","<=",t).get()).docs.map(d=>m({id:d.id},d.data())),i=o.reduce((d,l)=>d+(l.total||0),0),n=o.filter(d=>d.formaPago==="contado").reduce((d,l)=>d+(l.total||0),0),f=o.filter(d=>d.formaPago==="credito").reduce((d,l)=>d+(l.total||0),0),s={},p={};o.forEach(d=>{s[d.clienteNombre]=(s[d.clienteNombre]||0)+(d.total||0),(d.items||[]).forEach(l=>{p[l.nombre]=p[l.nombre]||{cant:0,total:0},p[l.nombre].cant+=l.cant,p[l.nombre].total+=(l.precio||0)*l.cant})});const we=Object.entries(s).sort((d,l)=>l[1]-d[1]).slice(0,5),ke=Object.entries(p).sort((d,l)=>l[1].total-d[1].total).slice(0,5);re({desde:e,hasta:t,notas:o,total:i,totalContado:n,totalCredito:f,count:o.length,topClientes:we,topProductos:ke}),v("\u2705 Reporte generado")}catch(e){v("\u274C "+e.message)}L(!1)},ce=()=>{if(!r)return;const e=[["Fecha","Cliente","Productos","Total","Forma de pago"]];r.notas.forEach(t=>{e.push([fDateTime(t.fecha),t.clienteNombre,(t.items||[]).map(a=>a.nombre+" x"+a.cant).join(" | "),(t.total||0).toFixed(2),t.formaPago])}),downloadCSV("reporte_ventas_"+Date.now()+".csv",e)},ue=()=>{if(!r)return;const e=r.topClientes.map(([i,n])=>`\u2022 ${i}: ${fmtx(n)}`).join(`
-`)||"Sin datos",t=r.topProductos.map(([i,n])=>`\u2022 ${i}: ${n.cant} unidades \u2014 ${fmtx(n.total)}`).join(`
-`)||"Sin datos",a=`REPORTE DE VENTAS
-${fDateTime(r.desde)} \u2014 ${fDateTime(r.hasta)}
+/* ── Reportes: respaldo completo, verificación de ubicación de ventas,
+ * reporte de ventas y exportaciones (clientes+QR, ventas semana, sueldo) ──
+ * Extraído de rutas-repartidores.js (antes era su sub-pestaña "Respaldo").
+ * No depende de rutas ni de GPS en vivo — es puro reporting de admin.
+ * Reutiliza helpers genéricos ya globales por rutas-repartidores.js:
+ * fDateTime, fmtx, inputStyle, lblStyle, csvEscape/toCSV/downloadCSV,
+ * qrTextForCliente/renderQRDataURL — ese archivo debe cargar antes que
+ * este en index.html (ya es así).
+ */
+function Reportes({ productos, clientes, currentUser }) {
+  const [msg, setMsg] = useState('');
+  const flash = m => { setMsg(m); setTimeout(() => setMsg(''), 3000); };
 
-Pedidos: ${r.count}
-Total vendido: ${fmtx(r.total)}
-Contado: ${fmtx(r.totalContado)}
-Cr\xE9dito: ${fmtx(r.totalCredito)}
+  const [subTab, setSubTab] = useState('respaldo');
 
-TOP CLIENTES
-${e}
+  // Exclusivo de este panel: quién puede reasignar/ver vendedores (nómina) y
+  // el meta de respaldos. Es un duplicado *intencional* y liviano del mismo
+  // listener que ya usa rutas-repartidores.js para su recordatorio de
+  // respaldo — ambos son de un solo documento/colección chica y admin-only.
+  const [usuarios, setUsuarios] = useState([]);
+  const [backupMeta, setBackupMeta] = useState(null);
+  useEffect(() => {
+    const unsubU = db.collection('usuarios').onSnapshot(snap => setUsuarios(snap.docs.map(d => ({ id: d.id, ...d.data() }))), () => {});
+    const unsubB = db.collection('_meta').doc('backups').onSnapshot(snap => setBackupMeta(snap.exists ? snap.data() : null), () => {});
+    return () => { unsubU(); unsubB(); };
+  }, []);
 
-TOP PRODUCTOS
-${t}`,o=`mailto:${encodeURIComponent(M||"")}?subject=${encodeURIComponent("Reporte de ventas \u2014 Productos de la Costa")}&body=${encodeURIComponent(a)}`;window.location.href=o},[W,O]=useState(!1),pe=()=>{const e=[["Nombre","Tel\xE9fono","Domicilio","Activo","C\xF3digo QR"]];c.forEach(t=>e.push([t.nombre,t.telefono||"",t.domicilio||"",t.activo?"S\xED":"No",qrTextForCliente(t.id)])),downloadCSV("clientes_qr_"+Date.now()+".csv",e)},ge=()=>{const e=c.filter(o=>o.activo);if(e.length===0){v("\u26A0\uFE0F No hay clientes activos");return}O(!0);const t={};let a=e.length;e.forEach(o=>{renderQRDataURL(qrTextForCliente(o.id),200,i=>{if(t[o.id]=i,a--,a===0){const n=window.open("","_blank");if(!n){v("\u26A0\uFE0F Habilita las ventanas emergentes para imprimir."),O(!1);return}const f='<!doctype html><html><head><meta charset="utf-8"><title>QR clientes</title><style>body{font-family:system-ui,sans-serif;margin:0;padding:16px}.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}.card{border:1px solid #ccc;border-radius:8px;padding:10px;text-align:center;page-break-inside:avoid}.card img{width:100%;max-width:150px}.card div{font-size:12px;margin-top:6px;word-break:break-word}@media print{body{padding:0}}</style></head><body><div class="grid">'+e.map(s=>`<div class="card"><img src="${t[s.id]}"/><div>${s.nombre}</div></div>`).join("")+"</div><script>window.onload=()=>window.print()<\/script></body></html>";n.document.write(f),n.document.close(),O(!1)}})})},[E,Q]=useState(!1),me=async()=>{Q(!0);try{const e=new Date,t=new Date(e);t.setDate(e.getDate()-7);const o=(await db.collection("notas").where("fecha",">=",t.toISOString()).where("fecha","<=",e.toISOString()).get()).docs.map(n=>m({id:n.id},n.data())).sort((n,f)=>new Date(n.fecha)-new Date(f.fecha)),i=[["Fecha","Cliente","Vendedor","Productos","Total","Forma de pago"]];o.forEach(n=>i.push([fDateTime(n.fecha),n.clienteNombre,n.capturadoPorNombre||"",(n.items||[]).map(f=>f.nombre+" x"+f.cant).join(" | "),(n.total||0).toFixed(2),n.formaPago])),downloadCSV("ventas_semana_"+Date.now()+".csv",i),v("\u2705 Ventas de la semana exportadas \u2014 "+o.length)}catch(e){v("\u274C "+e.message)}Q(!1)},[D,ve]=useState(""),[R,fe]=useState("semana"),[P,be]=useState(""),[j,he]=useState(""),[g,G]=useState(null),[I,q]=useState(!1),ye=()=>{const e=new Date;let t,a;return R==="semana"?(t=new Date(e),t.setDate(e.getDate()-7),a=e):R==="mes"?(t=new Date(e),t.setDate(e.getDate()-30),a=e):(t=P?new Date(P):new Date(e.getFullYear(),e.getMonth(),1),a=j?new Date(j+"T23:59:59"):e),{desde:t.toISOString(),hasta:a.toISOString()}},Se=async()=>{if(!D){v("\u26A0\uFE0F Selecciona un vendedor");return}q(!0);try{const{desde:e,hasta:t}=ye(),o=(await db.collection("notas").where("capturadoPorUid","==",D).where("fecha",">=",e).where("fecha","<=",t).get()).docs.map(s=>m({id:s.id},s.data())),i={};o.forEach(s=>{const p=new Date(s.fecha).toDateString();i[p]=i[p]||{fecha:s.fecha,cant:0,total:0},i[p].cant+=1,i[p].total+=s.total||0});const n=Object.values(i).sort((s,p)=>new Date(s.fecha)-new Date(p.fecha)),f=($.find(s=>s.id===D)||{}).nombre||"";G({desde:e,hasta:t,vendedorNombre:f,filas:n,totalVentas:o.length,totalVendido:o.reduce((s,p)=>s+(p.total||0),0)}),v("\u2705 Formato generado \u2014 "+n.length+" d\xEDa(s) con ventas")}catch(e){v("\u274C "+e.message)}q(!1)},xe=()=>{if(!g)return;const e=[["Vendedor","Fecha","Ventas realizadas","Total vendido","Horas trabajadas"]];g.filas.forEach(t=>{const a=new Date(t.fecha).toLocaleDateString("es-MX",{day:"2-digit",month:"short",year:"numeric"});e.push([g.vendedorNombre,a,t.cant,t.total.toFixed(2),""])}),e.push(["","TOTAL",g.totalVentas,g.totalVendido.toFixed(2),""]),downloadCSV("sueldo_"+g.vendedorNombre.replace(/\s+/g,"_")+"_"+Date.now()+".csv",e)};return React.createElement("div",{style:{padding:"16px 12px"}},React.createElement("div",{style:{fontSize:20,fontWeight:800,marginBottom:12}},"\u{1F4C8} Reportes"),F&&React.createElement("div",{style:{background:"var(--ok-bg)",borderRadius:8,padding:"8px 12px",fontSize:13,color:"var(--ok-text)",marginBottom:12}},F),React.createElement("div",{style:{display:"flex",gap:6,marginBottom:14}},[["respaldo","\u{1F4BE} Respaldo"],["ubicacion","\u{1F4CD} Ubicaci\xF3n"],["reporte","\u{1F4C8} Reporte de ventas"],["exportar","\u{1F4E4} Exportar"]].map(([e,t])=>React.createElement("button",{key:e,onClick:()=>X(e),style:{flex:1,padding:"8px 4px",borderRadius:8,border:"none",background:y===e?"var(--accent)":"var(--surface)",color:y===e?"var(--surface-2)":"var(--ink-soft)",fontSize:11,fontWeight:700,cursor:"pointer"}},t))),y==="respaldo"&&React.createElement(React.Fragment,null,React.createElement("div",{style:{background:"var(--surface)",borderRadius:12,padding:16,marginBottom:14}},React.createElement("div",{style:{fontSize:13,fontWeight:700,marginBottom:6}},"Respaldo completo"),React.createElement("div",{style:{fontSize:12,color:"var(--ink-soft)",marginBottom:12}},"Descarga un archivo con todos tus datos: productos, clientes, ventas, cr\xE9ditos, rutas, devoluciones e historial de inventario. Gu\xE1rdalo en Drive, tu correo o donde prefieras."),React.createElement("div",{style:{fontSize:12,color:k===null?"var(--warn-text)":k>=30?"var(--danger-text)":k>=7?"var(--warn-text)":"var(--ok-text)",marginBottom:12}},k===null?"\u26A0\uFE0F Nunca se ha generado un respaldo":`\xDAltimo respaldo: hace ${k} d\xEDa(s)${w.por?" \xB7 "+w.por:""}`),React.createElement("button",{onClick:Z,disabled:C,style:{width:"100%",background:"var(--accent)",color:"var(--surface-2)",border:"none",borderRadius:8,padding:12,fontWeight:700,cursor:"pointer",opacity:C?.6:1}},C?"Generando\u2026":"\u{1F4BE} Generar y descargar respaldo")),React.createElement("div",{style:{fontSize:11,color:"var(--ink-faint)"}},"Recomendado: hazlo cada semana, y guarda uno aparte cada fin de mes. Te avisamos aqu\xED arriba cuando ya lleve m\xE1s de 7 d\xEDas.")),y==="ubicacion"&&(()=>{const e=(h||[]).filter(o=>o.ubicacionVenta.ok===!0),t=(h||[]).filter(o=>o.ubicacionVenta.ok===!1),a=(h||[]).filter(o=>o.ubicacionVenta.ok===null);return React.createElement(React.Fragment,null,React.createElement("div",{style:{fontSize:11,color:"var(--ink-faint)",marginBottom:12,lineHeight:1.5}},"Compara d\xF3nde se hizo cada venta de ruta contra el domicilio registrado del cliente (radio de ",RADIO_VISITA_METROS," m). Es solo informativo: nunca bloquea ni anula una venta."),React.createElement(Row,{style:{gap:8,marginBottom:12}},React.createElement("input",{type:"date",value:z,onChange:o=>ee(o.target.value),style:x(m({},inputStyle),{marginBottom:0,flex:1})}),React.createElement("button",{onClick:oe,disabled:T,style:{background:"var(--accent)",color:"var(--surface-2)",border:"none",borderRadius:8,padding:"0 16px",fontWeight:700,cursor:"pointer",opacity:T?.6:1}},T?"\u2026":"Ver")),h===null&&React.createElement("div",{style:{fontSize:12,color:"var(--ink-faint)",textAlign:"center",padding:"20px 0"}},'Elige una fecha y toca "Ver".'),h!==null&&h.length===0&&React.createElement("div",{style:{fontSize:12,color:"var(--ink-faint)",textAlign:"center",padding:"20px 0"}},"Sin ventas de ruta con ubicaci\xF3n ese d\xEDa."),h!==null&&h.length>0&&React.createElement(React.Fragment,null,React.createElement(Row,{style:{gap:8,marginBottom:14}},React.createElement("div",{style:{flex:1,background:"var(--ok-bg)",borderRadius:10,padding:"10px 8px",textAlign:"center"}},React.createElement("div",{style:{fontSize:20,fontWeight:800,color:"var(--ok-text)"}},e.length),React.createElement("div",{style:{fontSize:10,color:"var(--ok-text)"}},"\u2705 Concuerdan")),React.createElement("div",{style:{flex:1,background:"var(--danger-bg)",borderRadius:10,padding:"10px 8px",textAlign:"center"}},React.createElement("div",{style:{fontSize:20,fontWeight:800,color:"var(--danger-text)"}},t.length),React.createElement("div",{style:{fontSize:10,color:"var(--danger-text)"}},"\u26A0\uFE0F No concuerdan")),React.createElement("div",{style:{flex:1,background:"var(--surface)",borderRadius:10,padding:"10px 8px",textAlign:"center"}},React.createElement("div",{style:{fontSize:20,fontWeight:800,color:"var(--ink-faint)"}},a.length),React.createElement("div",{style:{fontSize:10,color:"var(--ink-faint)"}},"\u2796 Sin datos"))),t.length>0&&React.createElement(React.Fragment,null,React.createElement("div",{style:{fontSize:11,color:"var(--danger-text)",fontWeight:700,marginBottom:8}},"VENTAS FUERA DE RANGO"),t.map(o=>React.createElement("div",{key:o.id,style:{background:"var(--danger-bg)",borderRadius:10,padding:"10px 12px",marginBottom:6}},React.createElement(Row,{style:{justifyContent:"space-between"}},React.createElement("span",{style:{fontSize:13,fontWeight:700,color:"var(--danger-text)"}},o.clienteNombre),React.createElement("span",{style:{fontSize:12,color:"var(--danger-text)"}},fmtx(o.total))),React.createElement("div",{style:{fontSize:11,color:"var(--danger-text)",marginTop:2}},fDateTime(o.fecha)," \xB7 a ",o.ubicacionVenta.distanciaM," m del domicilio registrado",o.capturadoPorNombre?" \xB7 "+o.capturadoPorNombre:"")))),a.length>0&&React.createElement("div",{style:{fontSize:11,color:"var(--ink-faint)",marginTop:t.length?14:0}},'"Sin datos" significa que el cliente no tiene ubicaci\xF3n registrada, o no se pudo obtener el GPS del repartidor en ese momento \u2014 no es evidencia de nada, solo falta informaci\xF3n para comparar.')))})(),y==="reporte"&&React.createElement(React.Fragment,null,React.createElement("div",{style:{display:"flex",gap:6,marginBottom:10}},[["hoy","Hoy"],["semana","7 d\xEDas"],["mes","30 d\xEDas"],["custom","Rango"]].map(([e,t])=>React.createElement("button",{key:e,onClick:()=>ae(e),style:{flex:1,padding:"7px 2px",borderRadius:8,border:"none",background:S===e?"var(--accent)":"var(--surface-2)",color:S===e?"var(--surface-2)":"var(--ink-soft)",fontSize:11,fontWeight:700,cursor:"pointer"}},t))),S==="custom"&&React.createElement("div",{style:{display:"flex",gap:8,marginBottom:10}},React.createElement("input",{type:"date",value:B,onChange:e=>ne(e.target.value),style:x(m({},inputStyle),{marginBottom:0,flex:1})}),React.createElement("input",{type:"date",value:V,onChange:e=>ie(e.target.value),style:x(m({},inputStyle),{marginBottom:0,flex:1})})),React.createElement("button",{onClick:le,disabled:N,style:{width:"100%",background:"var(--accent)",color:"var(--surface-2)",border:"none",borderRadius:8,padding:10,fontWeight:700,cursor:"pointer",marginBottom:14,opacity:N?.6:1}},N?"Generando\u2026":"\u{1F4CA} Generar reporte"),r&&React.createElement("div",{style:{background:"var(--surface)",borderRadius:12,padding:16,marginBottom:14}},React.createElement("div",{style:{fontSize:11,color:"var(--ink-faint)",marginBottom:10}},fDateTime(r.desde)," \u2014 ",fDateTime(r.hasta)),React.createElement("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:14}},React.createElement("div",null,React.createElement("div",{style:{fontSize:11,color:"var(--ink-soft)"}},"Total vendido"),React.createElement("div",{style:{fontSize:20,fontWeight:800,color:"var(--accent)"}},fmtx(r.total))),React.createElement("div",null,React.createElement("div",{style:{fontSize:11,color:"var(--ink-soft)"}},"Pedidos"),React.createElement("div",{style:{fontSize:20,fontWeight:800}},r.count)),React.createElement("div",null,React.createElement("div",{style:{fontSize:11,color:"var(--ink-soft)"}},"Contado"),React.createElement("div",{style:{fontSize:15,fontWeight:700,color:"var(--ok-text)"}},fmtx(r.totalContado))),React.createElement("div",null,React.createElement("div",{style:{fontSize:11,color:"var(--ink-soft)"}},"Cr\xE9dito"),React.createElement("div",{style:{fontSize:15,fontWeight:700,color:"var(--warn-text)"}},fmtx(r.totalCredito)))),r.topClientes.length>0&&React.createElement(React.Fragment,null,React.createElement("div",{style:{fontSize:11,color:"var(--ink-faint)",fontWeight:700,marginBottom:6}},"TOP CLIENTES"),r.topClientes.map(([e,t],a)=>React.createElement("div",{key:a,style:{display:"flex",justifyContent:"space-between",fontSize:12,marginBottom:4}},React.createElement("span",null,e),React.createElement("span",{style:{color:"var(--accent)",fontWeight:700}},fmtx(t))))),r.topProductos.length>0&&React.createElement(React.Fragment,null,React.createElement("div",{style:{fontSize:11,color:"var(--ink-faint)",fontWeight:700,margin:"10px 0 6px"}},"TOP PRODUCTOS"),r.topProductos.map(([e,t],a)=>React.createElement("div",{key:a,style:{display:"flex",justifyContent:"space-between",fontSize:12,marginBottom:4}},React.createElement("span",null,e," x",t.cant),React.createElement("span",{style:{color:"var(--accent)",fontWeight:700}},fmtx(t.total)))))),r&&React.createElement(React.Fragment,null,React.createElement("button",{onClick:ce,style:{width:"100%",background:"var(--surface)",color:"var(--ink-soft)",border:"1px solid var(--line-strong)",borderRadius:8,padding:10,fontWeight:700,cursor:"pointer",fontSize:12,marginBottom:10}},"\u{1F4E4} Exportar CSV"),React.createElement("div",{style:lblStyle},"Correo destino (opcional)"),React.createElement("input",{value:M,onChange:e=>se(e.target.value),placeholder:"correo@ejemplo.com",style:inputStyle}),React.createElement("div",{style:{fontSize:11,color:"var(--ink-faint)",marginBottom:10}},"Abre tu app de correo con el resumen ya escrito \u2014 revisa y dale enviar. Si quieres adjuntar el CSV, desc\xE1rgalo arriba y agr\xE9galo ah\xED."),React.createElement("button",{onClick:ue,style:{width:"100%",background:"var(--accent)",color:"var(--surface-2)",border:"none",borderRadius:8,padding:12,fontWeight:700,cursor:"pointer"}},"\u{1F4E7} Preparar correo"))),y==="exportar"&&React.createElement(React.Fragment,null,React.createElement("div",{style:{background:"var(--surface)",borderRadius:12,padding:16,marginBottom:14}},React.createElement("div",{style:{fontSize:13,fontWeight:700,marginBottom:6}},"\u{1F465} Clientes con su c\xF3digo QR"),React.createElement("div",{style:{fontSize:12,color:"var(--ink-soft)",marginBottom:12}},"Genera una hoja imprimible con el QR de cada cliente activo (para pegar en su tienda), o descarga los datos en CSV."),React.createElement("button",{onClick:ge,disabled:W,style:{width:"100%",background:"var(--accent)",color:"var(--surface-2)",border:"none",borderRadius:8,padding:10,fontWeight:700,cursor:"pointer",marginBottom:8,opacity:W?.6:1}},W?"Generando\u2026":"\u{1F5A8}\uFE0F Generar hoja de QR imprimible"),React.createElement("button",{onClick:pe,style:{width:"100%",background:"var(--surface-2)",color:"var(--ink-soft)",border:"1px solid var(--line-strong)",borderRadius:8,padding:10,fontWeight:700,cursor:"pointer",fontSize:12}},"\u{1F4E4} CSV con datos + c\xF3digo QR")),React.createElement("div",{style:{background:"var(--surface)",borderRadius:12,padding:16,marginBottom:14}},React.createElement("div",{style:{fontSize:13,fontWeight:700,marginBottom:6}},"\u{1F4C8} Ventas de la semana"),React.createElement("div",{style:{fontSize:12,color:"var(--ink-soft)",marginBottom:12}},"Descarga todas las ventas de los \xFAltimos 7 d\xEDas, una fila por pedido."),React.createElement("button",{onClick:me,disabled:E,style:{width:"100%",background:"var(--accent)",color:"var(--surface-2)",border:"none",borderRadius:8,padding:10,fontWeight:700,cursor:"pointer",opacity:E?.6:1}},E?"Generando\u2026":"\u{1F4E4} Exportar ventas de esta semana (CSV)")),React.createElement("div",{style:{background:"var(--surface)",borderRadius:12,padding:16}},React.createElement("div",{style:{fontSize:13,fontWeight:700,marginBottom:6}},"\u{1F4B5} Formato de ventas para c\xE1lculo de sueldo"),React.createElement("div",{style:{fontSize:12,color:"var(--ink-soft)",marginBottom:12}},'Ventas que hizo el vendedor por d\xEDa. La columna "Horas trabajadas" queda en blanco para llenarla a mano.'),React.createElement("div",{style:lblStyle},"Vendedor"),React.createElement("select",{value:D,onChange:e=>{ve(e.target.value),G(null)},style:m({},inputStyle)},React.createElement("option",{value:""},"Selecciona\u2026"),$.map(e=>React.createElement("option",{key:e.id,value:e.id},e.nombre))),React.createElement("div",{style:lblStyle},"Periodo"),React.createElement("div",{style:{display:"flex",gap:6,marginBottom:10}},[["semana","7 d\xEDas"],["mes","30 d\xEDas"],["custom","Rango"]].map(([e,t])=>React.createElement("button",{key:e,onClick:()=>{fe(e),G(null)},style:{flex:1,padding:"7px 2px",borderRadius:8,border:"none",background:R===e?"var(--accent)":"var(--surface-2)",color:R===e?"var(--surface-2)":"var(--ink-soft)",fontSize:11,fontWeight:700,cursor:"pointer"}},t))),R==="custom"&&React.createElement("div",{style:{display:"flex",gap:8,marginBottom:10}},React.createElement("input",{type:"date",value:P,onChange:e=>be(e.target.value),style:x(m({},inputStyle),{marginBottom:0,flex:1})}),React.createElement("input",{type:"date",value:j,onChange:e=>he(e.target.value),style:x(m({},inputStyle),{marginBottom:0,flex:1})})),React.createElement("button",{onClick:Se,disabled:I,style:{width:"100%",background:"var(--accent)",color:"var(--surface-2)",border:"none",borderRadius:8,padding:10,fontWeight:700,cursor:"pointer",marginBottom:g?12:0,opacity:I?.6:1}},I?"Generando\u2026":"\u{1F4CA} Generar formato"),g&&React.createElement(React.Fragment,null,React.createElement("div",{style:{background:"var(--surface-2)",borderRadius:8,padding:12,marginBottom:10}},React.createElement("div",{style:{fontSize:12,fontWeight:700,marginBottom:6}},g.vendedorNombre),g.filas.length===0&&React.createElement("div",{style:{fontSize:12,color:"var(--ink-faint)"}},"Sin ventas en este periodo"),g.filas.map((e,t)=>React.createElement(Row,{key:t,style:{justifyContent:"space-between",fontSize:12,marginBottom:3}},React.createElement("span",null,new Date(e.fecha).toLocaleDateString("es-MX",{day:"2-digit",month:"short"})),React.createElement("span",{style:{color:"var(--ink-soft)"}},e.cant," venta(s)"),React.createElement("span",{style:{fontWeight:700,color:"var(--accent)"}},fmtx(e.total)))),React.createElement("div",{style:{borderTop:"1px solid var(--line-strong)",paddingTop:6,marginTop:6,display:"flex",justifyContent:"space-between",fontSize:12,fontWeight:700}},React.createElement("span",null,"Total (",g.totalVentas," ventas)"),React.createElement("span",null,fmtx(g.totalVendido)))),React.createElement("button",{onClick:xe,style:{width:"100%",background:"var(--surface-2)",color:"var(--ink-soft)",border:"1px solid var(--line-strong)",borderRadius:8,padding:10,fontWeight:700,cursor:"pointer",fontSize:12}},"\u{1F4E4} Exportar CSV (con columna de horas en blanco)")))))}
+  const [backupGenerating, setBackupGenerating] = useState(false);
+  const diasDesdeUltimoRespaldo = backupMeta && backupMeta.ultimoRespaldo
+    ? Math.floor((Date.now() - new Date(backupMeta.ultimoRespaldo).getTime()) / 86400000)
+    : null;
+  const generarRespaldo = async () => {
+    setBackupGenerating(true);
+    try {
+      const colecciones = ['productos', 'clientes', 'notas', 'creditos', 'rutas', 'rutas_meta', 'devoluciones', 'inventario_historial', 'usuarios'];
+      const data = { generado: new Date().toISOString(), generadoPor: currentUser.nombre || currentUser.email };
+      for (const col of colecciones) {
+        const snap = await db.collection(col).get();
+        data[col] = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      }
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = 'respaldo_productos_de_la_costa_' + new Date().toISOString().slice(0, 10) + '.json';
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 4000);
+      await db.collection('_meta').doc('backups').set({ ultimoRespaldo: new Date().toISOString(), por: currentUser.nombre || currentUser.email }, { merge: true });
+      flash('✅ Respaldo descargado');
+    } catch (e) { flash('❌ ' + e.message); }
+    setBackupGenerating(false);
+  };
+
+  // ---- Verificación de ubicación del día ----
+  const [ubicFecha, setUbicFecha] = useState(() => new Date().toISOString().slice(0, 10));
+  const [ubicNotas, setUbicNotas] = useState(null);
+  const [ubicLoading, setUbicLoading] = useState(false);
+  const cargarUbicacionDia = async () => {
+    setUbicLoading(true);
+    try {
+      const desde = new Date(ubicFecha + 'T00:00:00').toISOString();
+      const hasta = new Date(ubicFecha + 'T23:59:59').toISOString();
+      const snap = await db.collection('notas').where('fecha', '>=', desde).where('fecha', '<=', hasta).get();
+      // Solo interesan las notas que pasaron por una validación de ubicación
+      // (ventas por ruta) — las del mostrador/oficina no traen este campo.
+      const notas = snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(n => n.ubicacionVenta);
+      notas.sort((a, b) => new Date(a.fecha) - new Date(b.fecha));
+      setUbicNotas(notas);
+    } catch (e) { flash('❌ ' + e.message); }
+    setUbicLoading(false);
+  };
+
+  // ---- Reporte de ventas ----
+  const [reporteRango, setReporteRango] = useState('semana');
+  const [reporteDesde, setReporteDesde] = useState('');
+  const [reporteHasta, setReporteHasta] = useState('');
+  const [reporteData, setReporteData] = useState(null);
+  const [reporteGenerating, setReporteGenerating] = useState(false);
+  const [reporteEmail, setReporteEmail] = useState('');
+  const rangoFechas = () => {
+    const hoy = new Date();
+    let desde, hasta;
+    if (reporteRango === 'hoy') {
+      desde = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate());
+      hasta = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate(), 23, 59, 59);
+    } else if (reporteRango === 'semana') {
+      desde = new Date(hoy); desde.setDate(hoy.getDate() - 7);
+      hasta = hoy;
+    } else if (reporteRango === 'mes') {
+      desde = new Date(hoy); desde.setDate(hoy.getDate() - 30);
+      hasta = hoy;
+    } else {
+      desde = reporteDesde ? new Date(reporteDesde) : new Date(hoy.getFullYear(), hoy.getMonth(), 1);
+      hasta = reporteHasta ? new Date(reporteHasta + 'T23:59:59') : hoy;
+    }
+    return { desde: desde.toISOString(), hasta: hasta.toISOString() };
+  };
+  const generarReporte = async () => {
+    setReporteGenerating(true);
+    try {
+      const { desde, hasta } = rangoFechas();
+      const snap = await db.collection('notas').where('fecha', '>=', desde).where('fecha', '<=', hasta).get();
+      const notas = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      const total = notas.reduce((s, n) => s + (n.total || 0), 0);
+      const totalContado = notas.filter(n => n.formaPago === 'contado').reduce((s, n) => s + (n.total || 0), 0);
+      const totalCredito = notas.filter(n => n.formaPago === 'credito').reduce((s, n) => s + (n.total || 0), 0);
+      const porCliente = {};
+      const porProducto = {};
+      notas.forEach(n => {
+        porCliente[n.clienteNombre] = (porCliente[n.clienteNombre] || 0) + (n.total || 0);
+        (n.items || []).forEach(it => {
+          porProducto[it.nombre] = porProducto[it.nombre] || { cant: 0, total: 0 };
+          porProducto[it.nombre].cant += it.cant;
+          porProducto[it.nombre].total += (it.precio || 0) * it.cant;
+        });
+      });
+      const topClientes = Object.entries(porCliente).sort((a, b) => b[1] - a[1]).slice(0, 5);
+      const topProductos = Object.entries(porProducto).sort((a, b) => b[1].total - a[1].total).slice(0, 5);
+      setReporteData({ desde, hasta, notas, total, totalContado, totalCredito, count: notas.length, topClientes, topProductos });
+      flash('✅ Reporte generado');
+    } catch (e) { flash('❌ ' + e.message); }
+    setReporteGenerating(false);
+  };
+  const exportarReporteCSV = () => {
+    if (!reporteData) return;
+    const rows = [['Fecha', 'Cliente', 'Productos', 'Total', 'Forma de pago']];
+    reporteData.notas.forEach(n => {
+      rows.push([fDateTime(n.fecha), n.clienteNombre, (n.items || []).map(it => it.nombre + ' x' + it.cant).join(' | '), (n.total || 0).toFixed(2), n.formaPago]);
+    });
+    downloadCSV('reporte_ventas_' + Date.now() + '.csv', rows);
+  };
+  const enviarReportePorCorreo = () => {
+    if (!reporteData) return;
+    const clientesTxt = reporteData.topClientes.map(([n, t]) => `• ${n}: ${fmtx(t)}`).join('\n') || 'Sin datos';
+    const productosTxt = reporteData.topProductos.map(([n, d]) => `• ${n}: ${d.cant} unidades — ${fmtx(d.total)}`).join('\n') || 'Sin datos';
+    const cuerpo = `REPORTE DE VENTAS\n${fDateTime(reporteData.desde)} — ${fDateTime(reporteData.hasta)}\n\nPedidos: ${reporteData.count}\nTotal vendido: ${fmtx(reporteData.total)}\nContado: ${fmtx(reporteData.totalContado)}\nCrédito: ${fmtx(reporteData.totalCredito)}\n\nTOP CLIENTES\n${clientesTxt}\n\nTOP PRODUCTOS\n${productosTxt}`;
+    const link = `mailto:${encodeURIComponent(reporteEmail || '')}?subject=${encodeURIComponent('Reporte de ventas — Productos de la Costa')}&body=${encodeURIComponent(cuerpo)}`;
+    window.location.href = link;
+  };
+
+  // ---- Exportar clientes con su QR ----
+  const [clientesQrGenerating, setClientesQrGenerating] = useState(false);
+  const exportarClientesCSV = () => {
+    const rows = [['Nombre', 'Teléfono', 'Domicilio', 'Activo', 'Código QR']];
+    clientes.forEach(c => rows.push([c.nombre, c.telefono || '', c.domicilio || '', c.activo ? 'Sí' : 'No', qrTextForCliente(c.id)]));
+    downloadCSV('clientes_qr_' + Date.now() + '.csv', rows);
+  };
+  const exportarClientesQRImprimible = () => {
+    const activos = clientes.filter(c => c.activo);
+    if (activos.length === 0) { flash('⚠️ No hay clientes activos'); return; }
+    setClientesQrGenerating(true);
+    const results = {};
+    let pending = activos.length;
+    activos.forEach(c => {
+      renderQRDataURL(qrTextForCliente(c.id), 200, url => {
+        results[c.id] = url;
+        pending--;
+        if (pending === 0) {
+          const w = window.open('', '_blank');
+          if (!w) { flash('⚠️ Habilita las ventanas emergentes para imprimir.'); setClientesQrGenerating(false); return; }
+          const html = '<!doctype html><html><head><meta charset="utf-8"><title>QR clientes</title><style>' +
+            'body{font-family:system-ui,sans-serif;margin:0;padding:16px}' +
+            '.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}' +
+            '.card{border:1px solid #ccc;border-radius:8px;padding:10px;text-align:center;page-break-inside:avoid}' +
+            '.card img{width:100%;max-width:150px}' +
+            '.card div{font-size:12px;margin-top:6px;word-break:break-word}' +
+            '@media print{body{padding:0}}</style></head><body>' +
+            '<div class="grid">' + activos.map(c => `<div class="card"><img src="${results[c.id]}"/><div>${c.nombre}</div></div>`).join('') + '</div>' +
+            '<script>window.onload=()=>window.print()</script></body></html>';
+          w.document.write(html);
+          w.document.close();
+          setClientesQrGenerating(false);
+        }
+      });
+    });
+  };
+
+  // ---- Exportar ventas de los últimos 7 días ----
+  const [ventasSemanaGenerating, setVentasSemanaGenerating] = useState(false);
+  const exportarVentasSemanaCSV = async () => {
+    setVentasSemanaGenerating(true);
+    try {
+      const hoy = new Date();
+      const desde = new Date(hoy); desde.setDate(hoy.getDate() - 7);
+      const snap = await db.collection('notas').where('fecha', '>=', desde.toISOString()).where('fecha', '<=', hoy.toISOString()).get();
+      const notas = snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => new Date(a.fecha) - new Date(b.fecha));
+      const rows = [['Fecha', 'Cliente', 'Vendedor', 'Productos', 'Total', 'Forma de pago']];
+      notas.forEach(n => rows.push([fDateTime(n.fecha), n.clienteNombre, n.capturadoPorNombre || '', (n.items || []).map(it => it.nombre + ' x' + it.cant).join(' | '), (n.total || 0).toFixed(2), n.formaPago]));
+      downloadCSV('ventas_semana_' + Date.now() + '.csv', rows);
+      flash('✅ Ventas de la semana exportadas — ' + notas.length);
+    } catch (e) { flash('❌ ' + e.message); }
+    setVentasSemanaGenerating(false);
+  };
+
+  // ---- Formato de ventas del vendedor (para cálculo de sueldo) ----
+  const [nominaVendedorId, setNominaVendedorId] = useState('');
+  const [nominaRango, setNominaRango] = useState('semana');
+  const [nominaDesde, setNominaDesde] = useState('');
+  const [nominaHasta, setNominaHasta] = useState('');
+  const [nominaData, setNominaData] = useState(null);
+  const [nominaGenerating, setNominaGenerating] = useState(false);
+  const rangoFechasNomina = () => {
+    const hoy = new Date();
+    let desde, hasta;
+    if (nominaRango === 'semana') { desde = new Date(hoy); desde.setDate(hoy.getDate() - 7); hasta = hoy; }
+    else if (nominaRango === 'mes') { desde = new Date(hoy); desde.setDate(hoy.getDate() - 30); hasta = hoy; }
+    else { desde = nominaDesde ? new Date(nominaDesde) : new Date(hoy.getFullYear(), hoy.getMonth(), 1); hasta = nominaHasta ? new Date(nominaHasta + 'T23:59:59') : hoy; }
+    return { desde: desde.toISOString(), hasta: hasta.toISOString() };
+  };
+  const generarNomina = async () => {
+    if (!nominaVendedorId) { flash('⚠️ Selecciona un vendedor'); return; }
+    setNominaGenerating(true);
+    try {
+      const { desde, hasta } = rangoFechasNomina();
+      const snap = await db.collection('notas').where('capturadoPorUid', '==', nominaVendedorId).where('fecha', '>=', desde).where('fecha', '<=', hasta).get();
+      const notas = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      const porDia = {};
+      notas.forEach(n => {
+        const key = new Date(n.fecha).toDateString();
+        porDia[key] = porDia[key] || { fecha: n.fecha, cant: 0, total: 0 };
+        porDia[key].cant += 1;
+        porDia[key].total += (n.total || 0);
+      });
+      const filas = Object.values(porDia).sort((a, b) => new Date(a.fecha) - new Date(b.fecha));
+      const vendedorNombre = (usuarios.find(u => u.id === nominaVendedorId) || {}).nombre || '';
+      setNominaData({ desde, hasta, vendedorNombre, filas, totalVentas: notas.length, totalVendido: notas.reduce((s, n) => s + (n.total || 0), 0) });
+      flash('✅ Formato generado — ' + filas.length + ' día(s) con ventas');
+    } catch (e) { flash('❌ ' + e.message); }
+    setNominaGenerating(false);
+  };
+  const exportarNominaCSV = () => {
+    if (!nominaData) return;
+    const rows = [['Vendedor', 'Fecha', 'Ventas realizadas', 'Total vendido', 'Horas trabajadas']];
+    nominaData.filas.forEach(f => {
+      const fechaCorta = new Date(f.fecha).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' });
+      rows.push([nominaData.vendedorNombre, fechaCorta, f.cant, f.total.toFixed(2), '']);
+    });
+    rows.push(['', 'TOTAL', nominaData.totalVentas, nominaData.totalVendido.toFixed(2), '']);
+    downloadCSV('sueldo_' + nominaData.vendedorNombre.replace(/\s+/g, '_') + '_' + Date.now() + '.csv', rows);
+  };
+
+  return (
+    <div style={{ padding: '16px 12px' }}>
+      <div style={{ fontSize: 20, fontWeight: 800, marginBottom: 12 }}>📈 Reportes</div>
+      {msg && <div style={{ background: 'var(--ok-bg)', borderRadius: 8, padding: '8px 12px', fontSize: 13, color: 'var(--ok-text)', marginBottom: 12 }}>{msg}</div>}
+
+      <div style={{ display: 'flex', gap: 6, marginBottom: 14 }}>
+        {[['respaldo', '💾 Respaldo'], ['ubicacion', '📍 Ubicación'], ['reporte', '📈 Reporte de ventas'], ['exportar', '📤 Exportar']].map(([v, l]) => (
+          <button key={v} onClick={() => setSubTab(v)} style={{ flex: 1, padding: '8px 4px', borderRadius: 8, border: 'none', background: subTab === v ? 'var(--accent)' : 'var(--surface)', color: subTab === v ? 'var(--surface-2)' : 'var(--ink-soft)', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>{l}</button>
+        ))}
+      </div>
+
+      {subTab === 'respaldo' && (
+        <>
+          <div style={{ background: 'var(--surface)', borderRadius: 12, padding: 16, marginBottom: 14 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 6 }}>Respaldo completo</div>
+            <div style={{ fontSize: 12, color: 'var(--ink-soft)', marginBottom: 12 }}>Descarga un archivo con todos tus datos: productos, clientes, ventas, créditos, rutas, devoluciones e historial de inventario. Guárdalo en Drive, tu correo o donde prefieras.</div>
+            <div style={{ fontSize: 12, color: diasDesdeUltimoRespaldo === null ? 'var(--warn-text)' : diasDesdeUltimoRespaldo >= 30 ? 'var(--danger-text)' : diasDesdeUltimoRespaldo >= 7 ? 'var(--warn-text)' : 'var(--ok-text)', marginBottom: 12 }}>
+              {diasDesdeUltimoRespaldo === null ? '⚠️ Nunca se ha generado un respaldo' : `Último respaldo: hace ${diasDesdeUltimoRespaldo} día(s)${backupMeta.por ? ' · ' + backupMeta.por : ''}`}
+            </div>
+            <button onClick={generarRespaldo} disabled={backupGenerating} style={{ width: '100%', background: 'var(--accent)', color: 'var(--surface-2)', border: 'none', borderRadius: 8, padding: 12, fontWeight: 700, cursor: 'pointer', opacity: backupGenerating ? 0.6 : 1 }}>{backupGenerating ? 'Generando…' : '💾 Generar y descargar respaldo'}</button>
+          </div>
+          <div style={{ fontSize: 11, color: 'var(--ink-faint)' }}>Recomendado: hazlo cada semana, y guarda uno aparte cada fin de mes. Te avisamos aquí arriba cuando ya lleve más de 7 días.</div>
+        </>
+      )}
+
+      {subTab === 'ubicacion' && (() => {
+        const ok = (ubicNotas || []).filter(n => n.ubicacionVenta.ok === true);
+        const mal = (ubicNotas || []).filter(n => n.ubicacionVenta.ok === false);
+        const sinDatos = (ubicNotas || []).filter(n => n.ubicacionVenta.ok === null);
+        return <>
+          <div style={{ fontSize: 11, color: 'var(--ink-faint)', marginBottom: 12, lineHeight: 1.5 }}>
+            Compara dónde se hizo cada venta de ruta contra el domicilio registrado del cliente (radio de {RADIO_VISITA_METROS} m). Es solo informativo: nunca bloquea ni anula una venta.
+          </div>
+          <Row style={{ gap: 8, marginBottom: 12 }}>
+            <input type="date" value={ubicFecha} onChange={e => setUbicFecha(e.target.value)} style={{ ...inputStyle, marginBottom: 0, flex: 1 }} />
+            <button onClick={cargarUbicacionDia} disabled={ubicLoading} style={{ background: 'var(--accent)', color: 'var(--surface-2)', border: 'none', borderRadius: 8, padding: '0 16px', fontWeight: 700, cursor: 'pointer', opacity: ubicLoading ? 0.6 : 1 }}>{ubicLoading ? '…' : 'Ver'}</button>
+          </Row>
+          {ubicNotas === null && <div style={{ fontSize: 12, color: 'var(--ink-faint)', textAlign: 'center', padding: '20px 0' }}>Elige una fecha y toca "Ver".</div>}
+          {ubicNotas !== null && ubicNotas.length === 0 && <div style={{ fontSize: 12, color: 'var(--ink-faint)', textAlign: 'center', padding: '20px 0' }}>Sin ventas de ruta con ubicación ese día.</div>}
+          {ubicNotas !== null && ubicNotas.length > 0 && <>
+            <Row style={{ gap: 8, marginBottom: 14 }}>
+              <div style={{ flex: 1, background: 'var(--ok-bg)', borderRadius: 10, padding: '10px 8px', textAlign: 'center' }}>
+                <div style={{ fontSize: 20, fontWeight: 800, color: 'var(--ok-text)' }}>{ok.length}</div>
+                <div style={{ fontSize: 10, color: 'var(--ok-text)' }}>✅ Concuerdan</div>
+              </div>
+              <div style={{ flex: 1, background: 'var(--danger-bg)', borderRadius: 10, padding: '10px 8px', textAlign: 'center' }}>
+                <div style={{ fontSize: 20, fontWeight: 800, color: 'var(--danger-text)' }}>{mal.length}</div>
+                <div style={{ fontSize: 10, color: 'var(--danger-text)' }}>⚠️ No concuerdan</div>
+              </div>
+              <div style={{ flex: 1, background: 'var(--surface)', borderRadius: 10, padding: '10px 8px', textAlign: 'center' }}>
+                <div style={{ fontSize: 20, fontWeight: 800, color: 'var(--ink-faint)' }}>{sinDatos.length}</div>
+                <div style={{ fontSize: 10, color: 'var(--ink-faint)' }}>➖ Sin datos</div>
+              </div>
+            </Row>
+            {mal.length > 0 && <>
+              <div style={{ fontSize: 11, color: 'var(--danger-text)', fontWeight: 700, marginBottom: 8 }}>VENTAS FUERA DE RANGO</div>
+              {mal.map(n => (
+                <div key={n.id} style={{ background: 'var(--danger-bg)', borderRadius: 10, padding: '10px 12px', marginBottom: 6 }}>
+                  <Row style={{ justifyContent: 'space-between' }}>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--danger-text)' }}>{n.clienteNombre}</span>
+                    <span style={{ fontSize: 12, color: 'var(--danger-text)' }}>{fmtx(n.total)}</span>
+                  </Row>
+                  <div style={{ fontSize: 11, color: 'var(--danger-text)', marginTop: 2 }}>{fDateTime(n.fecha)} · a {n.ubicacionVenta.distanciaM} m del domicilio registrado{n.capturadoPorNombre ? ' · ' + n.capturadoPorNombre : ''}</div>
+                </div>
+              ))}
+            </>}
+            {sinDatos.length > 0 && <div style={{ fontSize: 11, color: 'var(--ink-faint)', marginTop: mal.length ? 14 : 0 }}>"Sin datos" significa que el cliente no tiene ubicación registrada, o no se pudo obtener el GPS del repartidor en ese momento — no es evidencia de nada, solo falta información para comparar.</div>}
+          </>}
+        </>;
+      })()}
+
+      {subTab === 'reporte' && (
+        <>
+          <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
+            {[['hoy', 'Hoy'], ['semana', '7 días'], ['mes', '30 días'], ['custom', 'Rango']].map(([v, l]) => (
+              <button key={v} onClick={() => setReporteRango(v)} style={{ flex: 1, padding: '7px 2px', borderRadius: 8, border: 'none', background: reporteRango === v ? 'var(--accent)' : 'var(--surface-2)', color: reporteRango === v ? 'var(--surface-2)' : 'var(--ink-soft)', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>{l}</button>
+            ))}
+          </div>
+          {reporteRango === 'custom' && (
+            <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
+              <input type="date" value={reporteDesde} onChange={e => setReporteDesde(e.target.value)} style={{ ...inputStyle, marginBottom: 0, flex: 1 }} />
+              <input type="date" value={reporteHasta} onChange={e => setReporteHasta(e.target.value)} style={{ ...inputStyle, marginBottom: 0, flex: 1 }} />
+            </div>
+          )}
+          <button onClick={generarReporte} disabled={reporteGenerating} style={{ width: '100%', background: 'var(--accent)', color: 'var(--surface-2)', border: 'none', borderRadius: 8, padding: 10, fontWeight: 700, cursor: 'pointer', marginBottom: 14, opacity: reporteGenerating ? 0.6 : 1 }}>{reporteGenerating ? 'Generando…' : '📊 Generar reporte'}</button>
+
+          {reporteData && (
+            <div style={{ background: 'var(--surface)', borderRadius: 12, padding: 16, marginBottom: 14 }}>
+              <div style={{ fontSize: 11, color: 'var(--ink-faint)', marginBottom: 10 }}>{fDateTime(reporteData.desde)} — {fDateTime(reporteData.hasta)}</div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 14 }}>
+                <div><div style={{ fontSize: 11, color: 'var(--ink-soft)' }}>Total vendido</div><div style={{ fontSize: 20, fontWeight: 800, color: 'var(--accent)' }}>{fmtx(reporteData.total)}</div></div>
+                <div><div style={{ fontSize: 11, color: 'var(--ink-soft)' }}>Pedidos</div><div style={{ fontSize: 20, fontWeight: 800 }}>{reporteData.count}</div></div>
+                <div><div style={{ fontSize: 11, color: 'var(--ink-soft)' }}>Contado</div><div style={{ fontSize: 15, fontWeight: 700, color: 'var(--ok-text)' }}>{fmtx(reporteData.totalContado)}</div></div>
+                <div><div style={{ fontSize: 11, color: 'var(--ink-soft)' }}>Crédito</div><div style={{ fontSize: 15, fontWeight: 700, color: 'var(--warn-text)' }}>{fmtx(reporteData.totalCredito)}</div></div>
+              </div>
+              {reporteData.topClientes.length > 0 && <>
+                <div style={{ fontSize: 11, color: 'var(--ink-faint)', fontWeight: 700, marginBottom: 6 }}>TOP CLIENTES</div>
+                {reporteData.topClientes.map(([n, t], i) => <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 4 }}><span>{n}</span><span style={{ color: 'var(--accent)', fontWeight: 700 }}>{fmtx(t)}</span></div>)}
+              </>}
+              {reporteData.topProductos.length > 0 && <>
+                <div style={{ fontSize: 11, color: 'var(--ink-faint)', fontWeight: 700, margin: '10px 0 6px' }}>TOP PRODUCTOS</div>
+                {reporteData.topProductos.map(([n, d], i) => <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 4 }}><span>{n} x{d.cant}</span><span style={{ color: 'var(--accent)', fontWeight: 700 }}>{fmtx(d.total)}</span></div>)}
+              </>}
+            </div>
+          )}
+          {reporteData && (
+            <>
+              <button onClick={exportarReporteCSV} style={{ width: '100%', background: 'var(--surface)', color: 'var(--ink-soft)', border: '1px solid var(--line-strong)', borderRadius: 8, padding: 10, fontWeight: 700, cursor: 'pointer', fontSize: 12, marginBottom: 10 }}>📤 Exportar CSV</button>
+              <div style={lblStyle}>Correo destino (opcional)</div>
+              <input value={reporteEmail} onChange={e => setReporteEmail(e.target.value)} placeholder="correo@ejemplo.com" style={inputStyle} />
+              <div style={{ fontSize: 11, color: 'var(--ink-faint)', marginBottom: 10 }}>Abre tu app de correo con el resumen ya escrito — revisa y dale enviar. Si quieres adjuntar el CSV, descárgalo arriba y agrégalo ahí.</div>
+              <button onClick={enviarReportePorCorreo} style={{ width: '100%', background: 'var(--accent)', color: 'var(--surface-2)', border: 'none', borderRadius: 8, padding: 12, fontWeight: 700, cursor: 'pointer' }}>📧 Preparar correo</button>
+            </>
+          )}
+        </>
+      )}
+
+      {subTab === 'exportar' && (
+        <>
+          <div style={{ background: 'var(--surface)', borderRadius: 12, padding: 16, marginBottom: 14 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 6 }}>👥 Clientes con su código QR</div>
+            <div style={{ fontSize: 12, color: 'var(--ink-soft)', marginBottom: 12 }}>Genera una hoja imprimible con el QR de cada cliente activo (para pegar en su tienda), o descarga los datos en CSV.</div>
+            <button onClick={exportarClientesQRImprimible} disabled={clientesQrGenerating} style={{ width: '100%', background: 'var(--accent)', color: 'var(--surface-2)', border: 'none', borderRadius: 8, padding: 10, fontWeight: 700, cursor: 'pointer', marginBottom: 8, opacity: clientesQrGenerating ? 0.6 : 1 }}>{clientesQrGenerating ? 'Generando…' : '🖨️ Generar hoja de QR imprimible'}</button>
+            <button onClick={exportarClientesCSV} style={{ width: '100%', background: 'var(--surface-2)', color: 'var(--ink-soft)', border: '1px solid var(--line-strong)', borderRadius: 8, padding: 10, fontWeight: 700, cursor: 'pointer', fontSize: 12 }}>📤 CSV con datos + código QR</button>
+          </div>
+
+          <div style={{ background: 'var(--surface)', borderRadius: 12, padding: 16, marginBottom: 14 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 6 }}>📈 Ventas de la semana</div>
+            <div style={{ fontSize: 12, color: 'var(--ink-soft)', marginBottom: 12 }}>Descarga todas las ventas de los últimos 7 días, una fila por pedido.</div>
+            <button onClick={exportarVentasSemanaCSV} disabled={ventasSemanaGenerating} style={{ width: '100%', background: 'var(--accent)', color: 'var(--surface-2)', border: 'none', borderRadius: 8, padding: 10, fontWeight: 700, cursor: 'pointer', opacity: ventasSemanaGenerating ? 0.6 : 1 }}>{ventasSemanaGenerating ? 'Generando…' : '📤 Exportar ventas de esta semana (CSV)'}</button>
+          </div>
+
+          <div style={{ background: 'var(--surface)', borderRadius: 12, padding: 16 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 6 }}>💵 Formato de ventas para cálculo de sueldo</div>
+            <div style={{ fontSize: 12, color: 'var(--ink-soft)', marginBottom: 12 }}>Ventas que hizo el vendedor por día. La columna "Horas trabajadas" queda en blanco para llenarla a mano.</div>
+            <div style={lblStyle}>Vendedor</div>
+            <select value={nominaVendedorId} onChange={e => { setNominaVendedorId(e.target.value); setNominaData(null); }} style={{ ...inputStyle }}>
+              <option value="">Selecciona…</option>
+              {usuarios.map(u => <option key={u.id} value={u.id}>{u.nombre}</option>)}
+            </select>
+            <div style={lblStyle}>Periodo</div>
+            <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
+              {[['semana', '7 días'], ['mes', '30 días'], ['custom', 'Rango']].map(([v, l]) => (
+                <button key={v} onClick={() => { setNominaRango(v); setNominaData(null); }} style={{ flex: 1, padding: '7px 2px', borderRadius: 8, border: 'none', background: nominaRango === v ? 'var(--accent)' : 'var(--surface-2)', color: nominaRango === v ? 'var(--surface-2)' : 'var(--ink-soft)', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>{l}</button>
+              ))}
+            </div>
+            {nominaRango === 'custom' && (
+              <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
+                <input type="date" value={nominaDesde} onChange={e => setNominaDesde(e.target.value)} style={{ ...inputStyle, marginBottom: 0, flex: 1 }} />
+                <input type="date" value={nominaHasta} onChange={e => setNominaHasta(e.target.value)} style={{ ...inputStyle, marginBottom: 0, flex: 1 }} />
+              </div>
+            )}
+            <button onClick={generarNomina} disabled={nominaGenerating} style={{ width: '100%', background: 'var(--accent)', color: 'var(--surface-2)', border: 'none', borderRadius: 8, padding: 10, fontWeight: 700, cursor: 'pointer', marginBottom: nominaData ? 12 : 0, opacity: nominaGenerating ? 0.6 : 1 }}>{nominaGenerating ? 'Generando…' : '📊 Generar formato'}</button>
+
+            {nominaData && (
+              <>
+                <div style={{ background: 'var(--surface-2)', borderRadius: 8, padding: 12, marginBottom: 10 }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 6 }}>{nominaData.vendedorNombre}</div>
+                  {nominaData.filas.length === 0 && <div style={{ fontSize: 12, color: 'var(--ink-faint)' }}>Sin ventas en este periodo</div>}
+                  {nominaData.filas.map((f, i) => (
+                    <Row key={i} style={{ justifyContent: 'space-between', fontSize: 12, marginBottom: 3 }}>
+                      <span>{new Date(f.fecha).toLocaleDateString('es-MX', { day: '2-digit', month: 'short' })}</span>
+                      <span style={{ color: 'var(--ink-soft)' }}>{f.cant} venta(s)</span>
+                      <span style={{ fontWeight: 700, color: 'var(--accent)' }}>{fmtx(f.total)}</span>
+                    </Row>
+                  ))}
+                  <div style={{ borderTop: '1px solid var(--line-strong)', paddingTop: 6, marginTop: 6, display: 'flex', justifyContent: 'space-between', fontSize: 12, fontWeight: 700 }}>
+                    <span>Total ({nominaData.totalVentas} ventas)</span><span>{fmtx(nominaData.totalVendido)}</span>
+                  </div>
+                </div>
+                <button onClick={exportarNominaCSV} style={{ width: '100%', background: 'var(--surface-2)', color: 'var(--ink-soft)', border: '1px solid var(--line-strong)', borderRadius: 8, padding: 10, fontWeight: 700, cursor: 'pointer', fontSize: 12 }}>📤 Exportar CSV (con columna de horas en blanco)</button>
+              </>
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}

@@ -1,3 +1,176 @@
-var ce=Object.defineProperty,le=Object.defineProperties;var ue=Object.getOwnPropertyDescriptors;var v=Object.getOwnPropertySymbols;var F=Object.prototype.hasOwnProperty,M=Object.prototype.propertyIsEnumerable;var _=(e,a,d)=>a in e?ce(e,a,{enumerable:!0,configurable:!0,writable:!0,value:d}):e[a]=d,i=(e,a)=>{for(var d in a||(a={}))F.call(a,d)&&_(e,d,a[d]);if(v)for(var d of v(a))M.call(a,d)&&_(e,d,a[d]);return e},s=(e,a)=>le(e,ue(a));var k=(e,a)=>{var d={};for(var u in e)F.call(e,u)&&a.indexOf(u)<0&&(d[u]=e[u]);if(e!=null&&v)for(var u of v(e))a.indexOf(u)<0&&M.call(e,u)&&(d[u]=e[u]);return d};function App(){const[e,a]=useState("home"),[d,u]=useState(!1),[D,X]=useState("home"),[r,x]=useState(null),[N,j]=useState([]),[H,V]=useState([]),[P,G]=useState([]),[q,K]=useState([]),[Y,$]=useState([]),[J,Q]=useState(!1),[R,Z]=useState(null),[ee,z]=useState(!1),[te,E]=useState(!1),[ne,I]=useState(!1),[oe,A]=useState(!1),[g,W]=useState(navigator.onLine),[L,m]=useState({productos:0,clientes:0,notas:0,creditos:0,rutas:0}),[ae,S]=useState(!1);useEffect(()=>{const n=()=>W(!0),c=()=>W(!1);return window.addEventListener("online",n),window.addEventListener("offline",c),()=>{window.removeEventListener("online",n),window.removeEventListener("offline",c)}},[]),useEffect(()=>{z(r?!!localStorage.getItem(pinKey(r.uid)):!1)},[r==null?void 0:r.uid]),useEffect(()=>auth.onAuthStateChanged(async c=>{if(c)try{const o=db.collection("usuarios").doc(c.uid),t=await o.get();let l;t.exists?l=t.data():(l={nombre:c.email.split("@")[0],email:c.email,role:"admin"},await o.set(l)),x(i({uid:c.uid},l))}catch(o){x({uid:c.uid,nombre:c.email,email:c.email,role:"usuario"})}else x(null);Q(!0)}),[]),useEffect(()=>{if(!r)return;(async()=>{try{const o=db.collection("_meta").doc("seed"),t=await o.get(),l=t.exists?t.data():{};if(!l.productos){const f=db.batch();S_PROD.forEach(C=>{const b=C,{id:de}=b,w=k(b,["id"]);f.set(db.collection("productos").doc(),w)}),f.set(o,{productos:!0},{merge:!0}),await f.commit()}if(!l.clientes){const f=db.batch();S_CLI.forEach(C=>{const b=C,{id:de}=b,w=k(b,["id"]);f.set(db.collection("clientes").doc(),w)}),f.set(o,{clientes:!0},{merge:!0}),await f.commit()}}catch(o){console.error("Error al sembrar datos iniciales",o)}})();const n=o=>{console.error("Firestore error:",o),Z("\u26A0\uFE0F Error de conexi\xF3n con la base de datos. Revisa tus permisos.")},c=[db.collection("productos").onSnapshot({includeMetadataChanges:!0},o=>{j(o.docs.map(t=>s(i({id:t.id},t.data()),{_pendiente:t.metadata.hasPendingWrites}))),m(t=>s(i({},t),{productos:o.docs.filter(l=>l.metadata.hasPendingWrites).length}))},n),db.collection("clientes").onSnapshot({includeMetadataChanges:!0},o=>{V(o.docs.map(t=>s(i({id:t.id},t.data()),{_pendiente:t.metadata.hasPendingWrites}))),m(t=>s(i({},t),{clientes:o.docs.filter(l=>l.metadata.hasPendingWrites).length}))},n),db.collection("notas").orderBy("fecha","desc").limit(500).onSnapshot({includeMetadataChanges:!0},o=>{G(o.docs.map(t=>s(i({id:t.id},t.data()),{_pendiente:t.metadata.hasPendingWrites}))),m(t=>s(i({},t),{notas:o.docs.filter(l=>l.metadata.hasPendingWrites).length}))},n),db.collection("creditos").onSnapshot({includeMetadataChanges:!0},o=>{K(o.docs.map(t=>s(i({id:t.id},t.data()),{_pendiente:t.metadata.hasPendingWrites}))),m(t=>s(i({},t),{creditos:o.docs.filter(l=>l.metadata.hasPendingWrites).length}))},n),db.collection("rutas").orderBy("fecha","desc").limit(100).onSnapshot({includeMetadataChanges:!0},o=>{$(o.docs.map(t=>s(i({id:t.id},t.data()),{_pendiente:t.metadata.hasPendingWrites}))),m(t=>s(i({},t),{rutas:o.docs.filter(l=>l.metadata.hasPendingWrites).length}))},n)];return()=>c.forEach(o=>o())},[r]);const h=Object.values(L).reduce((n,c)=>n+c,0),T=()=>g?(S(!0),db.waitForPendingWrites().then(()=>(S(!1),!0)).catch(()=>(S(!1),alert("\u26A0\uFE0F No se pudo confirmar la sincronizaci\xF3n. Revisa tu conexi\xF3n antes de cerrar."),!1))):(alert(`\u{1F4E1} Sin conexi\xF3n \u2014 no se puede verificar la sincronizaci\xF3n ahora mismo.
+/* ── App Root ── */
+function App(){
+  const [tab,setTab]=useState('home');
+  const [navOpen,setNavOpen]=useState(false);
+  const [prevTab,setPrevTab]=useState('home');
+  const [currentUser,setCurrentUser]=useState(null);
+  const [productos,setProductos]=useState([]);
+  const [clientes,setClientes]=useState([]);
+  const [notas,setNotas]=useState([]);
+  const [creditos,setCreditos]=useState([]);
+  const [rutas,setRutas]=useState([]);
+  const [authChecked,setAuthChecked]=useState(false);
+  const [firestoreError,setFirestoreError]=useState(null);
+  const [locked,setLocked]=useState(false);
+  const [ventaRapida,setVentaRapida]=useState(false);
+  const [abrirFormProducto,setAbrirFormProducto]=useState(false);
+  const [abrirUsuarios,setAbrirUsuarios]=useState(false);
+  const [isOnline,setIsOnline]=useState(navigator.onLine);
+  const [pendCounts,setPendCounts]=useState({productos:0,clientes:0,notas:0,creditos:0,rutas:0});
+  const totalPendientes=Object.values(pendCounts).reduce((s,n)=>s+n,0);
 
-Tus cambios est\xE1n guardados en este dispositivo y subir\xE1n solos en cuanto vuelva la se\xF1al. No cierres la app hasta entonces si quieres asegurarte.`),Promise.resolve(!1)),U=[["home","\u{1F3E0}","Inicio"],["productos","\u{1F4E6}","Productos"],["nota","\u{1F9FE}","Pedido"],["clientes","\u{1F465}","Clientes"],["creditos","\u{1F4B3}","Cr\xE9ditos"],["ruta","\u{1F69A}","Ruta"],["repartidores","\u{1F9ED}","Repartidores"],["inventario","\u{1F4CB}","Inventario"],["reportes","\u{1F4C8}","Reportes"],["gerencia","\u{1F4B0}","Gerencia"]],re=permisoTabs(r),y=["home",...U.filter(([n])=>n!=="home"&&re[n]).map(([n])=>n)],ie=U.filter(([n])=>y.includes(n));useEffect(()=>{r&&e!=="config"&&!y.includes(e)&&a(y[0])},[r]);const B=()=>{e!=="config"&&X(e),a("config")},se=async()=>{if(h>0){const n=await T();if(n&&!confirm("\u2705 Todo sincronizado. \xBFCerrar sesi\xF3n?")||!n)return}auth.signOut(),a("nota")},p={productos:N,clientes:H,notas:P,creditos:q,rutas:Y,isOnline:g,pendCounts:L,totalPendientes:h,verificarSincronizado:T,sincronizando:ae},O=!g||h>0;return J?r?ee?React.createElement(PinLock,{currentUser:r,onUnlock:()=>z(!1),onUsePassword:()=>auth.signOut()}):React.createElement("div",{style:{minHeight:"100vh",position:"relative",paddingTop:O?81:53,paddingBottom:24,background:"var(--bg)"}},React.createElement("div",{style:{position:"fixed",top:0,left:"50%",transform:"translateX(-50%)",width:"100%",maxWidth:420,background:"var(--rail)",zIndex:100,height:50,display:"flex",alignItems:"center",justifyContent:"space-between",padding:"0 16px",boxSizing:"border-box"}},React.createElement(Row,{style:{gap:10}},e!=="config"&&React.createElement("button",{onClick:()=>u(n=>!n),style:{background:"none",border:"none",color:"var(--rail-ink-faint)",cursor:"pointer",padding:"5px 3px",display:"flex",alignItems:"center"}},React.createElement(Menu,null)),React.createElement("div",{style:{fontSize:14,fontWeight:700,color:"var(--accent)",fontFamily:"var(--font-display)",textTransform:"uppercase",letterSpacing:".02em"}},"\u{1F69A} Productos de la Costa")),React.createElement(Row,{style:{gap:6}},React.createElement("span",{style:{fontSize:12,color:"var(--rail-ink-faint)"}},"Hola, ",r.nombre.split(" ")[0]),React.createElement("button",{onClick:B,style:{background:e==="config"?"var(--rail-border)":"none",border:"none",color:e==="config"?"var(--accent)":"var(--rail-ink-faint)",cursor:"pointer",borderRadius:3,padding:"5px 7px",display:"flex",alignItems:"center"}},React.createElement(Gear,null)))),React.createElement("div",{style:{position:"fixed",top:50,left:"50%",transform:"translateX(-50%)",width:"100%",maxWidth:420,height:3,zIndex:100,background:"repeating-linear-gradient(-45deg,var(--accent),var(--accent) 10px,var(--rail) 10px,var(--rail) 20px)"}}),O&&React.createElement("div",{style:{position:"fixed",top:53,left:"50%",transform:"translateX(-50%)",width:"100%",maxWidth:420,background:g?"var(--warn-bg)":"var(--danger-bg)",color:g?"var(--warn-text)":"var(--danger-text)",fontSize:12,textAlign:"center",padding:"6px 12px",zIndex:99,boxSizing:"border-box"}},g?`\u23F3 Sincronizando ${h} cambio(s)\u2026`:"\u{1F4E1} Sin conexi\xF3n \u2014 puedes seguir trabajando, se sincroniza solo al volver la se\xF1al"),R&&React.createElement("div",{style:{margin:"0 12px 10px",background:"var(--danger-bg)",border:"1px solid var(--danger)55",borderRadius:4,padding:"8px 12px",fontSize:12,color:"var(--danger-text)"}},R),e==="home"&&React.createElement(Dashboard,s(i({},p),{currentUser:r,onIrA:a,onVentaRapida:()=>{E(!0),a("nota")},onAgregarProducto:()=>{I(!0),a("productos")},onAgregarUsuario:()=>{A(!0),B()}})),e==="productos"&&React.createElement(Productos,s(i({},p),{currentUser:r,abrirForm:ne,onAbrirFormConsumido:()=>I(!1)})),e==="nota"&&React.createElement(CrearNota,s(i({},p),{currentUser:r,ventaRapida:te,onVentaRapidaConsumida:()=>E(!1)})),e==="clientes"&&React.createElement(Clientes,s(i({},p),{currentUser:r})),e==="creditos"&&React.createElement(Creditos,s(i({},p),{currentUser:r})),e==="ruta"&&React.createElement(RutaReparto,s(i({},p),{currentUser:r})),e==="repartidores"&&React.createElement(RepartidoresPanel,s(i({},p),{currentUser:r,onIrA:a})),e==="inventario"&&React.createElement(Inventario,s(i({},p),{currentUser:r})),e==="reportes"&&React.createElement(Reportes,s(i({},p),{currentUser:r})),e==="gerencia"&&React.createElement(Gerencia,{notas:P,currentUser:r}),e==="config"&&React.createElement(Configuracion,{currentUser:r,onBack:()=>a(D),onLogout:se,abrirUsuarios:oe,onAbrirUsuariosConsumido:()=>A(!1)}),d&&React.createElement("div",{onClick:()=>u(!1),style:{position:"fixed",inset:0,background:"#1B1D19aa",zIndex:190}}),React.createElement("div",{style:{position:"fixed",top:0,left:"50%",transform:"translateX(-50%)",width:"100%",maxWidth:420,height:"100vh",zIndex:200,pointerEvents:"none"}},React.createElement("nav",{style:{position:"absolute",top:0,left:0,bottom:0,width:230,background:"var(--rail)",borderRight:"1px solid var(--rail-border)",boxShadow:d?"4px 0 18px #1B1D1955":"none",transform:d?"translateX(0)":"translateX(-100%)",transition:"transform .22s ease",display:"flex",flexDirection:"column",paddingTop:60,paddingBottom:16,boxSizing:"border-box",pointerEvents:"auto",overflowY:"auto"}},ie.map(([n,c,o])=>React.createElement("button",{key:n,onClick:()=>{a(n),u(!1)},style:{display:"flex",alignItems:"center",gap:12,padding:"12px 18px",background:e===n?"var(--rail-border)":"none",border:"none",borderLeft:e===n?"3px solid var(--accent)":"3px solid transparent",color:e===n?"var(--accent)":"var(--rail-ink-faint)",cursor:"pointer",textAlign:"left",fontSize:13,fontWeight:e===n?700:400}},React.createElement("span",{style:{fontSize:19,lineHeight:1,width:22,textAlign:"center"}},c),o))))):React.createElement(Login,null):React.createElement("div",{style:{display:"flex",justifyContent:"center",alignItems:"center",height:"100vh",color:"var(--ink-faint)",fontSize:14,background:"var(--bg)"}},"Cargando\u2026")}ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(App,null));
+  useEffect(()=>{
+    const on=()=>setIsOnline(true), off=()=>setIsOnline(false);
+    window.addEventListener('online',on);
+    window.addEventListener('offline',off);
+    return ()=>{ window.removeEventListener('online',on); window.removeEventListener('offline',off); };
+  },[]);
+
+  useEffect(()=>{
+    setLocked(currentUser?!!localStorage.getItem(pinKey(currentUser.uid)):false);
+  },[currentUser?.uid]);
+
+  // Autenticación: escucha sesión de Firebase y carga el perfil (usuarios/{uid})
+  useEffect(()=>{
+    const unsub=auth.onAuthStateChanged(async fbUser=>{
+      if(fbUser){
+        try{
+          const ref=db.collection('usuarios').doc(fbUser.uid);
+          const snap=await ref.get();
+          let perfil;
+          if(snap.exists){
+            perfil=snap.data();
+          }else{
+            // Primer inicio de sesión sin perfil: se crea como admin (útil para la primera cuenta)
+            perfil={nombre:fbUser.email.split('@')[0],email:fbUser.email,role:'admin'};
+            await ref.set(perfil);
+          }
+          setCurrentUser({uid:fbUser.uid,...perfil});
+        }catch(e){ setCurrentUser({uid:fbUser.uid,nombre:fbUser.email,email:fbUser.email,role:'usuario'}); }
+      }else{
+        setCurrentUser(null);
+      }
+      setAuthChecked(true);
+    });
+    return unsub;
+  },[]);
+
+  // Suscripciones en tiempo real a Firestore (solo cuando hay sesión iniciada)
+  useEffect(()=>{
+    if(!currentUser) return;
+    (async()=>{
+      try{
+        const seedRef=db.collection('_meta').doc('seed');
+        const seedSnap=await seedRef.get();
+        const seeded=seedSnap.exists?seedSnap.data():{};
+        if(!seeded.productos){
+          const batch=db.batch();
+          S_PROD.forEach(p=>{ const {id,...rest}=p; batch.set(db.collection('productos').doc(),rest); });
+          batch.set(seedRef,{productos:true},{merge:true});
+          await batch.commit();
+        }
+        if(!seeded.clientes){
+          const batch=db.batch();
+          S_CLI.forEach(c=>{ const {id,...rest}=c; batch.set(db.collection('clientes').doc(),rest); });
+          batch.set(seedRef,{clientes:true},{merge:true});
+          await batch.commit();
+        }
+      }catch(e){ console.error('Error al sembrar datos iniciales',e); }
+    })();
+    const errorHandler=(err)=>{ console.error('Firestore error:',err); setFirestoreError('⚠️ Error de conexión con la base de datos. Revisa tus permisos.'); };
+    const pend=(col,snap)=>setPendCounts(p=>({...p,[col]:snap.docs.filter(d=>d.metadata.hasPendingWrites).length}));
+    const unsubs=[
+      db.collection('productos').onSnapshot({includeMetadataChanges:true},snap=>{
+        setProductos(snap.docs.map(d=>({id:d.id,...d.data()})));
+        pend('productos',snap);
+      },errorHandler),
+      db.collection('clientes').onSnapshot({includeMetadataChanges:true},snap=>{
+        setClientes(snap.docs.map(d=>({id:d.id,...d.data()})));
+        pend('clientes',snap);
+      },errorHandler),
+      db.collection('notas').orderBy('fecha','desc').limit(500).onSnapshot({includeMetadataChanges:true},snap=>{
+        setNotas(snap.docs.map(d=>({id:d.id,...d.data()})));
+        pend('notas',snap);
+      },errorHandler),
+      db.collection('creditos').onSnapshot({includeMetadataChanges:true},snap=>{
+        setCreditos(snap.docs.map(d=>({id:d.id,...d.data()})));
+        pend('creditos',snap);
+      },errorHandler),
+      db.collection('rutas').orderBy('fecha','desc').limit(100).onSnapshot({includeMetadataChanges:true},snap=>{
+        setRutas(snap.docs.map(d=>({id:d.id,...d.data()})));
+        pend('rutas',snap);
+      },errorHandler),
+    ];
+    return ()=>unsubs.forEach(u=>u());
+  },[currentUser]);
+
+  const ALL_TABS=[['home','🏠','Inicio'],['productos','📦','Productos'],['nota','🧾','Pedido'],['clientes','👥','Clientes'],['creditos','💳','Créditos'],['ruta','🚚','Ruta'],['repartidores','🧭','Repartidores'],['inventario','📋','Inventario'],['reportes','📈','Reportes'],['gerencia','💰','Gerencia']];
+  // Pestañas visibles: por defecto según el rol, con overrides por persona que
+  // el admin concede o retira desde Configuración → Permisos (permisos.js).
+  // 'home' siempre está disponible; los demás pasan por permisoTabs().
+  const permTabs=permisoTabs(currentUser);
+  const tabsPermitidos=['home',...ALL_TABS.filter(([id])=>id!=='home'&&permTabs[id]).map(([id])=>id)];
+  const TABS=ALL_TABS.filter(([id])=>tabsPermitidos.includes(id));
+
+  // Si la pestaña actual no está permitida para el rol (p.ej. justo tras iniciar sesión), manda a la primera que sí vea.
+  useEffect(()=>{
+    if(!currentUser) return;
+    if(tab!=='config'&&!tabsPermitidos.includes(tab)) setTab(tabsPermitidos[0]);
+  },[currentUser]);
+
+  const goConfig=()=>{ if(tab!=='config') setPrevTab(tab); setTab('config'); };
+  const logout=()=>{ auth.signOut(); setTab('nota'); };
+  const ctx={productos,clientes,notas,creditos,rutas};
+
+  if(!authChecked) return <div style={{display:'flex',justifyContent:'center',alignItems:'center',height:'100vh',color:'var(--ink-faint)',fontSize:14,background:'var(--bg)'}}>Cargando…</div>;
+  if(!currentUser) return <Login/>;
+  if(locked) return <PinLock currentUser={currentUser} onUnlock={()=>setLocked(false)} onUsePassword={()=>auth.signOut()}/>;
+
+  const mostrarBanner=!isOnline||totalPendientes>0;
+  return <div style={{minHeight:'100vh',position:'relative',paddingTop:mostrarBanner?81:53,paddingBottom:24,background:'var(--bg)'}}>
+    <div style={{position:'fixed',top:0,left:'50%',transform:'translateX(-50%)',width:'100%',maxWidth:420,background:'var(--rail)',zIndex:100,height:50,display:'flex',alignItems:'center',justifyContent:'space-between',padding:'0 16px',boxSizing:'border-box'}}>
+      <Row style={{gap:10}}>
+        {tab!=='config'&&<button onClick={()=>setNavOpen(o=>!o)} style={{background:'none',border:'none',color:'var(--rail-ink-faint)',cursor:'pointer',padding:'5px 3px',display:'flex',alignItems:'center'}}>
+          <Menu/>
+        </button>}
+        <div style={{fontSize:14,fontWeight:700,color:'var(--accent)',fontFamily:'var(--font-display)',textTransform:'uppercase',letterSpacing:'.02em'}}>🚚 Productos de la Costa</div>
+      </Row>
+      <Row style={{gap:6}}>
+        <span style={{fontSize:12,color:'var(--rail-ink-faint)'}}>Hola, {currentUser.nombre.split(' ')[0]}</span>
+        <button onClick={goConfig} style={{background:tab==='config'?'var(--rail-border)':'none',border:'none',color:tab==='config'?'var(--accent)':'var(--rail-ink-faint)',cursor:'pointer',borderRadius:3,padding:'5px 7px',display:'flex',alignItems:'center'}}>
+          <Gear/>
+        </button>
+      </Row>
+    </div>
+    <div style={{position:'fixed',top:50,left:'50%',transform:'translateX(-50%)',width:'100%',maxWidth:420,height:3,zIndex:100,background:'repeating-linear-gradient(-45deg,var(--accent),var(--accent) 10px,var(--rail) 10px,var(--rail) 20px)'}}/>
+    {mostrarBanner&&<div style={{position:'fixed',top:53,left:'50%',transform:'translateX(-50%)',width:'100%',maxWidth:420,zIndex:99,background:isOnline?'var(--warn-bg)':'var(--danger-bg)',color:isOnline?'var(--warn-text)':'var(--danger-text)',fontSize:12,fontWeight:600,textAlign:'center',padding:'6px 12px',boxSizing:'border-box'}}>
+      {isOnline
+        ? `⏳ Sincronizando ${totalPendientes} cambio${totalPendientes===1?'':'s'}…`
+        : `📡 Sin conexión — puedes seguir trabajando, se sincroniza solo${totalPendientes>0?` (${totalPendientes} en cola)`:''}`}
+    </div>}
+    {firestoreError&&<div style={{margin:'0 12px 10px',background:'var(--danger-bg)',border:'1px solid var(--danger)55',borderRadius:4,padding:'8px 12px',fontSize:12,color:'var(--danger-text)'}}>{firestoreError}</div>}
+    {tab==='home'&&<Dashboard {...ctx} currentUser={currentUser} onIrA={setTab} onVentaRapida={()=>{setVentaRapida(true);setTab('nota');}} onAgregarProducto={()=>{setAbrirFormProducto(true);setTab('productos');}} onAgregarUsuario={()=>{setAbrirUsuarios(true);goConfig();}}/>}
+    {tab==='productos'&&<Productos {...ctx} currentUser={currentUser} abrirForm={abrirFormProducto} onAbrirFormConsumido={()=>setAbrirFormProducto(false)}/>}
+    {tab==='nota'&&<CrearNota {...ctx} currentUser={currentUser} ventaRapida={ventaRapida} onVentaRapidaConsumida={()=>setVentaRapida(false)}/>}
+    {tab==='clientes'&&<Clientes {...ctx} currentUser={currentUser}/>}
+    {tab==='creditos'&&<Creditos {...ctx} currentUser={currentUser}/>}
+    {tab==='ruta'&&<RutaReparto {...ctx} currentUser={currentUser}/>}
+    {tab==='repartidores'&&<RepartidoresPanel {...ctx} currentUser={currentUser} onIrA={setTab}/>}
+    {tab==='inventario'&&<Inventario {...ctx} currentUser={currentUser}/>}
+    {tab==='reportes'&&<Reportes {...ctx} currentUser={currentUser}/>}
+    {tab==='gerencia'&&<Gerencia notas={notas} currentUser={currentUser}/>}
+    {tab==='config'&&<Configuracion currentUser={currentUser} onBack={()=>setTab(prevTab)} onLogout={logout} abrirUsuarios={abrirUsuarios} onAbrirUsuariosConsumido={()=>setAbrirUsuarios(false)}/>}
+    {navOpen&&<div onClick={()=>setNavOpen(false)} style={{position:'fixed',inset:0,background:'#1B1D19aa',zIndex:190}}/>}
+    <div style={{position:'fixed',top:0,left:'50%',transform:'translateX(-50%)',width:'100%',maxWidth:420,height:'100vh',zIndex:200,pointerEvents:'none'}}>
+      <nav style={{position:'absolute',top:0,left:0,bottom:0,width:230,background:'var(--rail)',borderRight:'1px solid var(--rail-border)',boxShadow:navOpen?'4px 0 18px #1B1D1955':'none',transform:navOpen?'translateX(0)':'translateX(-100%)',transition:'transform .22s ease',display:'flex',flexDirection:'column',paddingTop:60,paddingBottom:16,boxSizing:'border-box',pointerEvents:'auto',overflowY:'auto'}}>
+        {TABS.map(([id,ico,lbl])=>(
+          <button key={id} onClick={()=>{setTab(id);setNavOpen(false);}} style={{display:'flex',alignItems:'center',gap:12,padding:'12px 18px',background:tab===id?'var(--rail-border)':'none',border:'none',borderLeft:tab===id?'3px solid var(--accent)':'3px solid transparent',color:tab===id?'var(--accent)':'var(--rail-ink-faint)',cursor:'pointer',textAlign:'left',fontSize:13,fontWeight:tab===id?700:400}}>
+            <span style={{fontSize:19,lineHeight:1,width:22,textAlign:'center'}}>{ico}</span>{lbl}
+          </button>
+        ))}
+      </nav>
+    </div>
+  </div>;
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
