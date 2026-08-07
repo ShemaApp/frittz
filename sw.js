@@ -3,10 +3,8 @@
 // Los DATOS (productos, clientes, etc.) los maneja Firestore con enablePersistence()
 // en el propio HTML — este SW no toca esos datos.
 
-const CACHE_NAME = 'distribupanel-shell-v26'; // ⬆️ v26: JSX precompilado — se quitó babel-standalone del navegador (index.html y precache), el JS ya viene transpilado de fábrica
-// Cache aparte para tiles de mapa offline: a propósito NO se borra cuando
-// sube la versión del shell (ver 'activate' más abajo) — si viviera en
-// CACHE_NAME, cada actualización de la app borraría el mapa descargado.
+const CACHE_NAME = 'distribupanel-shell-v27'; // ⬆️ v27: JSX precompilado — se quitó babel-standalone del navegador (index.html y precache), el JS ya viene transpilado de fábrica
+
 const TILES_CACHE = 'distribupanel-tiles-v1';
 const TILE_HOST = 'tile.openstreetmap.org';
 
