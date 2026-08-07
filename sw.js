@@ -3,7 +3,7 @@
 // Los DATOS (productos, clientes, etc.) los maneja Firestore con enablePersistence()
 // en el propio HTML — este SW no toca esos datos.
 
-const CACHE_NAME = 'distribupanel-shell-v25'; // ⬆️ v25: long-press en abonos de Créditos (corregir monto o eliminar), reconstruye abonos+saldo desde cero para evitar drift
+const CACHE_NAME = 'distribupanel-shell-v26'; // ⬆️ v26: JSX precompilado — se quitó babel-standalone del navegador (index.html y precache), el JS ya viene transpilado de fábrica
 // Cache aparte para tiles de mapa offline: a propósito NO se borra cuando
 // sube la versión del shell (ver 'activate' más abajo) — si viviera en
 // CACHE_NAME, cada actualización de la app borraría el mapa descargado.
@@ -37,7 +37,6 @@ const SHELL_URLS = [
   './icons/icon-512-maskable.png',
   'https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js',
   'https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js',
-  'https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js',
   'https://cdn.jsdelivr.net/npm/firebase@10.13.0/firebase-app-compat.js',
   'https://cdn.jsdelivr.net/npm/firebase@10.13.0/firebase-auth-compat.js',
   'https://cdn.jsdelivr.net/npm/firebase@10.13.0/firebase-firestore-compat.js',
