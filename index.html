@@ -8,8 +8,7 @@
 <meta name="theme-color" content="#1E211D"/>
 <link rel="icon" href="./icons/icon-192.png"/>
 <!-- iOS: Safari no lee manifest.json, necesita estas etiquetas aparte -->
-<!-- Solución al aviso de meta obsoleto -->
-<meta name="mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="P. Costa"/>
 <link rel="apple-touch-icon" href="./icons/icon-192.png"/>
@@ -22,7 +21,6 @@
 <script src="https://cdn.jsdelivr.net/npm/firebase@10.13.0/firebase-auth-compat.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/firebase@10.13.0/firebase-firestore-compat.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/firebase@10.13.0/firebase-app-check-compat.js"></script>
-<script src="https://www.google.com/recaptcha/api.js?render=6Led-nktAAAAAEQK6YGI3wzaSI0pEOmCw1iDGG45"></script>
 <script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <style>
   *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -52,7 +50,7 @@
 <div id="root"><div style="display:flex;justify-content:center;align-items:center;height:100vh;color:var(--ink-soft);font-size:14px">Iniciando…</div></div>
 <script src="./firebase-init.js"></script>
 <script src="./app-core.js"></script>
-<script src="./app.js"></script>
+<script src="./sesion.js"></script>
 <script src="./auth.js"></script>
 <script src="./dashboard.js"></script>
 <script src="./productos.js"></script>
@@ -61,6 +59,7 @@
 <script src="./creditos.js"></script>
 <script src="./ruta.js"></script>
 <script src="./config.js"></script>
+<script src="./app.js"></script>
 <script src="./rutas-repartidores.js"></script>
 <script src="./inventario.js"></script>
 <script src="./reportes.js"></script>

@@ -5,132 +5,14 @@ const {
 } = React;
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2);
 const snapTienePendientes = snap => snap.docs.some(d => d.metadata.hasPendingWrites);
-const pinKey = uid_ => 'pdc_pin_' + uid_;
-const hashPin = async (pin, salt) => {
-  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(pin + ':' + salt));
-  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
-};
-const savePin = async (uid_, pin) => {
-  const salt = uid() + uid();
-  const hash = await hashPin(pin, salt);
-  localStorage.setItem(pinKey(uid_), JSON.stringify({
-    hash,
-    salt,
-    len: pin.length
-  }));
-};
-const clearPin = uid_ => localStorage.removeItem(pinKey(uid_));
+// pinKey/hashPin/savePin/clearPin y S_PROD/S_CLI se movieron a sesion.js
+// (capa de servicios) — siguen siendo globales, solo cambió el archivo.
 const fmt = n => '$' + Number(n || 0).toFixed(2);
 const fDate = d => new Date(d).toLocaleDateString('es-MX', {
   day: '2-digit',
   month: 'short',
   year: '2-digit'
 });
-const S_PROD = [{
-  identificación: 'p1',
-  nombre: 'Paquete jumbo',
-  precio: 250.00,
-  existencias: 298,
-  unidad: 'paquete',
-  código: '750000000010'
-}, {
-  identificación: 'p2',
-  nombre: 'Sueros',
-  precio: 290.00,
-  existencias: 300,
-  unidad: 'paquete (12 pzas)',
-  código: '750000000015'
-}, {
-  identificación: 'p3',
-  nombre: 'Papa ondulada',
-  precio: 13.00,
-  existencias: 5050,
-  unidad: 'pieza',
-  código: '750000000003'
-}, {
-  identificación: 'p4',
-  nombre: 'Paquete fiesta',
-  precio: 85.00,
-  existencias: 200,
-  unidad: 'paquete',
-  código: '01 526371137561 002'
-}, {
-  identificación: 'p5',
-  nombre: 'Paquete Maruchan',
-  precio: 185.00,
-  existencias: 299,
-  unidad: 'paquete (12 pzas)',
-  código: '750000000012'
-}, {
-  identificación: 'p6',
-  nombre: 'Amper Energy',
-  precio: 210.00,
-  existencias: 300,
-  unidad: '12 pack',
-  código: '750000000014'
-}, {
-  identificación: 'p7',
-  nombre: 'Chicharrón de puerco',
-  precio: 27.00,
-  existencias: 500,
-  unidad: 'pieza',
-  código: '750000000004'
-}, {
-  identificación: 'p8',
-  nombre: 'Paquete grande',
-  precio: 30.00,
-  existencias: 200,
-  unidad: 'paquete',
-  código: '750000000008'
-}, {
-  identificación: 'p9',
-  nombre: 'Frituras',
-  precio: 10.00,
-  existencias: 10000,
-  unidad: 'pieza',
-  código: '750000000001'
-}, {
-  identificación: 'p10',
-  nombre: 'Paquete mixto grande',
-  precio: 35.00,
-  existencias: 200,
-  unidad: 'paquete',
-  código: '750000000009'
-}, {
-  identificación: 'p11',
-  nombre: 'Bolis pack',
-  precio: 72.00,
-  existencias: 299,
-  unidad: 'Pqt',
-  código: '750000000005'
-}, {
-  identificación: 'p12',
-  nombre: 'Cacahuates',
-  precio: 15.00,
-  existencias: 4997,
-  unidad: 'pieza',
-  código: '750000000002'
-}, {
-  identificación: 'p13',
-  nombre: 'Bolis pieza',
-  precio: 6.00,
-  existencias: 9999,
-  unidad: 'pieza',
-  código: '750000000006'
-}];
-const S_CLI = [{
-  identificación: 'c1',
-  nombre: 'Doña María los Sapos',
-  dirección: 'Campo los Sapos'
-}, {
-  identificación: 'c2',
-  nombre: 'Doña Luz',
-  dirección: 'Santa Cecilia'
-}, {
-  identificación: 'c3',
-  nombre: 'Doña Cecilia los Sapos',
-  dirección: 'Los sapos'
-}];
 const Ic = ({
   children,
   size = 18
@@ -431,93 +313,9 @@ const Toggle = ({
     boxShadow: '0 1px 2px rgba(0,0,0,.3)'
   }
 }));
-const TABS_INFO = [['productos', '📦', 'Productos'], ['nota', '🧾', 'Pedido'], ['clientes', '👥', 'Clientes'], ['creditos', '💳', 'Créditos'], ['ruta', '🚚', 'Ruta'], ['repartidores', '🧭', 'Rutas repartidores'], ['inventario', '📋', 'Inventario'], ['reportes', '📈', 'Reportes'], ['gerencia', '💰', 'Gerencia']];
-const EDICION_INFO = [['productos', '📦', 'Editar / dar de alta productos'], ['clientes', '👥', 'Editar / dar de alta clientes'], ['creditos', '💳', 'Registrar abonos a créditos']];
-const ACCIONES_INFO = [['camara', '📷', 'Usar cámara (escanear QR de cliente)'], ['csv', '📄', 'Descargar reportes en CSV'], ['gps', '📍', 'Compartir ubicación en vivo (GPS)'], ['password', '🔑', 'Cambiar su propia contraseña']];
-const ACCIONES_DEFAULT_ROL = {
-  admin: {
-    camara: true,
-    csv: true,
-    gps: true,
-    password: true
-  },
-  usuario: {
-    camara: false,
-    csv: true,
-    gps: false,
-    password: true
-  },
-  repartidor: {
-    camara: true,
-    csv: false,
-    gps: true,
-    password: true
-  }
-};
-const permisoAcciones = u => u?.role === 'admin' ? ACCIONES_DEFAULT_ROL.admin : {
-  ...(ACCIONES_DEFAULT_ROL[u?.role] || ACCIONES_DEFAULT_ROL.usuario),
-  ...(u?.permisos?.acciones || {})
-};
-const TABS_DEFAULT_ROL = {
-  admin: {
-    productos: true,
-    nota: true,
-    clientes: true,
-    creditos: true,
-    ruta: true,
-    repartidores: true,
-    inventario: true,
-    reportes: true,
-    gerencia: true
-  },
-  usuario: {
-    productos: true,
-    nota: true,
-    clientes: true,
-    creditos: true,
-    ruta: false,
-    repartidores: false,
-    inventario: true,
-    reportes: false,
-    gerencia: true
-  },
-  repartidor: {
-    productos: false,
-    nota: true,
-    clientes: false,
-    creditos: false,
-    ruta: false,
-    repartidores: true,
-    inventario: false,
-    reportes: false,
-    gerencia: true
-  }
-};
-const EDITA_DEFAULT_ROL = {
-  admin: {
-    productos: true,
-    clientes: true,
-    creditos: true
-  },
-  usuario: {
-    productos: true,
-    clientes: true,
-    creditos: true
-  },
-  repartidor: {
-    productos: false,
-    clientes: false,
-    creditos: false
-  }
-};
-const permisoTabs = u => ({
-  ...(TABS_DEFAULT_ROL[u?.role] || TABS_DEFAULT_ROL.usuario),
-  ...(u?.permisos?.tabs || {})
-});
-const permisoEdita = u => u?.role === 'admin' ? EDITA_DEFAULT_ROL.admin : {
-  ...(EDITA_DEFAULT_ROL[u?.role] || EDITA_DEFAULT_ROL.usuario),
-  ...(u?.permisos?.edita || {})
-};
+// El modelo de permisos (TABS_INFO, EDICION_INFO, ACCIONES_INFO,
+// *_DEFAULT_ROL, permisoTabs, permisoEdita, permisoAcciones) se movió a
+// sesion.js (capa de servicios) — sigue siendo global, solo cambió el archivo.
 function PwInp({
   value,
   onChange,

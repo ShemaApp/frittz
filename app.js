@@ -1,171 +1,17 @@
 function App() {
+  const {
+    currentUser, authChecked, firestoreError,
+    locked, setLocked,
+    isOnline,
+    productos, clientes, notas, creditos, rutas,
+    pendCounts, totalPendientes,
+  } = useSesion();
   const [tab, setTab] = useState('home');
   const [navOpen, setNavOpen] = useState(false);
   const [prevTab, setPrevTab] = useState('home');
-  const [currentUser, setCurrentUser] = useState(null);
-  const [productos, setProductos] = useState([]);
-  const [clientes, setClientes] = useState([]);
-  const [notas, setNotas] = useState([]);
-  const [creditos, setCreditos] = useState([]);
-  const [rutas, setRutas] = useState([]);
-  const [authChecked, setAuthChecked] = useState(false);
-  const [firestoreError, setFirestoreError] = useState(null);
-  const [locked, setLocked] = useState(false);
   const [ventaRapida, setVentaRapida] = useState(false);
   const [abrirFormProducto, setAbrirFormProducto] = useState(false);
   const [abrirUsuarios, setAbrirUsuarios] = useState(false);
-  const [isOnline, setIsOnline] = useState(navigator.onLine);
-  const [pendCounts, setPendCounts] = useState({
-    productos: 0,
-    clientes: 0,
-    notas: 0,
-    creditos: 0,
-    rutas: 0
-  });
-  const totalPendientes = Object.values(pendCounts).reduce((s, n) => s + n, 0);
-  useEffect(() => {
-    const on = () => setIsOnline(true),
-      off = () => setIsOnline(false);
-    window.addEventListener('online', on);
-    window.addEventListener('offline', off);
-    return () => {
-      window.removeEventListener('online', on);
-      window.removeEventListener('offline', off);
-    };
-  }, []);
-  useEffect(() => {
-    setLocked(currentUser ? !!localStorage.getItem(pinKey(currentUser.uid)) : false);
-  }, [currentUser?.uid]);
-  useEffect(() => {
-    const unsub = auth.onAuthStateChanged(async fbUser => {
-      if (fbUser) {
-        try {
-          const ref = db.collection('usuarios').doc(fbUser.uid);
-          const snap = await ref.get();
-          let perfil;
-          if (snap.exists) {
-            perfil = snap.data();
-          } else {
-            perfil = {
-              nombre: fbUser.email.split('@')[0],
-              email: fbUser.email,
-              role: 'admin'
-            };
-            await ref.set(perfil);
-          }
-          setCurrentUser({
-            uid: fbUser.uid,
-            ...perfil
-          });
-        } catch (e) {
-          setCurrentUser({
-            uid: fbUser.uid,
-            nombre: fbUser.email,
-            email: fbUser.email,
-            role: 'usuario'
-          });
-        }
-      } else {
-        setCurrentUser(null);
-      }
-      setAuthChecked(true);
-    });
-    return unsub;
-  }, []);
-  useEffect(() => {
-    if (!currentUser) return;
-    (async () => {
-      try {
-        const seedRef = db.collection('_meta').doc('seed');
-        const seedSnap = await seedRef.get();
-        const seeded = seedSnap.exists ? seedSnap.data() : {};
-        if (!seeded.productos) {
-          const batch = db.batch();
-          S_PROD.forEach(p => {
-            const {
-              id,
-              ...rest
-            } = p;
-            batch.set(db.collection('productos').doc(), rest);
-          });
-          batch.set(seedRef, {
-            productos: true
-          }, {
-            merge: true
-          });
-          await batch.commit();
-        }
-        if (!seeded.clientes) {
-          const batch = db.batch();
-          S_CLI.forEach(c => {
-            const {
-              id,
-              ...rest
-            } = c;
-            batch.set(db.collection('clientes').doc(), rest);
-          });
-          batch.set(seedRef, {
-            clientes: true
-          }, {
-            merge: true
-          });
-          await batch.commit();
-        }
-      } catch (e) {
-        console.error('Error al sembrar datos iniciales', e);
-      }
-    })();
-    const errorHandler = err => {
-      console.error('Firestore error:', err);
-      setFirestoreError('⚠️ Error de conexión con la base de datos. Revisa tus permisos.');
-    };
-    const pend = (col, snap) => setPendCounts(p => ({
-      ...p,
-      [col]: snap.docs.filter(d => d.metadata.hasPendingWrites).length
-    }));
-    const unsubs = [db.collection('productos').onSnapshot({
-      includeMetadataChanges: true
-    }, snap => {
-      setProductos(snap.docs.map(d => ({
-        id: d.id,
-        ...d.data()
-      })));
-      pend('productos', snap);
-    }, errorHandler), db.collection('clientes').onSnapshot({
-      includeMetadataChanges: true
-    }, snap => {
-      setClientes(snap.docs.map(d => ({
-        id: d.id,
-        ...d.data()
-      })));
-      pend('clientes', snap);
-    }, errorHandler), db.collection('notas').orderBy('fecha', 'desc').limit(500).onSnapshot({
-      includeMetadataChanges: true
-    }, snap => {
-      setNotas(snap.docs.map(d => ({
-        id: d.id,
-        ...d.data()
-      })));
-      pend('notas', snap);
-    }, errorHandler), db.collection('creditos').onSnapshot({
-      includeMetadataChanges: true
-    }, snap => {
-      setCreditos(snap.docs.map(d => ({
-        id: d.id,
-        ...d.data()
-      })));
-      pend('creditos', snap);
-    }, errorHandler), db.collection('rutas').orderBy('fecha', 'desc').limit(100).onSnapshot({
-      includeMetadataChanges: true
-    }, snap => {
-      setRutas(snap.docs.map(d => ({
-        id: d.id,
-        ...d.data()
-      })));
-      pend('rutas', snap);
-    }, errorHandler)];
-    return () => unsubs.forEach(u => u());
-  }, [currentUser]);
   const ALL_TABS = [['home', '🏠', 'Inicio'], ['productos', '📦', 'Productos'], ['nota', '🧾', 'Pedido'], ['clientes', '👥', 'Clientes'], ['creditos', '💳', 'Créditos'], ['ruta', '🚚', 'Ruta'], ['repartidores', '🧭', 'Repartidores'], ['inventario', '📋', 'Inventario'], ['reportes', '📈', 'Reportes'], ['gerencia', '💰', 'Gerencia']];
   const permTabs = permisoTabs(currentUser);
   const tabsPermitidos = ['home', ...ALL_TABS.filter(([id]) => id !== 'home' && permTabs[id]).map(([id]) => id)];
