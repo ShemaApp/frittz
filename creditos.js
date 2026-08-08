@@ -5,6 +5,7 @@ function Creditos({
   const puedeEditar = currentUser?.role === 'admin' || permisoEdita(currentUser).creditos;
   const [abonoId, setAbonoId] = useState(null);
   const [monto, setMonto] = useState('');
+  const [formaPagoAbono, setFormaPagoAbono] = useState('efectivo');
   const [savingAbono, setSavingAbono] = useState(false);
   const [expandedAbono, setExpandedAbono] = useState(null);
   const [editAbono, setEditAbono] = useState(null);
@@ -24,10 +25,14 @@ function Creditos({
         saldo: firebase.firestore.FieldValue.increment(-m),
         abonos: firebase.firestore.FieldValue.arrayUnion({
           fecha: new Date().toISOString(),
-          monto: m
+          monto: m,
+          formaPago: formaPagoAbono,
+          capturadoPorUid: currentUser.uid,
+          capturadoPorNombre: currentUser.nombre
         })
       });
       setMonto('');
+      setFormaPagoAbono('efectivo');
       setAbonoId(null);
     } catch (e) {
       alert('Error al registrar abono: ' + e.message);
@@ -227,12 +232,22 @@ function Creditos({
       style: {
         color: 'var(--ink-soft)'
       }
-    }, fDate(a.fecha)), React.createElement("span", {
+    }, fDate(a.fecha)), React.createElement(Row, {
+      style: {
+        gap: 5
+      }
+    }, a.formaPago && React.createElement(Tag, {
+      color: a.formaPago === 'transferencia' ? 'var(--info-text)' : 'var(--ok-text)',
+      style: {
+        fontSize: 9,
+        padding: '1px 5px'
+      }
+    }, a.formaPago === 'transferencia' ? '🏦' : '💵'), React.createElement("span", {
       style: {
         color: 'var(--ok-text)',
         fontWeight: 700
       }
-    }, "+", fmt(a.monto))), puedeEditar && React.createElement("div", {
+    }, "+", fmt(a.monto)))), puedeEditar && React.createElement("div", {
       style: {
         maxHeight: expanded ? editing ? 46 : 40 : 0,
         overflow: 'hidden',
@@ -301,7 +316,26 @@ function Creditos({
         fontSize: 11
       }
     }, "🗑️ Eliminar"))));
-  })), puedeEditar && (abonoId === c.id ? React.createElement(Row, {
+  })), puedeEditar && (abonoId === c.id ? React.createElement("div", null, React.createElement(Row, {
+    style: {
+      gap: 6,
+      marginBottom: 6
+    }
+  }, [['efectivo', '💵 Efectivo', 'var(--ok-bg)', 'var(--ok-text)'], ['transferencia', '🏦 Transferencia', 'var(--info-bg)', 'var(--info-text)']].map(([v, l, bg, col]) => React.createElement("button", {
+    key: v,
+    onClick: () => setFormaPagoAbono(v),
+    style: {
+      flex: 1,
+      padding: '6px',
+      borderRadius: 8,
+      border: 'none',
+      background: formaPagoAbono === v ? bg : 'var(--surface-2)',
+      color: formaPagoAbono === v ? col : 'var(--ink-soft)',
+      fontSize: 11,
+      fontWeight: 700,
+      cursor: 'pointer'
+    }
+  }, l))), React.createElement(Row, {
     style: {
       gap: 8
     }
@@ -326,6 +360,7 @@ function Creditos({
     onClick: () => {
       setAbonoId(null);
       setMonto('');
+      setFormaPagoAbono('efectivo');
     },
     style: {
       background: 'none',
@@ -336,7 +371,7 @@ function Creditos({
     }
   }, React.createElement(XI, {
     size: 18
-  }))) : React.createElement(BOut, {
+  })))) : React.createElement(BOut, {
     onClick: () => setAbonoId(c.id),
     color: "var(--ok-text)",
     style: {

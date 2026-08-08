@@ -3,7 +3,7 @@
 // Los DATOS (productos, clientes, etc.) los maneja Firestore con enablePersistence()
 // en el propio HTML — este SW no toca esos datos.
 
-const CACHE_NAME = 'distribupanel-shell-v27'; // ⬆️ v27: se extrajo sesion.js (modelo de permisos + auth/perfil/suscripciones) de app-core.js/app.js — app.js queda como shell de navegación
+const CACHE_NAME = 'distribupanel-shell-v28'; // ⬆️ v28: cierre de caja en gerencia.js (fórmula de modelo.md con abonos efectivo, comprobante permanente en cierres_caja) + forma de pago y autor en cada abono (creditos.js)
 // Cache aparte para tiles de mapa offline: a propósito NO se borra cuando
 // sube la versión del shell (ver 'activate' más abajo) — si viviera en
 // CACHE_NAME, cada actualización de la app borraría el mapa descargado.

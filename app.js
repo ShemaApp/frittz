@@ -208,7 +208,7 @@ function App() {
     ...ctx,
     currentUser: currentUser
   }), tab === 'gerencia' && React.createElement(Gerencia, {
-    notas: notas,
+    ...ctx,
     currentUser: currentUser
   }), tab === 'config' && React.createElement(Configuracion, {
     currentUser: currentUser,

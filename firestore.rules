@@ -134,6 +134,14 @@ service cloud.firestore {
       allow update, delete: if isAdmin();
     }
 
+    // Comprobantes de cierre de caja — inmutables una vez creados (nadie
+    // "corrige" un cierre, se genera uno nuevo si algo cambió).
+    match /cierres_caja/{id} {
+      allow read: if signedIn() && (isAdmin() || resource.data.capturadoPorUid == request.auth.uid);
+      allow create: if signedIn() && request.resource.data.capturadoPorUid == request.auth.uid;
+      allow update, delete: if false;
+    }
+
     // ── usuarios (perfiles) ──
     match /usuarios/{uid} {
       allow read: if signedIn() && (request.auth.uid == uid || isAdmin());
