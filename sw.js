@@ -5,7 +5,7 @@
 
 // Cambia esta versión en cada publicación para invalidar el shell anterior.
 const CACHE_PREFIX = 'pdlc-';
-const CACHE_NAME = 'pdlc-v36-shell-atomico';
+const CACHE_NAME = 'pdlc-v37-shell-atomico';
 // Cache aparte para tiles de mapa offline: a propósito NO se borra cuando
 // sube la versión del shell (ver 'activate' más abajo) — si viviera en
 // CACHE_NAME, cada actualización de la app borraría el mapa descargado.
