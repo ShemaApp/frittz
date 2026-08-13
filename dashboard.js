@@ -49,12 +49,11 @@ function Dashboard({
   rutas,
   currentUser,
   onIrA,
-  onVentaRapida,
-  onAgregarProducto,
-  onAgregarUsuario
+  onVentaRapida
 }) {
   const isAdmin = currentUser.role === 'admin';
   const isRepartidor = currentUser.role === 'repartidor';
+  const tabsPermitidos = permisoTabs(currentUser);
   const esEfectivo = fp => fp === 'efectivo' || fp === 'contado';
   const hoy = new Date().toDateString();
   const vhoy = notas.filter(n => new Date(n.fecha).toDateString() === hoy);
@@ -78,31 +77,64 @@ function Dashboard({
   const miVentaEfectivoHoy = misNotasHoy.filter(n => esEfectivo(n.formaPago)).reduce((s, n) => s + n.total, 0);
   const misClientesHoy = new Set(misNotasHoy.map(n => n.clienteId)).size;
   const rutaActiva = (rutas || []).find(r => r.estado === 'activa' && (!isRepartidor || r.repartidorId === currentUser.uid));
-  const acciones = isRepartidor ? [{
-    icon: '📦',
-    label: 'Mi transferencia',
-    onClick: () => onIrA('repartidores')
-  }] : [{
-    icon: '📦',
-    label: 'Agregar producto',
-    onClick: onAgregarProducto
-  }, {
+  const irA = id => () => {
+    if (tabsPermitidos[id]) onIrA(id);
+  };
+  const acciones = (isRepartidor ? [{
     icon: '🧾',
-    label: 'Venta de almacén',
-    onClick: () => onIrA('nota')
+    label: 'Registrar venta',
+    detalle: rutaActiva ? 'Usar saldo transferido' : 'Revisar transferencia',
+    onClick: irA('ruta')
   }, {
-    icon: '⚡',
-    label: 'Venta de mostrador',
-    onClick: onVentaRapida
+    icon: '🧭',
+    label: 'Mi distribución',
+    detalle: 'Revisar transferencias y clientes QR',
+    onClick: irA('repartidores')
   }, {
     icon: '💰',
-    label: 'Agregar gasto',
-    onClick: () => onIrA('gerencia')
-  }, ...(isAdmin ? [{
-    icon: '👤',
-    label: 'Agregar usuario',
-    onClick: onAgregarUsuario
-  }] : [])];
+    label: 'Corte del día',
+    detalle: 'Consultar ventas y efectivo',
+    onClick: irA('gerencia')
+  }] : [{
+    icon: '🧾',
+    label: 'Nueva venta',
+    detalle: 'Registrar pedido de almacén',
+    onClick: irA('nota'),
+    tab: 'nota'
+  }, {
+    icon: '⚡',
+    label: 'Venta mostrador',
+    detalle: 'Cobro rápido en punto de venta',
+    onClick: onVentaRapida,
+    tab: 'nota'
+  }, {
+    icon: '👥',
+    label: 'Clientes y QR',
+    detalle: 'Buscar, crear o mostrar QR',
+    onClick: irA('clientes'),
+    tab: 'clientes'
+  }, {
+    icon: '💳',
+    label: 'Cobrar crédito',
+    detalle: 'Consultar saldo y registrar abono',
+    onClick: irA('creditos'),
+    tab: 'creditos'
+  }, {
+    icon: '📦',
+    label: 'Transferencias',
+    detalle: 'Crear, vender o recibir',
+    onClick: irA('ruta'),
+    tab: 'ruta',
+    soloAdmin: true
+  }, {
+    icon: '📋',
+    label: 'Revisar inventario',
+    detalle: 'Consultar existencias y alertas',
+    onClick: irA('inventario'),
+    tab: 'inventario'
+  }]).filter(a => (a.soloAdmin ? isAdmin : true) && (!a.tab || tabsPermitidos[a.tab]));
+  const tituloAcciones = isRepartidor ? 'Herramientas de campo' : 'Acciones rápidas';
+  const ayudaAcciones = isRepartidor ? 'Accesos para vender desde tu transferencia, identificar clientes y consultar tu corte.' : 'Accesos directos para las tareas operativas más frecuentes.';
   return React.createElement("div", {
     style: {
       padding: '16px 12px'
@@ -125,59 +157,66 @@ function Dashboard({
     label: "Ventas de transferencia hoy",
     bg: "var(--rail)",
     color: "var(--rail-ink)",
-    onClick: () => onIrA('ruta')
+    onClick: irA('ruta')
   }), React.createElement(StatTile, {
     value: fmt(miVentaEfectivoHoy),
     label: "Venta efectivo hoy",
     bg: "var(--accent)",
     color: "var(--accent-ink)",
-    onClick: () => onIrA('gerencia')
+    onClick: irA('gerencia')
   }), React.createElement(StatTile, {
     value: misClientesHoy,
     label: "Clientes atendidos hoy",
     bg: "var(--info)",
     color: "#fff",
-    onClick: () => onIrA('ruta')
+    onClick: irA('ruta')
   }), React.createElement(StatTile, {
     value: rutaActiva ? 'Activa' : 'Sin transferencia',
     label: "Estado de tu transferencia",
     bg: rutaActiva ? 'var(--ok)' : 'var(--warn)',
     color: "#fff",
-    onClick: () => onIrA('ruta')
+    onClick: irA('ruta')
   })) : React.createElement(React.Fragment, null, React.createElement(StatTile, {
     value: vhoy.length,
     label: "Pedidos de hoy",
     bg: "var(--rail)",
     color: "var(--rail-ink)",
-    onClick: () => onIrA('nota')
+    onClick: irA('nota')
   }), React.createElement(StatTile, {
     value: fmt(thoy),
     label: "Ingresos de hoy",
     bg: "var(--accent)",
     color: "var(--accent-ink)",
-    onClick: () => onIrA('gerencia')
+    onClick: irA('gerencia')
   }), React.createElement(StatTile, {
     value: clientes.filter(c => c.activo).length,
     label: "Clientes registrados",
     bg: "var(--info)",
     color: "#fff",
-    onClick: () => onIrA('clientes')
+    onClick: irA('clientes')
   }), React.createElement(StatTile, {
     value: fmt(tcred),
     label: "Créditos pendientes",
     bg: "var(--warn)",
     color: "#fff",
-    onClick: () => onIrA('creditos')
-  }))), React.createElement(Card, null, React.createElement("div", {
+    onClick: irA('creditos')
+  }))), acciones.length > 0 && React.createElement(Card, null, React.createElement("div", {
     style: {
       fontSize: 13,
       fontWeight: 700,
-      marginBottom: 12,
+      marginBottom: 4,
       fontFamily: 'var(--font-display)',
       textTransform: 'uppercase',
       letterSpacing: '.02em'
     }
-  }, "Acciones rápidas"), React.createElement("div", {
+  }, tituloAcciones), React.createElement("div", {
+    style: {
+      fontSize: 11,
+      color: 'var(--ink-faint)',
+      marginBottom: 12,
+      lineHeight: 1.35
+    }
+  }, ayudaAcciones), React.createElement("div", {
     style: {
       display: 'grid',
       gridTemplateColumns: '1fr 1fr',
@@ -190,12 +229,13 @@ function Dashboard({
       background: 'var(--surface-2)',
       border: '1px solid var(--line)',
       borderRadius: 6,
-      padding: '14px 8px',
+      padding: '12px 9px',
       display: 'flex',
       flexDirection: 'column',
       alignItems: 'center',
-      gap: 6,
-      cursor: 'pointer'
+      gap: 4,
+      cursor: 'pointer',
+      minHeight: 104
     }
   }, React.createElement("span", {
     style: {
@@ -204,11 +244,18 @@ function Dashboard({
   }, a.icon), React.createElement("span", {
     style: {
       fontSize: 12,
-      fontWeight: 600,
+      fontWeight: 700,
       textAlign: 'center',
       color: 'var(--ink)'
     }
-  }, a.label))))), !isRepartidor && React.createElement(React.Fragment, null, top.length > 0 && React.createElement(Card, null, React.createElement("div", {
+  }, a.label), React.createElement("span", {
+    style: {
+      fontSize: 10,
+      lineHeight: 1.25,
+      textAlign: 'center',
+      color: 'var(--ink-faint)'
+    }
+  }, a.detalle))))), !isRepartidor && React.createElement(React.Fragment, null, top.length > 0 && React.createElement(Card, null, React.createElement("div", {
     style: {
       fontSize: 11,
       color: 'var(--ink-faint)',

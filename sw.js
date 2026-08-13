@@ -4,7 +4,7 @@
 // en el propio HTML — este SW no toca esos datos.
 
 // Cambia esta versión en cada publicación para invalidar el shell anterior.
-const CACHE_NAME = 'pdlc-v32-transferencias-inventario-qr';
+const CACHE_NAME = 'pdlc-v33-dashboard-clientes-qr';
 // Cache aparte para tiles de mapa offline: a propósito NO se borra cuando
 // sube la versión del shell (ver 'activate' más abajo) — si viviera en
 // CACHE_NAME, cada actualización de la app borraría el mapa descargado.

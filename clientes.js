@@ -67,6 +67,69 @@ function generarImagenQRCliente(texto, tamanio, callback) {
     }
   });
 }
+const cacheMiniaturasQRClientes = new Map();
+function MiniaturaQRCliente({
+  cliente,
+  onClick
+}) {
+  const [url, setUrl] = useState(() => cacheMiniaturasQRClientes.get(cliente.id) || null);
+  useEffect(() => {
+    const guardada = cacheMiniaturasQRClientes.get(cliente.id);
+    if (guardada) {
+      setUrl(guardada);
+      return undefined;
+    }
+    let vigente = true;
+    generarImagenQRCliente(textoQRCliente(cliente.id), 56, resultado => {
+      if (!vigente || !resultado) return;
+      cacheMiniaturasQRClientes.set(cliente.id, resultado);
+      setUrl(resultado);
+    });
+    return () => {
+      vigente = false;
+    };
+  }, [cliente.id]);
+  return React.createElement("button", {
+    type: "button",
+    onMouseDown: e => e.stopPropagation(),
+    onTouchStart: e => e.stopPropagation(),
+    onClick: e => {
+      e.stopPropagation();
+      onClick();
+    },
+    title: 'Ver QR de ' + cliente.nombre,
+    'aria-label': 'Ver QR de ' + cliente.nombre,
+    style: {
+      width: 62,
+      minWidth: 62,
+      height: 62,
+      padding: 3,
+      background: '#fff',
+      border: '1px solid var(--line-strong)',
+      borderRadius: 8,
+      cursor: 'pointer',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      overflow: 'hidden'
+    }
+  }, url ? React.createElement("img", {
+    src: url,
+    alt: 'QR de ' + cliente.nombre,
+    style: {
+      width: 54,
+      height: 54,
+      objectFit: 'contain',
+      display: 'block'
+    }
+  }) : React.createElement("span", {
+    style: {
+      fontSize: 20,
+      color: 'var(--ink-faint)',
+      lineHeight: 1
+    }
+  }, '▦'));
+}
 function Clientes({
   clientes,
   notas,
@@ -230,7 +293,7 @@ function Clientes({
       color: 'var(--ink-faint)',
       marginBottom: 10
     }
-  }, "Mantén presionado un cliente para editar, ver su QR, su historial o más detalles."), list.map(c => {
+  }, "Toca la miniatura QR para abrirla. Mantén presionado un cliente para editar, ver su historial o más detalles."), list.map(c => {
     const expanded = expandedId === c.id;
     return React.createElement(Card, {
       key: c.id,
@@ -255,8 +318,19 @@ function Clientes({
       }
     }, React.createElement(Row, {
       style: {
+        alignItems: 'flex-start',
+        gap: 10
+      }
+    }, React.createElement("div", {
+      style: {
+        flex: 1,
+        minWidth: 0
+      }
+    }, React.createElement(Row, {
+      style: {
         flexWrap: 'wrap',
-        gap: 4
+        gap: 4,
+        marginBottom: 4
       }
     }, React.createElement("span", {
       style: {
@@ -280,9 +354,14 @@ function Clientes({
     }, "📱 ", c.telefono || '—'), React.createElement("div", {
       style: {
         fontSize: 12,
-        color: 'var(--ink-soft)'
+        color: 'var(--ink-soft)',
+        marginTop: 2,
+        lineHeight: 1.3
       }
-    }, "📍 ", c.domicilio || '—')), React.createElement("div", {
+    }, "📍 ", c.domicilio || '—')), React.createElement(MiniaturaQRCliente, {
+      cliente: c,
+      onClick: () => verQR(c)
+    }))), React.createElement("div", {
       style: {
         maxHeight: expanded ? 190 : 0,
         overflow: 'hidden',
