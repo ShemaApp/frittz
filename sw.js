@@ -4,7 +4,7 @@
 // en el propio HTML — este SW no toca esos datos.
 
 // Cambia esta versión en cada publicación para invalidar el shell anterior.
-const CACHE_NAME = 'pdlc-v33-dashboard-clientes-qr';
+const CACHE_NAME = 'pdlc-v34-login-logo-cactus';
 // Cache aparte para tiles de mapa offline: a propósito NO se borra cuando
 // sube la versión del shell (ver 'activate' más abajo) — si viviera en
 // CACHE_NAME, cada actualización de la app borraría el mapa descargado.
@@ -37,6 +37,7 @@ const SHELL_URLS = [
   './icons/icon-192.png',
   './icons/icon-512.png',
   './icons/icon-512-maskable.png',
+  './assets/logo-cactus-transparente.png',
   'https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js',
   'https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js',
   'https://cdn.jsdelivr.net/npm/firebase@10.13.0/firebase-app-compat.js',

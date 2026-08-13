@@ -40,12 +40,19 @@ function Login() {
       padding: 28,
       background: 'var(--bg)'
     }
-  }, React.createElement("div", {
+  }, React.createElement("img", {
+    src: "assets/logo-cactus-transparente.png",
+    alt: "Emblema de Productos de la Costa",
+    width: 82,
+    height: 82,
     style: {
-      fontSize: 44,
-      marginBottom: 6
+      width: 82,
+      height: 82,
+      objectFit: 'contain',
+      display: 'block',
+      marginBottom: 8
     }
-  }, "🚚"), React.createElement("div", {
+  }), React.createElement("div", {
     style: {
       fontSize: 22,
       fontWeight: 700,
