@@ -4,7 +4,8 @@
 // en el propio HTML — este SW no toca esos datos.
 
 // Cambia esta versión en cada publicación para invalidar el shell anterior.
-const CACHE_NAME = 'pdlc-v35-navegacion-regreso';
+const CACHE_PREFIX = 'pdlc-';
+const CACHE_NAME = 'pdlc-v36-shell-atomico';
 // Cache aparte para tiles de mapa offline: a propósito NO se borra cuando
 // sube la versión del shell (ver 'activate' más abajo) — si viviera en
 // CACHE_NAME, cada actualización de la app borraría el mapa descargado.
@@ -50,25 +51,34 @@ const SHELL_URLS = [
   'https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js',
 ];
 
-// --- Instalación: precachea el shell ---
+// --- Instalación atómica: no se activa una versión incompleta del shell ---
 self.addEventListener('install', (event) => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      // addAll falla si UNA sola url falla; usamos allSettled para ser tolerantes
-      return Promise.allSettled(SHELL_URLS.map((url) => cache.add(url)));
-    }).then(() => self.skipWaiting())
-  );
+  event.waitUntil((async () => {
+    const cache = await caches.open(CACHE_NAME);
+    try {
+      // addAll resuelve únicamente cuando TODOS los recursos requeridos se guardaron.
+      // Si falla uno, se conserva activo el Service Worker anterior y su shell completo.
+      await cache.addAll(SHELL_URLS);
+      await self.skipWaiting();
+    } catch (error) {
+      // Evita reutilizar una caché parcial cuando el navegador reintente instalar esta versión.
+      await caches.delete(CACHE_NAME);
+      throw error;
+    }
+  })());
 });
 
-// --- Activación: limpia caches viejos (nunca el de tiles de mapa) ---
+// --- Activación: conserva tiles y elimina solo versiones antiguas de esta PWA ---
 self.addEventListener('activate', (event) => {
-  event.waitUntil(
-    caches.keys().then((keys) =>
-      Promise.all(
-        keys.filter((k) => k !== CACHE_NAME && k !== TILES_CACHE).map((k) => caches.delete(k))
-      )
-    ).then(() => self.clients.claim())
-  );
+  event.waitUntil((async () => {
+    const keys = await caches.keys();
+    await Promise.all(
+      keys
+        .filter((key) => key.startsWith(CACHE_PREFIX) && key !== CACHE_NAME && key !== TILES_CACHE)
+        .map((key) => caches.delete(key))
+    );
+    await self.clients.claim();
+  })());
 });
 
 // --- Fetch: network-first para navegación (HTML), cache-first para el resto ---
