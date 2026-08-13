@@ -23,6 +23,7 @@ function Reportes({
     };
   }, []);
   const [backupGenerating, setBackupGenerating] = useState(false);
+  const [excelGenerating, setExcelGenerating] = useState(false);
   const diasDesdeUltimoRespaldo = backupMeta && backupMeta.ultimoRespaldo ? Math.floor((Date.now() - new Date(backupMeta.ultimoRespaldo).getTime()) / 86400000) : null;
   const generarRespaldo = async () => {
     setBackupGenerating(true);
@@ -170,6 +171,304 @@ function Reportes({
       rows.push([fDateTime(n.fecha), n.clienteNombre, (n.items || []).map(it => it.nombre + ' x' + it.cant).join(' | '), (n.total || 0).toFixed(2), n.formaPago, origen, n.transferenciaId || '']);
     });
     downloadCSV('reporte_ventas_' + Date.now() + '.csv', rows);
+  };
+  const fechaExcel = valor => {
+    if (!valor) return '';
+    if (typeof valor.toDate === 'function') return valor.toDate();
+    const fecha = new Date(valor);
+    return Number.isNaN(fecha.getTime()) ? '' : fecha;
+  };
+  const numeroExcel = valor => {
+    const numero = Number(valor);
+    return Number.isFinite(numero) ? numero : 0;
+  };
+  const numeroOVacioExcel = valor => valor === '' || valor === null || valor === undefined ? '' : numeroExcel(valor);
+  const fechaHoraExcel = valor => {
+    const fecha = fechaExcel(valor);
+    return fecha ? fecha.getTime() : 0;
+  };
+  const ordenarPorFechaExcel = registros => registros.sort((a, b) => fechaHoraExcel(a.fecha) - fechaHoraExcel(b.fecha));
+  const origenExcel = origen => origen === 'transferencia_almacen' || origen === 'qr_cliente_ruta' ? 'Transferencia de almacén' : origen === 'almacen' || !origen ? 'Almacén' : String(origen);
+  const agregarHojaExcel = (libro, nombre, encabezados, filas, columnasMoneda, columnasFecha) => {
+    const hoja = XLSX.utils.json_to_sheet(filas, {
+      header: encabezados
+    });
+    if (filas.length === 0) {
+      encabezados.forEach((encabezado, columna) => {
+        hoja[XLSX.utils.encode_cell({
+          r: 0,
+          c: columna
+        })] = {
+          t: 's',
+          v: encabezado
+        };
+      });
+      hoja['!ref'] = 'A1:' + XLSX.utils.encode_col(encabezados.length - 1) + '1';
+    }
+    const ultimaFila = Math.max(filas.length + 1, 1);
+    hoja['!autofilter'] = {
+      ref: 'A1:' + XLSX.utils.encode_col(encabezados.length - 1) + ultimaFila
+    };
+    hoja['!cols'] = encabezados.map(encabezado => {
+      const ancho = filas.slice(0, 200).reduce((maximo, fila) => Math.max(maximo, String(fila[encabezado] === undefined || fila[encabezado] === null ? '' : fila[encabezado]).length), encabezado.length);
+      return {
+        wch: Math.min(Math.max(ancho + 2, 12), 38)
+      };
+    });
+    const aplicarFormato = (columnas, formato) => columnas.forEach(columna => {
+      const indice = encabezados.indexOf(columna);
+      if (indice < 0) return;
+      for (let fila = 1; fila <= filas.length; fila++) {
+        const celda = hoja[XLSX.utils.encode_cell({
+          r: fila,
+          c: indice
+        })];
+        if (celda && celda.v !== '') celda.z = formato;
+      }
+    });
+    aplicarFormato(columnasMoneda || [], '$#,##0.00');
+    aplicarFormato(columnasFecha || [], 'dd/mm/yyyy hh:mm');
+    XLSX.utils.book_append_sheet(libro, hoja, nombre);
+  };
+  const exportarLibroExcel = async () => {
+    if (excelGenerating) return;
+    if (typeof XLSX === 'undefined') {
+      flash('❌ No se pudo cargar la herramienta de Excel. Revisa tu conexión e inténtalo de nuevo.');
+      return;
+    }
+    setExcelGenerating(true);
+    try {
+      const [ventasSnap, creditosSnap, transferenciasSnap, historialSnap] = await Promise.all([db.collection('notas').get(), db.collection('creditos').get(), db.collection('rutas').get(), db.collection('inventario_historial').get()]);
+      const ventas = ordenarPorFechaExcel(ventasSnap.docs.map(d => ({
+        id: d.id,
+        ...d.data()
+      })));
+      const creditosExcel = ordenarPorFechaExcel(creditosSnap.docs.map(d => ({
+        id: d.id,
+        ...d.data()
+      })));
+      const transferencias = ordenarPorFechaExcel(transferenciasSnap.docs.map(d => ({
+        id: d.id,
+        ...d.data()
+      })));
+      const movimientos = ordenarPorFechaExcel(historialSnap.docs.map(d => ({
+        id: d.id,
+        ...d.data()
+      })));
+      const ventasFilas = ventas.map(venta => {
+        const items = Array.isArray(venta.items) ? venta.items : [];
+        return {
+          'Venta ID': venta.id,
+          Fecha: fechaExcel(venta.fecha),
+          'Cliente ID': venta.clienteId || '',
+          Cliente: venta.clienteNombre || '',
+          Teléfono: venta.clienteTelefono || '',
+          'Vendedor UID': venta.capturadoPorUid || '',
+          Vendedor: venta.capturadoPorNombre || '',
+          'Forma de pago': venta.formaPago || '',
+          Origen: origenExcel(venta.origen),
+          'Transferencia ID': venta.transferenciaId || venta.rutaId || '',
+          'Líneas de venta': items.length,
+          'Unidades vendidas': items.reduce((suma, item) => suma + numeroExcel(item.cant), 0),
+          Total: numeroExcel(venta.total),
+          'GPS venta disponible': venta.ubicacionVenta ? 'Sí' : 'No'
+        };
+      });
+      const ventaDetalleFilas = [];
+      ventas.forEach(venta => {
+        (Array.isArray(venta.items) ? venta.items : []).forEach((item, indice) => {
+          const cantidad = numeroExcel(item.cant);
+          const precio = numeroExcel(item.precio);
+          ventaDetalleFilas.push({
+            'Venta ID': venta.id,
+            Línea: indice + 1,
+            'Fecha venta': fechaExcel(venta.fecha),
+            'Cliente ID': venta.clienteId || '',
+            Cliente: venta.clienteNombre || '',
+            'Producto ID': item.id || item.productoId || '',
+            Producto: item.nombre || item.productoNombre || '',
+            Unidad: item.unidad || '',
+            Cantidad: cantidad,
+            'Precio unitario': precio,
+            Subtotal: cantidad * precio,
+            Origen: origenExcel(venta.origen),
+            'Transferencia ID': venta.transferenciaId || venta.rutaId || '',
+            'Forma de pago': venta.formaPago || ''
+          });
+        });
+      });
+      const transferenciasFilas = transferencias.map(transferencia => ({
+        'Transferencia ID': transferencia.id,
+        'Fecha de salida': fechaExcel(transferencia.fechaSalidaReal || transferencia.fecha),
+        'Fecha programada': fechaExcel(transferencia.fechaProgramada),
+        'Regreso programado': fechaExcel(transferencia.fechaRegresoProgramada),
+        'Fecha de recepción': fechaExcel(transferencia.fechaRecepcionAlmacen || transferencia.fechaRegresoReal),
+        Estado: transferencia.estado || transferencia.estadoTransferencia || '',
+        'Estado transferencia': transferencia.estadoTransferencia || '',
+        Origen: transferencia.origen || 'almacen',
+        Responsable: transferencia.repartidorNombre || '',
+        'Responsable UID': transferencia.repartidorId || '',
+        Vehículo: transferencia.vehiculo || '',
+        Zona: transferencia.zona || '',
+        'Asignada por': transferencia.asignadaPorNombre || '',
+        'Recibida por': transferencia.recibidoPorNombre || '',
+        'Motivo de merma': transferencia.motivoMerma || '',
+        Conciliada: transferencia.conciliada ? 'Sí' : 'No'
+      }));
+      const transferenciaDetalleFilas = [];
+      transferencias.forEach(transferencia => {
+        const detalle = Array.isArray(transferencia.items) ? transferencia.items.map((item, indice) => [item.id || String(indice + 1), item]) : Object.entries(transferencia.items || {});
+        detalle.forEach(([productoId, item]) => {
+          transferenciaDetalleFilas.push({
+            'Transferencia ID': transferencia.id,
+            'Fecha de salida': fechaExcel(transferencia.fechaSalidaReal || transferencia.fecha),
+            Estado: transferencia.estado || transferencia.estadoTransferencia || '',
+            'Producto ID': productoId,
+            Producto: item.nombre || '',
+            Unidad: item.unidad || '',
+            'Cantidad cargada': numeroOVacioExcel(item.cantCargada),
+            'Cantidad restante': numeroOVacioExcel(item.cantRestante),
+            'Cantidad devuelta': numeroOVacioExcel(item.cantDevuelta),
+            Merma: numeroOVacioExcel(item.cantMerma),
+            Responsable: transferencia.repartidorNombre || '',
+            Zona: transferencia.zona || ''
+          });
+        });
+      });
+      const creditosFilas = creditosExcel.map(credito => {
+        const total = numeroExcel(credito.total);
+        const saldo = numeroExcel(credito.saldo);
+        const abonos = Array.isArray(credito.abonos) ? credito.abonos : [];
+        return {
+          'Crédito ID': credito.id,
+          'Venta ID': credito.notaId || '',
+          Fecha: fechaExcel(credito.fecha),
+          'Cliente ID': credito.clienteId || '',
+          Cliente: credito.clienteNombre || '',
+          Total: total,
+          Abonado: Math.max(total - saldo, 0),
+          Saldo: saldo,
+          Estado: saldo <= 0 ? 'Liquidado' : 'Pendiente',
+          'Cantidad de abonos': abonos.length,
+          'Capturado por UID': credito.capturadoPorUid || ''
+        };
+      });
+      const abonosFilas = [];
+      creditosExcel.forEach(credito => {
+        (Array.isArray(credito.abonos) ? credito.abonos : []).forEach((abono, indice) => {
+          abonosFilas.push({
+            'Crédito ID': credito.id,
+            'Abono #': indice + 1,
+            Fecha: fechaExcel(abono.fecha),
+            'Cliente ID': credito.clienteId || '',
+            Cliente: credito.clienteNombre || '',
+            Monto: numeroExcel(abono.monto),
+            'Forma de pago': abono.formaPago || '',
+            'Capturado por UID': abono.capturadoPorUid || '',
+            'Capturado por': abono.capturadoPorNombre || ''
+          });
+        });
+      });
+      const movimientosFilas = movimientos.map(movimiento => ({
+        'Movimiento ID': movimiento.id,
+        Fecha: fechaExcel(movimiento.fecha),
+        'Producto ID': movimiento.productoId || '',
+        Producto: movimiento.productoNombre || '',
+        'Stock anterior': numeroOVacioExcel(movimiento.stockAnterior),
+        'Stock nuevo': numeroOVacioExcel(movimiento.stockNuevo),
+        Diferencia: numeroOVacioExcel(movimiento.diferencia),
+        Motivo: movimiento.motivo || '',
+        'Usuario UID': movimiento.usuarioUid || movimiento.capturadoPorUid || '',
+        Usuario: movimiento.usuarioNombre || movimiento.capturadoPorNombre || '',
+        'Correo usuario': movimiento.usuarioEmail || ''
+      }));
+      const productosFilas = (productos || []).map(producto => ({
+        'Producto ID': producto.id || '',
+        'Código de barras': producto.codigoBarras || '',
+        Producto: producto.nombre || '',
+        Unidad: producto.unidad || '',
+        'Precio actual': numeroExcel(producto.precio),
+        'Stock actual': numeroExcel(producto.stock),
+        Activo: producto.activo === false ? 'No' : 'Sí'
+      }));
+      const clientesFilas = (clientes || []).map(cliente => {
+        const ubicacion = cliente.ubicacion || {};
+        return {
+          'Cliente ID': cliente.id || '',
+          Cliente: cliente.nombre || '',
+          Teléfono: cliente.telefono || '',
+          Domicilio: cliente.domicilio || '',
+          Activo: cliente.activo === false ? 'No' : 'Sí',
+          'Código QR': qrTextForCliente(cliente.id),
+          'Estado GPS': ubicacion.lat !== undefined && ubicacion.lng !== undefined ? 'Con GPS' : 'Sin GPS',
+          'GPS latitud': ubicacion.lat === undefined ? '' : ubicacion.lat,
+          'GPS longitud': ubicacion.lng === undefined ? '' : ubicacion.lng,
+          'GPS precisión (m)': numeroOVacioExcel(ubicacion.precisionMetros),
+          'Fecha GPS': fechaExcel(ubicacion.fecha),
+          'Creado por UID': cliente.creadoPorUid || ''
+        };
+      });
+      const libro = XLSX.utils.book_new();
+      const totalVendido = ventas.reduce((suma, venta) => suma + numeroExcel(venta.total), 0);
+      const totalContado = ventas.filter(venta => venta.formaPago === 'contado' || venta.formaPago === 'efectivo').reduce((suma, venta) => suma + numeroExcel(venta.total), 0);
+      const totalCredito = ventas.filter(venta => venta.formaPago === 'credito').reduce((suma, venta) => suma + numeroExcel(venta.total), 0);
+      const saldoPendiente = creditosExcel.reduce((suma, credito) => suma + numeroExcel(credito.saldo), 0);
+      const resumenFilas = [{
+        Indicador: 'Generado el',
+        Valor: fDateTime(new Date().toISOString())
+      }, {
+        Indicador: 'Generado por',
+        Valor: currentUser?.nombre || currentUser?.email || ''
+      }, {
+        Indicador: 'Ventas',
+        Valor: ventas.length
+      }, {
+        Indicador: 'Total vendido',
+        Valor: totalVendido
+      }, {
+        Indicador: 'Ventas de contado',
+        Valor: totalContado
+      }, {
+        Indicador: 'Ventas a crédito',
+        Valor: totalCredito
+      }, {
+        Indicador: 'Créditos pendientes',
+        Valor: creditosExcel.filter(credito => numeroExcel(credito.saldo) > 0).length
+      }, {
+        Indicador: 'Saldo pendiente de crédito',
+        Valor: saldoPendiente
+      }, {
+        Indicador: 'Transferencias',
+        Valor: transferencias.length
+      }, {
+        Indicador: 'Movimientos de inventario',
+        Valor: movimientos.length
+      }, {
+        Indicador: 'Productos',
+        Valor: productosFilas.length
+      }, {
+        Indicador: 'Clientes',
+        Valor: clientesFilas.length
+      }];
+      agregarHojaExcel(libro, 'Resumen', ['Indicador', 'Valor'], resumenFilas, [], []);
+      agregarHojaExcel(libro, 'Ventas', ['Venta ID', 'Fecha', 'Cliente ID', 'Cliente', 'Teléfono', 'Vendedor UID', 'Vendedor', 'Forma de pago', 'Origen', 'Transferencia ID', 'Líneas de venta', 'Unidades vendidas', 'Total', 'GPS venta disponible'], ventasFilas, ['Total'], ['Fecha']);
+      agregarHojaExcel(libro, 'VentaDetalle', ['Venta ID', 'Línea', 'Fecha venta', 'Cliente ID', 'Cliente', 'Producto ID', 'Producto', 'Unidad', 'Cantidad', 'Precio unitario', 'Subtotal', 'Origen', 'Transferencia ID', 'Forma de pago'], ventaDetalleFilas, ['Precio unitario', 'Subtotal'], ['Fecha venta']);
+      agregarHojaExcel(libro, 'Transferencias', ['Transferencia ID', 'Fecha de salida', 'Fecha programada', 'Regreso programado', 'Fecha de recepción', 'Estado', 'Estado transferencia', 'Origen', 'Responsable', 'Responsable UID', 'Vehículo', 'Zona', 'Asignada por', 'Recibida por', 'Motivo de merma', 'Conciliada'], transferenciasFilas, [], ['Fecha de salida', 'Fecha programada', 'Regreso programado', 'Fecha de recepción']);
+      agregarHojaExcel(libro, 'TransferenciaDetalle', ['Transferencia ID', 'Fecha de salida', 'Estado', 'Producto ID', 'Producto', 'Unidad', 'Cantidad cargada', 'Cantidad restante', 'Cantidad devuelta', 'Merma', 'Responsable', 'Zona'], transferenciaDetalleFilas, [], ['Fecha de salida']);
+      agregarHojaExcel(libro, 'Créditos', ['Crédito ID', 'Venta ID', 'Fecha', 'Cliente ID', 'Cliente', 'Total', 'Abonado', 'Saldo', 'Estado', 'Cantidad de abonos', 'Capturado por UID'], creditosFilas, ['Total', 'Abonado', 'Saldo'], ['Fecha']);
+      agregarHojaExcel(libro, 'Abonos', ['Crédito ID', 'Abono #', 'Fecha', 'Cliente ID', 'Cliente', 'Monto', 'Forma de pago', 'Capturado por UID', 'Capturado por'], abonosFilas, ['Monto'], ['Fecha']);
+      agregarHojaExcel(libro, 'MovimientosInventario', ['Movimiento ID', 'Fecha', 'Producto ID', 'Producto', 'Stock anterior', 'Stock nuevo', 'Diferencia', 'Motivo', 'Usuario UID', 'Usuario', 'Correo usuario'], movimientosFilas, [], ['Fecha']);
+      agregarHojaExcel(libro, 'Productos', ['Producto ID', 'Código de barras', 'Producto', 'Unidad', 'Precio actual', 'Stock actual', 'Activo'], productosFilas, ['Precio actual'], []);
+      agregarHojaExcel(libro, 'Clientes', ['Cliente ID', 'Cliente', 'Teléfono', 'Domicilio', 'Activo', 'Código QR', 'Estado GPS', 'GPS latitud', 'GPS longitud', 'GPS precisión (m)', 'Fecha GPS', 'Creado por UID'], clientesFilas, [], ['Fecha GPS']);
+      XLSX.writeFile(libro, 'libro_operativo_productos_de_la_costa_' + new Date().toISOString().slice(0, 10) + '.xlsx', {
+        compression: true,
+        cellDates: true
+      });
+      flash('✅ Libro Excel descargado: ' + ventas.length + ' ventas y ' + clientesFilas.length + ' clientes');
+    } catch (e) {
+      flash('❌ No se pudo generar el libro Excel: ' + e.message);
+    }
+    setExcelGenerating(false);
   };
   const enviarReportePorCorreo = () => {
     if (!reporteData) return;
@@ -784,6 +1083,41 @@ function Reportes({
       cursor: 'pointer'
     }
   }, "📧 Preparar correo"))), subTab === 'exportar' && React.createElement(React.Fragment, null, React.createElement("div", {
+    style: {
+      background: 'var(--surface)',
+      borderRadius: 12,
+      padding: 16,
+      marginBottom: 14,
+      border: '1px solid var(--line-strong)'
+    }
+  }, React.createElement("div", {
+    style: {
+      fontSize: 13,
+      fontWeight: 700,
+      marginBottom: 6
+    }
+  }, "📊 Libro Excel estructurado"), React.createElement("div", {
+    style: {
+      fontSize: 12,
+      color: 'var(--ink-soft)',
+      marginBottom: 12,
+      lineHeight: 1.45
+    }
+  }, "Genera un archivo XLSX con una hoja por tipo de información: resumen, ventas, detalle de ventas, transferencias, créditos, abonos, movimientos de inventario, productos y clientes. Cada fila representa un registro o un producto de una operación."), React.createElement("button", {
+    onClick: exportarLibroExcel,
+    disabled: excelGenerating,
+    style: {
+      width: '100%',
+      background: 'var(--ok)',
+      color: 'var(--surface-2)',
+      border: 'none',
+      borderRadius: 8,
+      padding: 11,
+      fontWeight: 700,
+      cursor: 'pointer',
+      opacity: excelGenerating ? 0.6 : 1
+    }
+  }, excelGenerating ? 'Generando libro…' : '📊 Descargar libro Excel (.xlsx)')), React.createElement("div", {
     style: {
       background: 'var(--surface)',
       borderRadius: 12,

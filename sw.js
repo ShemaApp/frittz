@@ -5,7 +5,7 @@
 
 // Cambia esta versión en cada publicación para invalidar el shell anterior.
 const CACHE_PREFIX = 'pdlc-';
-const CACHE_NAME = 'pdlc-v37-shell-atomico';
+const CACHE_NAME = 'pdlc-v38-shell-excel-estructurado';
 // Cache aparte para tiles de mapa offline: a propósito NO se borra cuando
 // sube la versión del shell (ver 'activate' más abajo) — si viviera en
 // CACHE_NAME, cada actualización de la app borraría el mapa descargado.
@@ -46,6 +46,7 @@ const SHELL_URLS = [
   'https://cdn.jsdelivr.net/npm/firebase@10.13.0/firebase-firestore-compat.js',
   'https://cdn.jsdelivr.net/npm/firebase@10.13.0/firebase-app-check-compat.js',
   'https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js',
+  'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js',
   'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css',
   'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js',
   'https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js',
