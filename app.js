@@ -8,7 +8,7 @@ function App() {
   } = useSesion();
   const [tab, setTab] = useState('home');
   const [navOpen, setNavOpen] = useState(false);
-  const [prevTab, setPrevTab] = useState('home');
+  const historialTabs = useRef([]);
   const [ventaRapida, setVentaRapida] = useState(false);
   const [abrirFormProducto, setAbrirFormProducto] = useState(false);
   const [abrirUsuarios, setAbrirUsuarios] = useState(false);
@@ -18,12 +18,22 @@ function App() {
   const TABS = ALL_TABS.filter(([id]) => tabsPermitidos.includes(id));
   useEffect(() => {
     if (!currentUser) return;
-    if (tab !== 'config' && !tabsPermitidos.includes(tab)) setTab(tabsPermitidos[0]);
+    if (tab !== 'config' && !tabsPermitidos.includes(tab)) {
+      historialTabs.current = [];
+      setTab(tabsPermitidos[0]);
+    }
   }, [currentUser]);
-  const goConfig = () => {
-    if (tab !== 'config') setPrevTab(tab);
-    setTab('config');
+  const navegarA = destino => {
+    setNavOpen(false);
+    if (!destino || destino === tab) return;
+    historialTabs.current.push(tab);
+    setTab(destino);
   };
+  const volverAtras = () => {
+    setNavOpen(false);
+    setTab(historialTabs.current.pop() || 'home');
+  };
+  const goConfig = () => navegarA('config');
   const logout = () => {
     auth.signOut();
     setTab('nota');
@@ -82,7 +92,22 @@ function App() {
     style: {
       gap: 10
     }
-  }, tab !== 'config' && React.createElement("button", {
+  }, tab !== 'home' && tab !== 'config' && React.createElement("button", {
+    onClick: volverAtras,
+    title: 'Volver a la pantalla anterior',
+    'aria-label': 'Volver a la pantalla anterior',
+    style: {
+      background: 'none',
+      border: 'none',
+      color: 'var(--rail-ink-faint)',
+      cursor: 'pointer',
+      padding: '4px 3px',
+      display: 'flex',
+      alignItems: 'center',
+      fontSize: 24,
+      lineHeight: 1
+    }
+  }, '←'), tab !== 'config' && React.createElement("button", {
     onClick: () => setNavOpen(o => !o),
     style: {
       background: 'none',
@@ -165,14 +190,14 @@ function App() {
   }, firestoreError), tab === 'home' && React.createElement(Dashboard, {
     ...ctx,
     currentUser: currentUser,
-    onIrA: setTab,
+    onIrA: navegarA,
     onVentaRapida: () => {
       setVentaRapida(true);
-      setTab('nota');
+      navegarA('nota');
     },
     onAgregarProducto: () => {
       setAbrirFormProducto(true);
-      setTab('productos');
+      navegarA('productos');
     },
     onAgregarUsuario: () => {
       setAbrirUsuarios(true);
@@ -200,7 +225,7 @@ function App() {
   }), tab === 'repartidores' && React.createElement(RepartidoresPanel, {
     ...ctx,
     currentUser: currentUser,
-    onIrA: setTab
+    onIrA: navegarA
   }), tab === 'inventario' && React.createElement(Inventario, {
     ...ctx,
     currentUser: currentUser
@@ -212,7 +237,7 @@ function App() {
     currentUser: currentUser
   }), tab === 'config' && React.createElement(Configuracion, {
     currentUser: currentUser,
-    onBack: () => setTab(prevTab),
+    onBack: volverAtras,
     onLogout: logout,
     abrirUsuarios: abrirUsuarios,
     onAbrirUsuariosConsumido: () => setAbrirUsuarios(false)
@@ -258,10 +283,7 @@ function App() {
     }
   }, TABS.map(([id, ico, lbl]) => React.createElement("button", {
     key: id,
-    onClick: () => {
-      setTab(id);
-      setNavOpen(false);
-    },
+    onClick: () => navegarA(id),
     style: {
       display: 'flex',
       alignItems: 'center',
