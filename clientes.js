@@ -177,6 +177,187 @@ function HojaCapturaGPSRapida({ cliente, estado, lectura, error, onConfirmar, on
     React.createElement('div', { onClick: e => e.stopPropagation(), style: { width: '100%', maxWidth: 620, margin: '0 auto', background: 'var(--surface)', borderRadius: '18px 18px 0 0', padding: '14px 16px 20px', boxShadow: '0 -12px 30px rgba(0,0,0,.18)' } }, contenido));
 }
 
+function FichaRapidaCliente({
+  cliente,
+  saldo,
+  historial,
+  puedeEditar,
+  onEditar,
+  onAbrirQR,
+  onHistorial,
+  onUbicacion
+}) {
+  const ubicacionValida = Number.isFinite(Number(cliente?.ubicacion?.lat)) && Number.isFinite(Number(cliente?.ubicacion?.lng));
+  return React.createElement("div", {
+    style: {
+      display: 'flex',
+      flexDirection: 'column',
+      gap: 12
+    }
+  }, React.createElement(Row, {
+    style: {
+      gap: 6,
+      flexWrap: 'wrap'
+    }
+  }, cliente.activo ? React.createElement(Tag, {
+    color: 'var(--ok-text)'
+  }, 'Activo') : React.createElement(Tag, {
+    color: 'var(--ink-soft)'
+  }, 'Inactivo'), saldo > 0 ? React.createElement(Tag, {
+    color: 'var(--warn-text)'
+  }, 'Con crédito') : React.createElement(Tag, {
+    color: 'var(--ink-soft)'
+  }, 'Sin crédito'), ubicacionValida ? React.createElement(Tag, {
+    color: 'var(--ok-text)'
+  }, '✓ GPS guardado') : React.createElement(Tag, {
+    color: 'var(--warn-text)'
+  }, '📍 Sin GPS')), React.createElement("div", {
+    style: {
+      display: 'grid',
+      gridTemplateColumns: '1fr 1fr',
+      gap: 8
+    }
+  }, React.createElement("div", {
+    style: {
+      background: 'var(--surface-2)',
+      borderRadius: 8,
+      padding: '9px 10px'
+    }
+  }, React.createElement("div", {
+    style: {
+      fontSize: 10,
+      color: 'var(--ink-faint)',
+      fontWeight: 700,
+      marginBottom: 3
+    }
+  }, 'SALDO PENDIENTE'), React.createElement("div", {
+    style: {
+      fontSize: 15,
+      color: saldo > 0 ? 'var(--warn-text)' : 'var(--ok-text)',
+      fontWeight: 800
+    }
+  }, saldo > 0 ? fmt(saldo) : 'Sin saldo')), React.createElement("div", {
+    style: {
+      background: 'var(--surface-2)',
+      borderRadius: 8,
+      padding: '9px 10px'
+    }
+  }, React.createElement("div", {
+    style: {
+      fontSize: 10,
+      color: 'var(--ink-faint)',
+      fontWeight: 700,
+      marginBottom: 3
+    }
+  }, 'COMPRAS REGISTRADAS'), React.createElement("div", {
+    style: {
+      fontSize: 15,
+      color: 'var(--ink)',
+      fontWeight: 800
+    }
+  }, historial.length))), React.createElement("div", null, React.createElement(Lbl, null, 'Contacto'), React.createElement("div", {
+    style: {
+      fontSize: 13,
+      lineHeight: 1.45
+    }
+  }, '📱 ', cliente.telefono || 'Sin teléfono registrado')), React.createElement("div", null, React.createElement(Lbl, null, 'Domicilio'), React.createElement("div", {
+    style: {
+      fontSize: 13,
+      lineHeight: 1.45,
+      color: cliente.domicilio ? 'var(--ink)' : 'var(--ink-faint)'
+    }
+  }, '📍 ', cliente.domicilio || 'Domicilio no registrado')), React.createElement("div", null, React.createElement(Lbl, null, 'Cliente agregado'), React.createElement("div", {
+    style: {
+      fontSize: 12,
+      color: 'var(--ink-soft)'
+    }
+  }, cliente.fechaAlta ? fDate(cliente.fechaAlta) : 'No disponible')), React.createElement(Row, {
+    style: {
+      gap: 6,
+      flexWrap: 'wrap'
+    }
+  }, React.createElement(BOut, {
+    onClick: onUbicacion,
+    disabled: !ubicacionValida,
+    style: {
+      flex: 1
+    }
+  }, ubicacionValida ? '📍 Ver ubicación' : '📍 Sin ubicación'), React.createElement(BOut, {
+    onClick: onAbrirQR,
+    style: {
+      flex: 1
+    }
+  }, '🔳 QR'), puedeEditar && React.createElement(BFill, {
+    onClick: onEditar,
+    style: {
+      flex: 1
+    }
+  }, '✏️ Editar')), React.createElement("div", {
+    style: {
+      borderTop: '1px solid var(--line)',
+      paddingTop: 10
+    }
+  }, React.createElement(Row, {
+    style: {
+      justifyContent: 'space-between',
+      marginBottom: 7
+    }
+  }, React.createElement("div", {
+    style: {
+      fontSize: 11,
+      color: 'var(--ink-faint)',
+      fontWeight: 800
+    }
+  }, 'HISTORIAL RECIENTE'), historial.length > 3 && React.createElement("button", {
+    type: 'button',
+    onClick: onHistorial,
+    style: {
+      border: 'none',
+      padding: 0,
+      background: 'none',
+      color: 'var(--accent-text)',
+      fontSize: 11,
+      fontWeight: 700,
+      cursor: 'pointer'
+    }
+  }, 'Ver todo')), historial.length === 0 ? React.createElement("div", {
+    style: {
+      fontSize: 12,
+      color: 'var(--ink-faint)'
+    }
+  }, 'Sin compras registradas todavía.') : historial.slice(0, 3).map(n => React.createElement(Row, {
+    key: n.id,
+    style: {
+      justifyContent: 'space-between',
+      gap: 6,
+      padding: '7px 0',
+      borderBottom: '1px solid var(--line)',
+      fontSize: 12
+    }
+  }, React.createElement("span", {
+    style: {
+      color: 'var(--ink-soft)'
+    }
+  }, fDate(n.fecha)), React.createElement("span", {
+    style: {
+      flex: 1,
+      textAlign: 'center',
+      color: 'var(--ink-faint)'
+    }
+  }, (n.items || []).length, ' prod.'), React.createElement("span", {
+    style: {
+      color: 'var(--accent-text)',
+      fontWeight: 800
+    }
+  }, fmt(n.total)))), historial.length > 0 && React.createElement(BOut, {
+    onClick: onHistorial,
+    style: {
+      width: '100%',
+      marginTop: 9
+    }
+  }, '📋 Ver historial completo')));
+}
+
 function Clientes({
   clientes,
   notas,
@@ -184,13 +365,12 @@ function Clientes({
   currentUser
 }) {
   const puedeEditar = currentUser?.role === 'admin' || permisoEdita(currentUser).clientes;
-  const [filtro, setFiltro] = useState('activos');
+  const [filtroEstado, setFiltroEstado] = useState('activos');
+  const [filtroCredito, setFiltroCredito] = useState('todos');
   const [q, setQ] = useState('');
   const [form, setForm] = useState(null);
   const [histId, setHistId] = useState(null);
   const [expandedId, setExpandedId] = useState(null);
-  const pressTimer = useRef(null);
-  const longPressed = useRef(false);
   const [qrFor, setQrFor] = useState(null);
   const [qrUrl, setQrUrl] = useState(null);
   const [detallesFor, setDetallesFor] = useState(null);
@@ -200,10 +380,30 @@ function Clientes({
   const [lecturaGPS, setLecturaGPS] = useState(null);
   const [errorCapturaGPS, setErrorCapturaGPS] = useState('');
   const cmap = creditos.reduce((m, c) => {
-    if (c.saldo > 0) m[c.clienteId] = (m[c.clienteId] || 0) + c.saldo;
+    const saldo = Number(c.saldo || 0);
+    if (Number.isFinite(saldo) && saldo > 0) m[c.clienteId] = (m[c.clienteId] || 0) + saldo;
     return m;
   }, {});
-  const list = clientes.filter(c => filtro === 'activos' ? c.activo : filtro === 'inactivos' ? !c.activo : !!cmap[c.id]).filter(c => filtroGPS === 'sin-gps' ? !c.ubicacion : filtroGPS === 'con-gps' ? !!c.ubicacion : true).filter(c => c.nombre.toLowerCase().includes(q.toLowerCase()));
+  const clientesPorEstado = clientes.filter(c => filtroEstado === 'todos' ? true : filtroEstado === 'activos' ? c.activo : !c.activo);
+  const tieneCredito = cliente => Number(cmap[cliente.id] || 0) > 0;
+  const coincideBusqueda = cliente => {
+    const termino = q.trim().toLowerCase();
+    if (!termino) return true;
+    return [cliente.nombre, cliente.telefono, cliente.domicilio].some(valor => String(valor || '').toLowerCase().includes(termino));
+  };
+  const contarClientes = condicion => clientesPorEstado.filter(condicion).length;
+  const list = clientesPorEstado.filter(c => filtroCredito === 'credito' ? tieneCredito(c) : filtroCredito === 'sin-credito' ? !tieneCredito(c) : true).filter(c => filtroGPS === 'sin-gps' ? !c.ubicacion : filtroGPS === 'con-gps' ? !!c.ubicacion : true).filter(coincideBusqueda);
+  const historialCliente = clienteId => notas.filter(n => n.clienteId === clienteId).slice().sort((a, b) => new Date(b.fecha || 0).getTime() - new Date(a.fecha || 0).getTime());
+  const abrirUbicacionCliente = cliente => {
+    const ubicacion = cliente?.ubicacion;
+    const lat = Number(ubicacion?.lat);
+    const lng = Number(ubicacion?.lng);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+      alert('Este cliente todavía no tiene una ubicación GPS válida.');
+      return;
+    }
+    window.open('https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(lat + ',' + lng), '_blank', 'noopener');
+  };
   const save = async () => {
     if (!form.nombre) return;
     const item = {
@@ -218,23 +418,6 @@ function Clientes({
       fechaAlta: new Date().toISOString()
     });
     setForm(null);
-  };
-  const startPress = id => {
-    longPressed.current = false;
-    clearTimeout(pressTimer.current);
-    pressTimer.current = setTimeout(() => {
-      longPressed.current = true;
-      if (navigator.vibrate) navigator.vibrate(12);
-      setExpandedId(eid => eid === id ? null : id);
-    }, 500);
-  };
-  const cancelPress = () => clearTimeout(pressTimer.current);
-  const onCardTap = id => {
-    if (longPressed.current) {
-      longPressed.current = false;
-      return;
-    }
-    if (expandedId === id) setExpandedId(null);
   };
   const verQR = c => {
     setQrFor(c);
@@ -332,6 +515,8 @@ function Clientes({
       setEstadoCapturaGPS('error');
     }
   };
+  const detalleHistorial = detallesFor ? historialCliente(detallesFor.id) : [];
+  const detalleSaldo = detallesFor ? Number(cmap[detallesFor.id] || 0) : 0;
   return React.createElement("div", {
     style: {
       padding: '16px 12px'
@@ -353,54 +538,110 @@ function Clientes({
       domicilio: ''
     })
   }, "+ Nuevo")), React.createElement(Inp, {
-    placeholder: "🔍 Buscar…",
+    placeholder: "🔍 Buscar por nombre, teléfono o domicilio…",
     value: q,
     onChange: e => setQ(e.target.value),
     style: {
-      marginBottom: 10
+      marginBottom: 12
     }
-  }), React.createElement(Row, {
+  }), React.createElement("div", {
     style: {
+      fontSize: 11,
+      color: 'var(--ink-faint)',
+      fontWeight: 800,
+      marginBottom: 6,
+      letterSpacing: '.02em'
+    }
+  }, "ESTADO"), React.createElement("div", {
+    style: {
+      display: 'flex',
+      flexWrap: 'wrap',
       gap: 6,
       marginBottom: 12
     }
-  }, [['activos', 'Activos'], ['credito', 'Crédito'], ['inactivos', 'Inactivos']].map(([v, l]) => React.createElement("button", {
+  }, [['todos', 'Todos', contarClientes(() => true)], ['activos', 'Activos', contarClientes(c => c.activo)], ['inactivos', 'Inactivos', contarClientes(c => !c.activo)]].map(([v, l, total]) => React.createElement("button", {
     key: v,
-    onClick: () => setFiltro(v),
+    type: 'button',
+    onClick: () => setFiltroEstado(v),
+    'aria-pressed': filtroEstado === v,
     style: {
-      flex: 1,
-      padding: '7px 2px',
+      padding: '7px 9px',
       borderRadius: 8,
-      border: 'none',
-      background: filtro === v ? 'var(--accent)' : 'var(--surface-2)',
-      color: filtro === v ? 'var(--ink)' : 'var(--ink-soft)',
+      border: '1px solid ' + (filtroEstado === v ? 'var(--accent)' : 'var(--line)'),
+      background: filtroEstado === v ? 'var(--accent)' : 'var(--surface)',
+      color: filtroEstado === v ? 'var(--ink)' : 'var(--ink-soft)',
       fontSize: 11,
       fontWeight: 700,
       cursor: 'pointer'
     }
-  }, l))), puedeEditar && React.createElement(Row, {
-    style: { gap: 6, marginBottom: 10 }
-  }, [['todos', 'Todos'], ['sin-gps', '📍 Sin GPS'], ['con-gps', '✓ Con GPS']].map(([v, l]) => React.createElement("button", {
-    key: v,
-    onClick: () => setFiltroGPS(v),
+  }, l + '  ' + total))), React.createElement("div", {
     style: {
-      flex: 1,
-      padding: '7px 2px',
+      fontSize: 11,
+      color: 'var(--ink-faint)',
+      fontWeight: 800,
+      marginBottom: 6,
+      letterSpacing: '.02em'
+    }
+  }, "CRÉDITO"), React.createElement("div", {
+    style: {
+      display: 'flex',
+      flexWrap: 'wrap',
+      gap: 6,
+      marginBottom: 12
+    }
+  }, [['todos', 'Todos', contarClientes(() => true)], ['credito', 'Con crédito', contarClientes(tieneCredito)], ['sin-credito', 'Sin crédito', contarClientes(c => !tieneCredito(c))]].map(([v, l, total]) => React.createElement("button", {
+    key: v,
+    type: 'button',
+    onClick: () => setFiltroCredito(v),
+    'aria-pressed': filtroCredito === v,
+    style: {
+      padding: '7px 9px',
+      borderRadius: 8,
+      border: '1px solid ' + (filtroCredito === v ? 'var(--accent)' : 'var(--line)'),
+      background: filtroCredito === v ? 'var(--accent)' : 'var(--surface)',
+      color: filtroCredito === v ? 'var(--ink)' : 'var(--ink-soft)',
+      fontSize: 11,
+      fontWeight: 700,
+      cursor: 'pointer'
+    }
+  }, l + '  ' + total))), React.createElement("div", {
+    style: {
+      fontSize: 11,
+      color: 'var(--ink-faint)',
+      fontWeight: 800,
+      marginBottom: 6,
+      letterSpacing: '.02em'
+    }
+  }, "UBICACIÓN"), React.createElement("div", {
+    style: {
+      display: 'flex',
+      flexWrap: 'wrap',
+      gap: 6,
+      marginBottom: 10
+    }
+  }, [['todos', 'Todos', contarClientes(() => true)], ['con-gps', '✓ Con GPS', contarClientes(c => !!c.ubicacion)], ['sin-gps', '📍 Sin GPS', contarClientes(c => !c.ubicacion)]].map(([v, l, total]) => React.createElement("button", {
+    key: v,
+    type: 'button',
+    onClick: () => setFiltroGPS(v),
+    'aria-pressed': filtroGPS === v,
+    style: {
+      padding: '7px 9px',
       borderRadius: 8,
       border: '1px solid ' + (filtroGPS === v ? 'var(--accent)' : 'var(--line)'),
       background: filtroGPS === v ? 'var(--accent)' : 'var(--surface)',
       color: filtroGPS === v ? 'var(--ink)' : 'var(--ink-soft)',
-      fontSize: 10,
+      fontSize: 11,
       fontWeight: 700,
       cursor: 'pointer'
     }
-  }, l))), React.createElement("div", {
+  }, l + '  ' + total))), React.createElement("div", {
     style: {
       fontSize: 11,
       color: 'var(--ink-faint)',
-      marginBottom: 10
+      marginBottom: 12,
+      lineHeight: 1.4
     }
-  }, filtroGPS === 'sin-gps' ? 'Captura la ubicación estando en el domicilio. Los clientes guardados desaparecen de esta lista.' : 'Toca la miniatura QR para abrirla. Mantén presionado un cliente para editar, ver su historial o más detalles.'), list.map(c => {
+  }, list.length + ' cliente' + (list.length === 1 ? '' : 's') + ' encontrado' + (list.length === 1 ? '' : 's') + '. ' + (filtroGPS === 'sin-gps' ? 'Captura la ubicación estando en el domicilio; al guardarla desaparecerá de este filtro.' : 'Toca el botón ⋮ para ver acciones, la miniatura QR para abrir el código o la tarjeta para abrir la ficha rápida.')), list.map(c => {
     const expanded = expandedId === c.id;
     return React.createElement(Card, {
       key: c.id,
@@ -410,13 +651,7 @@ function Clientes({
         overflow: 'hidden'
       }
     }, React.createElement("div", {
-      onMouseDown: () => startPress(c.id),
-      onMouseUp: cancelPress,
-      onMouseLeave: cancelPress,
-      onTouchStart: () => startPress(c.id),
-      onTouchEnd: cancelPress,
-      onTouchMove: cancelPress,
-      onClick: () => onCardTap(c.id),
+      onClick: () => setDetallesFor(c),
       style: {
         padding: '12px 14px',
         cursor: 'pointer',
@@ -446,9 +681,11 @@ function Clientes({
       }
     }, c.nombre), !c.activo && React.createElement(Tag, {
       color: "var(--ink-soft)"
-    }, "Inactivo"), cmap[c.id] && React.createElement(Tag, {
+    }, "Inactivo"), tieneCredito(c) ? React.createElement(Tag, {
       color: "var(--warn-text)"
-    }, "💳 ", fmt(cmap[c.id])), c.ubicacion ? React.createElement(Tag, {
+    }, "Con crédito · ", fmt(cmap[c.id])) : React.createElement(Tag, {
+      color: "var(--ink-soft)"
+    }, "Sin crédito"), c.ubicacion ? React.createElement(Tag, {
       color: "var(--ok-text)"
     }, "✓ GPS guardado") : React.createElement(Tag, {
       color: "var(--warn-text)"
@@ -468,7 +705,30 @@ function Clientes({
     }, "📍 ", c.domicilio || '—')), React.createElement(MiniaturaQRCliente, {
       cliente: c,
       onClick: () => verQR(c)
-    }))), !c.ubicacion && puedeEditar && React.createElement("div", {
+    }), React.createElement("button", {
+      type: 'button',
+      onMouseDown: e => e.stopPropagation(),
+      onTouchStart: e => e.stopPropagation(),
+      onClick: e => {
+        e.stopPropagation();
+        setExpandedId(eid => eid === c.id ? null : c.id);
+      },
+      title: 'Acciones de ' + c.nombre,
+      'aria-label': 'Acciones de ' + c.nombre,
+      'aria-expanded': expanded,
+      style: {
+        width: 34,
+        minWidth: 34,
+        height: 62,
+        border: '1px solid var(--line-strong)',
+        borderRadius: 8,
+        background: 'var(--surface)',
+        color: 'var(--ink-soft)',
+        fontSize: 20,
+        lineHeight: 1,
+        cursor: 'pointer'
+      }
+    }, '⋮'))), !c.ubicacion && puedeEditar && React.createElement("div", {
       style: { padding: '0 14px 12px' }
     }, React.createElement(BFill, {
       onMouseDown: e => e.stopPropagation(),
@@ -480,7 +740,7 @@ function Clientes({
       style: { width: '100%' }
     }, '📍 CAPTURAR AQUÍ')), React.createElement("div", {
       style: {
-        maxHeight: expanded ? 190 : 0,
+        maxHeight: expanded ? 250 : 0,
         overflow: 'hidden',
         transition: 'max-height .2s ease'
       }
@@ -701,33 +961,50 @@ function Clientes({
       color: 'var(--ink-faint)',
       marginTop: 12
     }
-  }, "Este es el código que identifica a ", qrFor.nombre, " al escanear en una venta desde transferencia."), React.createElement(Row, { style: { gap: 8, marginTop: 14, justifyContent: 'center' } }, React.createElement(BOut, { onClick: copiarQR, style: { flex: 1 }, disabled: !qrUrl }, '📋 Copiar código'), React.createElement(BFill, { onClick: descargarQR, style: { flex: 1 }, disabled: !qrUrl }, '⬇️ Descargar QR')))), detallesFor && React.createElement(Modal, {
-    title: 'ℹ️ Detalles de ' + detallesFor.nombre,
+  }, "Este es el código que identifica a ", qrFor.nombre, " al escanear en una venta desde transferencia."), React.createElement(Row, {
+    style: {
+      gap: 8,
+      marginTop: 14,
+      justifyContent: 'center'
+    }
+  }, React.createElement(BOut, {
+    onClick: copiarQR,
+    style: {
+      flex: 1
+    },
+    disabled: !qrUrl
+  }, '📋 Copiar código'), React.createElement(BFill, {
+    onClick: descargarQR,
+    style: {
+      flex: 1
+    },
+    disabled: !qrUrl
+  }, '⬇️ Descargar QR')))), detallesFor && React.createElement(Modal, {
+    title: 'Cliente · ' + detallesFor.nombre,
     onClose: () => setDetallesFor(null)
-  }, React.createElement("div", {
-    style: {
-      display: 'flex',
-      flexDirection: 'column',
-      gap: 10
-    }
-  }, React.createElement("div", null, React.createElement(Lbl, null, "Cliente agregado"), React.createElement("div", {
-    style: {
-      fontSize: 13
-    }
-  }, detallesFor.fechaAlta ? fDate(detallesFor.fechaAlta) : 'No disponible (cliente de antes de este registro)')), React.createElement("div", null, React.createElement(Lbl, null, "Domicilio"), React.createElement("div", {
-    style: {
-      fontSize: 13,
-      color: detallesFor.ubicacion ? 'var(--ink-soft)' : 'var(--ink-faint)'
-    }
-  }, detallesFor.ubicacion ? '✓ GPS guardado' : '📍 Sin GPS')), React.createElement("div", null, React.createElement(Lbl, null, "Teléfono"), React.createElement("div", {
-    style: {
-      fontSize: 13
-    }
-  }, detallesFor.telefono || '—')), React.createElement("div", null, React.createElement(Lbl, null, "Dirección registrada"), React.createElement("div", {
-    style: {
-      fontSize: 13
-    }
-    }, detallesFor.domicilio || '—')))), React.createElement(HojaCapturaGPSRapida, {
+  }, React.createElement(FichaRapidaCliente, {
+    cliente: detallesFor,
+    saldo: detalleSaldo,
+    historial: detalleHistorial,
+    puedeEditar: puedeEditar,
+    onEditar: () => {
+      setForm({
+        ...detallesFor
+      });
+      setDetallesFor(null);
+    },
+    onAbrirQR: () => {
+      const cliente = detallesFor;
+      setDetallesFor(null);
+      verQR(cliente);
+    },
+    onHistorial: () => {
+      const clienteId = detallesFor.id;
+      setDetallesFor(null);
+      setHistId(clienteId);
+    },
+    onUbicacion: () => abrirUbicacionCliente(detallesFor)
+  })), React.createElement(HojaCapturaGPSRapida, {
     cliente: capturaRapidaFor,
     estado: estadoCapturaGPS,
     lectura: lecturaGPS,
