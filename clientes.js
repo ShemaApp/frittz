@@ -1,5 +1,53 @@
 let clientesQRLoading = false;
 const textoQRCliente = clienteId => 'PDLC-CLIENTE:' + clienteId;
+const LOCALIDADES_BASE_CABORCA = Object.freeze([
+  'La Y Griega',
+  'Ejido Pablo Bórquez',
+  'Ejido La Alameda',
+  'Ejido El Coyote',
+  'Ejido El Bajío',
+  'Ejido Rodolfo Campodónico',
+  'Santa Eduwiges (Las Cachoras)',
+  'Puerto Lobos',
+  'Ejido Álvaro Obregón',
+  'Ejido El Último Esfuerzo',
+  'Ejido Ures',
+  'Ejido La Primavera',
+  'Ejido Josefa Ortiz de Domínguez',
+  'Ejido 21 de Marzo',
+  'Viñedo Viva (Campamento)',
+  'Ejido Alfonso Garzón Santibáñez',
+  'Ejido Adolfo Orive de Alba',
+  'El Rocío',
+  'San Isidro',
+  'Ejido Zacatecas',
+  'Ejido El Cajeme (Cajeme Dos)',
+  'Ejido Yaqui Justiciero',
+  'Ejido Jesús García',
+  'Rancho San Francisquito',
+  'Ejido Viñedo Viva',
+  'Ejido La Almita',
+  'Ejido Poblado San Francisco',
+  'Campo San Carlos',
+  'Campo Don Pedro',
+  'Campo San Alberto',
+  'Campo Santa Inés',
+  'Campo El Álamo',
+  'Campo La Esperanza',
+  'Rancho El Sahuaro (Bajo)',
+  'Rancho Las Bellotas',
+  'Heroica Caborca',
+  'Ejido 15 de Septiembre',
+  'El Desemboque',
+  'Poblado San Felipe',
+  'Ejido México Sesenta y Ocho',
+  'Ejido José María Morelos'
+]);
+const normalizarLocalidad = valor => String(valor || '').trim().replace(/\s+/g, ' ');
+const claveLocalidad = valor => normalizarLocalidad(valor).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+const LOCALIDAD_NUEVA = '__nueva_localidad__';
+const LOCALIDAD_SIN_CLASIFICAR = '__sin_localidad__';
+
 function asegurarLibreriaQRClientes(callback) {
   if (window.QRCode) {
     callback(true);
@@ -143,7 +191,7 @@ function HojaCapturaGPSRapida({ cliente, estado, lectura, error, onConfirmar, on
     React.createElement('div', { style: { fontSize: 12, color: 'var(--ink-faint)', lineHeight: 1.45, marginBottom: 14 } }, 'La ubicación se guardará para preparar rutas futuras.'),
     React.createElement('div', { style: { background: 'var(--surface-2)', border: '1px solid var(--line)', borderRadius: 10, padding: '11px 12px', marginBottom: 16 } },
       React.createElement('div', { style: { fontSize: 13, fontWeight: 800, marginBottom: 3 } }, cliente.nombre),
-      React.createElement('div', { style: { fontSize: 12, color: 'var(--ink-soft)', lineHeight: 1.35 } }, '📍 ', cliente.domicilio || 'Domicilio sin detalle')),
+      React.createElement('div', { style: { fontSize: 12, color: 'var(--ink-soft)', lineHeight: 1.35 } }, '📍 ', cliente.localidad || cliente.domicilio || 'Localidad sin detalle')),
     React.createElement(BFill, { onClick: onConfirmar, style: { width: '100%' } }, 'SÍ, CAPTURAR UBICACIÓN'),
     React.createElement('button', { type: 'button', onClick: onCerrar, style: { width: '100%', marginTop: 8, padding: 9, border: 'none', background: 'transparent', color: 'var(--ink-soft)', cursor: 'pointer', fontWeight: 700, fontSize: 12 } }, 'Cancelar')
   );else if (estado === 'buscando' || estado === 'guardando') contenido = React.createElement(React.Fragment, null,
@@ -260,13 +308,13 @@ function FichaRapidaCliente({
       fontSize: 13,
       lineHeight: 1.45
     }
-  }, '📱 ', cliente.telefono || 'Sin teléfono registrado')), React.createElement("div", null, React.createElement(Lbl, null, 'Domicilio'), React.createElement("div", {
+  }, '📱 ', cliente.telefono || 'Sin teléfono registrado')), React.createElement("div", null, React.createElement(Lbl, null, 'Localidad'), React.createElement("div", {
     style: {
       fontSize: 13,
       lineHeight: 1.45,
-      color: cliente.domicilio ? 'var(--ink)' : 'var(--ink-faint)'
+      color: (cliente.localidad || cliente.domicilio) ? 'var(--ink)' : 'var(--ink-faint)'
     }
-  }, '📍 ', cliente.domicilio || 'Domicilio no registrado')), React.createElement("div", null, React.createElement(Lbl, null, 'Cliente agregado'), React.createElement("div", {
+  }, '📍 ', cliente.localidad || cliente.domicilio || 'Localidad no registrada')), React.createElement("div", null, React.createElement(Lbl, null, 'Cliente agregado'), React.createElement("div", {
     style: {
       fontSize: 12,
       color: 'var(--ink-soft)'
@@ -375,6 +423,7 @@ function Clientes({
   const [qrUrl, setQrUrl] = useState(null);
   const [detallesFor, setDetallesFor] = useState(null);
   const [filtroGPS, setFiltroGPS] = useState('todos');
+  const [filtroLocalidad, setFiltroLocalidad] = useState('todos');
   const [capturaRapidaFor, setCapturaRapidaFor] = useState(null);
   const [estadoCapturaGPS, setEstadoCapturaGPS] = useState('confirmar');
   const [lecturaGPS, setLecturaGPS] = useState(null);
@@ -385,14 +434,38 @@ function Clientes({
     return m;
   }, {});
   const clientesPorEstado = clientes.filter(c => filtroEstado === 'todos' ? true : filtroEstado === 'activos' ? c.activo : !c.activo);
+  const localidades = (() => {
+    const porClave = new Map();
+    [...LOCALIDADES_BASE_CABORCA, ...clientes.map(cliente => cliente.localidad || cliente.domicilio || '')].forEach(valor => {
+      const nombre = normalizarLocalidad(valor);
+      const clave = claveLocalidad(nombre);
+      if (nombre && !porClave.has(clave)) porClave.set(clave, nombre);
+    });
+    return Array.from(porClave.values()).sort((a, b) => a.localeCompare(b, 'es', { sensitivity: 'base' }));
+  })();
+  const localidadCanonica = valor => {
+    const nombre = normalizarLocalidad(valor);
+    if (!nombre) return '';
+    const existente = localidades.find(localidad => claveLocalidad(localidad) === claveLocalidad(nombre));
+    return existente || nombre;
+  };
+  const localidadDeCliente = cliente => localidadCanonica(cliente.localidad || cliente.domicilio || '');
   const tieneCredito = cliente => Number(cmap[cliente.id] || 0) > 0;
   const coincideBusqueda = cliente => {
     const termino = q.trim().toLowerCase();
     if (!termino) return true;
-    return [cliente.nombre, cliente.telefono, cliente.domicilio].some(valor => String(valor || '').toLowerCase().includes(termino));
+    return [cliente.nombre, cliente.telefono, localidadDeCliente(cliente)].some(valor => String(valor || '').toLowerCase().includes(termino));
   };
+  const coincideLocalidad = cliente => filtroLocalidad === 'todos' ? true : filtroLocalidad === LOCALIDAD_SIN_CLASIFICAR ? !localidadDeCliente(cliente) : claveLocalidad(localidadDeCliente(cliente)) === claveLocalidad(filtroLocalidad);
   const contarClientes = condicion => clientesPorEstado.filter(condicion).length;
-  const list = clientesPorEstado.filter(c => filtroCredito === 'credito' ? tieneCredito(c) : filtroCredito === 'sin-credito' ? !tieneCredito(c) : true).filter(c => filtroGPS === 'sin-gps' ? !c.ubicacion : filtroGPS === 'con-gps' ? !!c.ubicacion : true).filter(coincideBusqueda);
+  const contarLocalidad = localidad => clientesPorEstado.filter(cliente => claveLocalidad(localidadDeCliente(cliente)) === claveLocalidad(localidad)).length;
+  const sinLocalidad = clientesPorEstado.filter(cliente => !localidadDeCliente(cliente)).length;
+  const list = clientesPorEstado.filter(c => filtroCredito === 'credito' ? tieneCredito(c) : filtroCredito === 'sin-credito' ? !tieneCredito(c) : true).filter(c => filtroGPS === 'sin-gps' ? !c.ubicacion : filtroGPS === 'con-gps' ? !!c.ubicacion : true).filter(coincideLocalidad).filter(coincideBusqueda).slice().sort((a, b) => {
+    const localidadA = localidadDeCliente(a) || 'Sin clasificar';
+    const localidadB = localidadDeCliente(b) || 'Sin clasificar';
+    const porLocalidad = localidadA.localeCompare(localidadB, 'es', { sensitivity: 'base' });
+    return porLocalidad || String(a.nombre || '').localeCompare(String(b.nombre || ''), 'es', { sensitivity: 'base' });
+  });
   const historialCliente = clienteId => notas.filter(n => n.clienteId === clienteId).slice().sort((a, b) => new Date(b.fecha || 0).getTime() - new Date(a.fecha || 0).getTime());
   const abrirUbicacionCliente = cliente => {
     const ubicacion = cliente?.ubicacion;
@@ -406,10 +479,18 @@ function Clientes({
   };
   const save = async () => {
     if (!form.nombre) return;
+    const localidadEntrada = form.localidadNueva !== undefined ? form.localidadNueva : form.localidad || form.domicilio || '';
+    const localidad = localidadCanonica(localidadEntrada);
+    if (!localidad) {
+      alert('Selecciona una localidad existente o escribe una nueva.');
+      return;
+    }
     const item = {
       nombre: form.nombre,
       telefono: form.telefono || '',
-      domicilio: form.domicilio || '',
+      localidad,
+      // Conserva compatibilidad con pantallas históricas que todavía leen domicilio.
+      domicilio: localidad,
       activo: form.activo !== undefined ? form.activo : true,
       ubicacion: form.ubicacion || null
     };
@@ -535,10 +616,11 @@ function Clientes({
     onClick: () => setForm({
       nombre: '',
       telefono: '',
-      domicilio: ''
+      domicilio: '',
+      localidad: ''
     })
   }, "+ Nuevo")), React.createElement(Inp, {
-    placeholder: "🔍 Buscar por nombre, teléfono o domicilio…",
+    placeholder: "🔍 Buscar por nombre, teléfono o localidad…",
     value: q,
     onChange: e => setQ(e.target.value),
     style: {
@@ -638,11 +720,38 @@ function Clientes({
     style: {
       fontSize: 11,
       color: 'var(--ink-faint)',
+      fontWeight: 800,
+      marginBottom: 6,
+      letterSpacing: '.02em'
+    }
+  }, "LOCALIDAD"), React.createElement("select", {
+    value: filtroLocalidad,
+    onChange: e => setFiltroLocalidad(e.target.value),
+    style: {
+      width: '100%',
+      padding: '9px 10px',
+      border: '1px solid var(--line-strong)',
+      borderRadius: 7,
+      background: 'var(--surface-2)',
+      color: 'var(--ink)',
+      fontSize: 12,
+      marginBottom: 10
+    }
+  }, React.createElement("option", { value: 'todos' }, 'Todas las localidades (' + contarClientes(() => true) + ')'), sinLocalidad > 0 && React.createElement("option", { value: LOCALIDAD_SIN_CLASIFICAR }, 'Sin clasificar (' + sinLocalidad + ')'), localidades.map(localidad => React.createElement("option", {
+    key: localidad,
+    value: localidad
+  }, localidad + ' (' + contarLocalidad(localidad) + ')'))), React.createElement("div", {
+    style: {
+      fontSize: 11,
+      color: 'var(--ink-faint)',
       marginBottom: 12,
       lineHeight: 1.4
     }
-  }, list.length + ' cliente' + (list.length === 1 ? '' : 's') + ' encontrado' + (list.length === 1 ? '' : 's') + '. ' + (filtroGPS === 'sin-gps' ? 'Captura la ubicación estando en el domicilio; al guardarla desaparecerá de este filtro.' : 'Toca el botón ⋮ para ver acciones, la miniatura QR para abrir el código o la tarjeta para abrir la ficha rápida.')), list.map(c => {
+  }, list.length + ' cliente' + (list.length === 1 ? '' : 's') + ' encontrado' + (list.length === 1 ? '' : 's') + '. ' + (filtroGPS === 'sin-gps' ? 'Captura la ubicación estando en el domicilio; al guardarla desaparecerá de este filtro.' : 'La lista está agrupada por localidad. Toca el botón ⋮ para ver acciones, la miniatura QR para abrir el código o la tarjeta para abrir la ficha rápida.')), list.map((c, indice) => {
     const expanded = expandedId === c.id;
+    const localidadActual = localidadDeCliente(c) || 'Sin clasificar';
+    const localidadAnterior = indice > 0 ? localidadDeCliente(list[indice - 1]) || 'Sin clasificar' : null;
+    const mostrarEncabezadoLocalidad = indice === 0 || claveLocalidad(localidadActual) !== claveLocalidad(localidadAnterior);
     return React.createElement(Card, {
       key: c.id,
       style: {
@@ -650,7 +759,17 @@ function Clientes({
         padding: 0,
         overflow: 'hidden'
       }
-    }, React.createElement("div", {
+    }, mostrarEncabezadoLocalidad && React.createElement("div", {
+      style: {
+        padding: '8px 14px',
+        borderBottom: '1px solid var(--line)',
+        background: 'var(--surface-2)',
+        color: 'var(--ink-soft)',
+        fontSize: 11,
+        fontWeight: 800,
+        letterSpacing: '.02em'
+      }
+    }, 'LOCALIDAD · ' + localidadActual), React.createElement("div", {
       onClick: () => setDetallesFor(c),
       style: {
         padding: '12px 14px',
@@ -702,7 +821,7 @@ function Clientes({
         marginTop: 2,
         lineHeight: 1.3
       }
-    }, "📍 ", c.domicilio || '—')), React.createElement(MiniaturaQRCliente, {
+    }, "📍 ", localidadDeCliente(c) || 'Sin clasificar')), React.createElement(MiniaturaQRCliente, {
       cliente: c,
       onClick: () => verQR(c)
     }), React.createElement("button", {
@@ -758,7 +877,8 @@ function Clientes({
     }, puedeEditar && React.createElement(BOut, {
       onClick: () => {
         setForm({
-          ...c
+          ...c,
+          localidad: localidadCanonica(c.localidad || c.domicilio || '')
         });
         setExpandedId(null);
       },
@@ -872,16 +992,46 @@ function Clientes({
     style: {
       marginBottom: 10
     }
-  }), React.createElement(Lbl, null, "Domicilio"), React.createElement(Inp, {
-    value: form.domicilio,
-    onChange: e => setForm(f => ({
-      ...f,
-      domicilio: e.target.value
-    })),
+  }), React.createElement(Lbl, null, "Localidad (ejido o rancho)"), React.createElement("select", {
+    value: form.localidadNueva !== undefined ? LOCALIDAD_NUEVA : form.localidad || form.domicilio || '',
+    onChange: e => {
+      const valor = e.target.value;
+      if (valor === LOCALIDAD_NUEVA) {
+        setForm(f => ({ ...f, localidadNueva: '' }));
+      } else {
+        setForm(f => {
+          const siguiente = { ...f, localidad: valor };
+          delete siguiente.localidadNueva;
+          return siguiente;
+        });
+      }
+    },
     style: {
+      width: '100%',
+      padding: '9px 10px',
+      border: '1px solid var(--line-strong)',
+      borderRadius: 6,
+      background: 'var(--surface-2)',
+      color: 'var(--ink)',
+      fontSize: 13,
+      marginBottom: form.localidadNueva !== undefined ? 8 : 6
+    }
+  }, React.createElement("option", { value: '' }, 'Selecciona una localidad'), localidades.map(localidad => React.createElement("option", {
+    key: localidad,
+    value: localidad
+  }, localidad)), React.createElement("option", { value: LOCALIDAD_NUEVA }, '+ Crear nueva localidad…')), form.localidadNueva !== undefined && React.createElement(Inp, {
+    value: form.localidadNueva,
+    placeholder: 'Nombre de la nueva localidad',
+    onChange: e => setForm(f => ({ ...f, localidadNueva: e.target.value })),
+    style: { marginBottom: 6 }
+  }), React.createElement("div", {
+    style: {
+      fontSize: 11,
+      color: 'var(--ink-faint)',
+      lineHeight: 1.4,
       marginBottom: 16
     }
-  }), React.createElement(Lbl, null, "Ubicación exacta del domicilio"), React.createElement("div", {
+  }, 'Selecciona una localidad existente o crea una nueva. El nombre se reutilizará en futuros clientes.'), React.createElement(Lbl, null, "Ubicación exacta del domicilio"), React.createElement("div", {
     style: {
       marginBottom: 16
     }
@@ -989,7 +1139,8 @@ function Clientes({
     puedeEditar: puedeEditar,
     onEditar: () => {
       setForm({
-        ...detallesFor
+        ...detallesFor,
+        localidad: localidadCanonica(detallesFor.localidad || detallesFor.domicilio || '')
       });
       setDetallesFor(null);
     },

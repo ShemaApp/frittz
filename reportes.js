@@ -397,7 +397,9 @@ function Reportes({
           'Cliente ID': cliente.id || '',
           Cliente: cliente.nombre || '',
           Teléfono: cliente.telefono || '',
-          Domicilio: cliente.domicilio || '',
+          Localidad: cliente.localidad || cliente.domicilio || '',
+          'Fuente de localidad': cliente.localidad ? 'Campo localidad' : cliente.domicilio ? 'Domicilio heredado' : 'Sin clasificar',
+          'Domicilio histórico': cliente.localidad && cliente.domicilio && String(cliente.localidad).trim().toLocaleLowerCase('es') !== String(cliente.domicilio).trim().toLocaleLowerCase('es') ? cliente.domicilio : '',
           Activo: cliente.activo === false ? 'No' : 'Sí',
           'Código QR': qrTextForCliente(cliente.id),
           'Estado GPS': ubicacion.lat !== undefined && ubicacion.lng !== undefined ? 'Con GPS' : 'Sin GPS',
@@ -459,7 +461,7 @@ function Reportes({
       agregarHojaExcel(libro, 'Abonos', ['Crédito ID', 'Abono #', 'Fecha', 'Cliente ID', 'Cliente', 'Monto', 'Forma de pago', 'Capturado por UID', 'Capturado por'], abonosFilas, ['Monto'], ['Fecha']);
       agregarHojaExcel(libro, 'MovimientosInventario', ['Movimiento ID', 'Fecha', 'Producto ID', 'Producto', 'Stock anterior', 'Stock nuevo', 'Diferencia', 'Motivo', 'Usuario UID', 'Usuario', 'Correo usuario'], movimientosFilas, [], ['Fecha']);
       agregarHojaExcel(libro, 'Productos', ['Producto ID', 'Código de barras', 'Producto', 'Unidad', 'Precio actual', 'Stock actual', 'Activo'], productosFilas, ['Precio actual'], []);
-      agregarHojaExcel(libro, 'Clientes', ['Cliente ID', 'Cliente', 'Teléfono', 'Domicilio', 'Activo', 'Código QR', 'Estado GPS', 'GPS latitud', 'GPS longitud', 'GPS precisión (m)', 'Fecha GPS', 'Creado por UID'], clientesFilas, [], ['Fecha GPS']);
+      agregarHojaExcel(libro, 'Clientes', ['Cliente ID', 'Cliente', 'Teléfono', 'Localidad', 'Fuente de localidad', 'Domicilio histórico', 'Activo', 'Código QR', 'Estado GPS', 'GPS latitud', 'GPS longitud', 'GPS precisión (m)', 'Fecha GPS', 'Creado por UID'], clientesFilas, [], ['Fecha GPS']);
       XLSX.writeFile(libro, 'libro_operativo_productos_de_la_costa_' + new Date().toISOString().slice(0, 10) + '.xlsx', {
         compression: true,
         cellDates: true
@@ -480,8 +482,8 @@ function Reportes({
   };
   const [clientesQrGenerating, setClientesQrGenerating] = useState(false);
   const exportarClientesCSV = () => {
-    const rows = [['Nombre', 'Teléfono', 'Domicilio', 'Activo', 'Código QR']];
-    clientes.forEach(c => rows.push([c.nombre, c.telefono || '', c.domicilio || '', c.activo ? 'Sí' : 'No', qrTextForCliente(c.id)]));
+    const rows = [['Nombre', 'Teléfono', 'Localidad', 'Fuente de localidad', 'Activo', 'Código QR']];
+    clientes.forEach(c => rows.push([c.nombre, c.telefono || '', c.localidad || c.domicilio || '', c.localidad ? 'Campo localidad' : c.domicilio ? 'Domicilio heredado' : 'Sin clasificar', c.activo ? 'Sí' : 'No', qrTextForCliente(c.id)]));
     downloadCSV('clientes_qr_' + Date.now() + '.csv', rows);
   };
   const exportarClientesQRImprimible = () => {
