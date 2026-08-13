@@ -10,13 +10,13 @@ service cloud.firestore {
     // catch-all final para funcionar — ese catch-all solo existe para
     // bloquear colecciones NO anticipadas (typos, nombres nuevos que se
     // agreguen en el código sin agregar su regla aquí).
-    //   ✅ productos            ✅ notas              ✅ rutas_meta
+    //   ✅ productos            ✅ notas              ✅ rutas
     //   ✅ inventario_historial ✅ creditos           ✅ devoluciones
     //   ✅ clientes             ✅ rutas              ✅ gastos
     //   ✅ usuarios             ✅ _meta
     // Si agregas una colección nueva en el código: agrégala aquí también, o
-    // sus lecturas/escrituras van a fallar en silencio (ya nos pasó con
-    // rutas_meta y devoluciones — quedaron sin regla un tiempo).
+    // sus lecturas/escrituras van a fallar en silencio (ya nos ocurrió con
+    // una colección operativa sin regla explícita).
 
     // ── Helpers ──
     function signedIn() {
@@ -52,7 +52,10 @@ service cloud.firestore {
     // ── productos ──
     match /productos/{id} {
       allow read: if signedIn();
-      allow create, update: if permisoEdicion('productos');
+      allow create: if permisoEdicion('productos');
+      // Solo almacén (administrador o usuario con permiso) modifica el stock general.
+      // El repartidor vende desde su transferencia y nunca descuenta directamente productos.stock.
+      allow update: if permisoEdicion('productos');
       allow delete: if isAdmin();
     }
 
@@ -72,56 +75,77 @@ service cloud.firestore {
     // ── clientes ──
     match /clientes/{id} {
       allow read: if signedIn();
-      allow create, update: if permisoEdicion('clientes');
+      allow create: if permisoEdicion('clientes')
+        || (signedIn() && role() == 'repartidor' && request.resource.data.creadoPorUid == request.auth.uid);
+      allow update: if permisoEdicion('clientes');
       allow delete: if false;
     }
 
-    // ── notas (pedidos) ──
-    // Inmutables una vez creadas. Se exige que capturadoPorUid coincida con
-    // quien está autenticado, para que nadie registre una venta a nombre de otro.
+    // ── notas (ventas) ──
+    // Son inmutables. La venta desde transferencia exige una transacción que
+    // agregue su entrega a la misma transferencia del responsable autenticado.
     match /notas/{id} {
       allow read: if signedIn();
-      allow create: if signedIn() && request.resource.data.capturadoPorUid == request.auth.uid;
+      allow create: if signedIn() && request.resource.data.capturadoPorUid == request.auth.uid
+        && (
+          (request.resource.data.origen == 'almacen' && permisoEdicion('productos'))
+          || ((request.resource.data.origen == 'transferencia_almacen' || request.resource.data.origen == 'qr_cliente_ruta')
+            && request.resource.data.transferenciaId is string
+            && request.resource.data.rutaId == request.resource.data.transferenciaId
+            && (isAdmin() || getAfter(/databases/$(database)/documents/rutas/$(request.resource.data.transferenciaId)).data.repartidorId == request.auth.uid)
+            && getAfter(/databases/$(database)/documents/rutas/$(request.resource.data.transferenciaId)).data.estado == 'activa'
+            && getAfter(/databases/$(database)/documents/rutas/$(request.resource.data.transferenciaId)).data.entregas.size() == get(/databases/$(database)/documents/rutas/$(request.resource.data.transferenciaId)).data.entregas.size() + 1)
+        );
       allow update, delete: if false;
     }
 
     // ── creditos ──
     match /creditos/{id} {
       allow read: if signedIn();
-      allow create, update: if permisoEdicion('creditos');
+      allow create: if permisoEdicion('creditos')
+        || (signedIn() && role() == 'repartidor' && request.resource.data.capturadoPorUid == request.auth.uid);
+      allow update: if permisoEdicion('creditos');
       allow delete: if false;
     }
 
     // ── rutas ──
-    // "Cargar camión" (ruta.js). Ahora es una pantalla exclusiva de admin en
-    // la interfaz, así que la regla ya no necesita cubrir repartidor/usuario.
-    // Si algún día vuelves a dar este permiso a 'usuario' desde Configuración
-    // → Permisos, actualiza esta regla también (hoy no está en la lista de
-    // recursos de permisoEdicion, solo productos/clientes/creditos).
+    // La colección mantiene temporalmente la compatibilidad de nombre, pero cada documento
+    // representa una transferencia desde almacén. El repartidor opera solo sus propias transferencias.
     match /rutas/{id} {
-      allow read: if signedIn();
-      allow create, update: if isAdmin();
-      allow delete: if false;
-    }
-
-    // ── rutas_meta (asignación de repartidor/vehículo/zona + seguimiento
-    // GPS/checklist — panel de rutas-repartidores.js) ──
-    // Ownership real: admin puede todo (crear, reasignar, tomar una ruta si
-    // el repartidor asignado no se presenta a trabajar); un repartidor solo
-    // puede crear/actualizar rutas donde repartidorId sea su propio uid.
-    match /rutas_meta/{id} {
-      allow read: if signedIn();
-      allow create: if isAdmin()
-        || (signedIn() && role() == 'repartidor' && request.resource.data.repartidorId == request.auth.uid);
-      allow update: if isAdmin()
+      allow read: if isAdmin()
         || (signedIn() && role() == 'repartidor' && resource.data.repartidorId == request.auth.uid);
-      allow delete: if isAdmin();
+      allow create: if isAdmin();
+      allow update: if isAdmin()
+        || (signedIn() && role() == 'repartidor'
+          && resource.data.repartidorId == request.auth.uid
+          && request.resource.data.repartidorId == request.auth.uid
+          && (
+            // Mientras está abierta, el responsable comparte GPS o registra una venta.
+            (resource.data.estado == 'activa'
+              && request.resource.data.estado == 'activa'
+              && (
+                request.resource.data.diff(resource.data).affectedKeys().hasOnly(['ubicacionActual'])
+                || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['items', 'entregas'])
+                  && request.resource.data.entregas.size() == resource.data.entregas.size() + 1)
+              ))
+            // Al terminar, únicamente solicita que almacén reciba y concilie.
+            || (resource.data.estado == 'activa'
+              && request.resource.data.estado == 'pendiente_recepcion'
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+                'estado', 'estadoTransferencia', 'fechaSolicitudCierre',
+                'solicitadoPorUid', 'solicitadoPorNombre'
+              ])
+              && request.resource.data.solicitadoPorUid == request.auth.uid)
+          ));
+      allow delete: if false;
     }
 
     // ── devoluciones (usado por rutas-repartidores.js, panel de admin/repartidor) ──
     match /devoluciones/{id} {
       allow read: if signedIn();
-      allow create: if isAdmin() || (signedIn() && role() == 'repartidor');
+      allow create: if isAdmin()
+        || (signedIn() && role() == 'repartidor'
+          && request.resource.data.capturadoPorUid == request.auth.uid);
       allow update, delete: if isAdmin();
     }
 

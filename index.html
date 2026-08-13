@@ -15,13 +15,13 @@
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
 <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600;700&display=swap" rel="stylesheet"/>
-<script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
-<script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/firebase@10.13.0/firebase-app-compat.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/firebase@10.13.0/firebase-auth-compat.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/firebase@10.13.0/firebase-firestore-compat.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/firebase@10.13.0/firebase-app-check-compat.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<script defer crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script defer crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/firebase@10.13.0/firebase-app-compat.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/firebase@10.13.0/firebase-auth-compat.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/firebase@10.13.0/firebase-firestore-compat.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/firebase@10.13.0/firebase-app-check-compat.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <style>
   *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
   :root{
@@ -48,23 +48,25 @@
 </head>
 <body>
 <div id="root"><div style="display:flex;justify-content:center;align-items:center;height:100vh;color:var(--ink-soft);font-size:14px">Iniciando…</div></div>
-<script src="./firebase-init.js"></script>
-<script src="./app-core.js"></script>
-<script src="./sesion.js"></script>
-<script src="./auth.js"></script>
-<script src="./dashboard.js"></script>
-<script src="./productos.js"></script>
-<script src="./clientes.js"></script>
-<script src="./pedidos.js"></script>
-<script src="./creditos.js"></script>
-<script src="./ruta.js"></script>
-<script src="./config.js"></script>
-<script src="./app.js"></script>
-<script src="./rutas-repartidores.js"></script>
-<script src="./inventario.js"></script>
-<script src="./reportes.js"></script>
-<script src="./gerencia.js"></script>
-<script src="./permisos.js"></script>
+<!-- Archivo local no versionado: ver firebase-config.example.js -->
+<script defer src="./firebase-config.local.js"></script>
+<script defer src="./firebase-init.js"></script>
+<script defer src="./app-core.js"></script>
+<script defer src="./sesion.js"></script>
+<script defer src="./auth.js"></script>
+<script defer src="./dashboard.js"></script>
+<script defer src="./productos.js"></script>
+<script defer src="./clientes.js"></script>
+<script defer src="./pedidos.js"></script>
+<script defer src="./creditos.js"></script>
+<script defer src="./ruta.js"></script>
+<script defer src="./config.js"></script>
+<script defer src="./app.js"></script>
+<script defer src="./rutas-repartidores.js"></script>
+<script defer src="./inventario.js"></script>
+<script defer src="./reportes.js"></script>
+<script defer src="./gerencia.js"></script>
+<script defer src="./permisos.js"></script>
 <script>
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {

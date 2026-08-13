@@ -10,7 +10,7 @@
 
 /* ── Modelo de permisos: constantes de rol + helpers de acceso ──
    (movido de app-core.js, sin cambios de lógica) */
-const TABS_INFO = [['productos', '📦', 'Productos'], ['nota', '🧾', 'Pedido'], ['clientes', '👥', 'Clientes'], ['creditos', '💳', 'Créditos'], ['ruta', '🚚', 'Ruta'], ['repartidores', '🧭', 'Rutas repartidores'], ['inventario', '📋', 'Inventario'], ['reportes', '📈', 'Reportes'], ['gerencia', '💰', 'Gerencia']];
+const TABS_INFO = [['productos', '📦', 'Productos'], ['nota', '🧾', 'Venta de almacén'], ['clientes', '👥', 'Clientes'], ['creditos', '💳', 'Créditos'], ['ruta', '📦', 'Transferencias'], ['repartidores', '🧭', 'Distribución'], ['inventario', '📋', 'Inventario'], ['reportes', '📈', 'Reportes'], ['gerencia', '💰', 'Gerencia']];
 const EDICION_INFO = [['productos', '📦', 'Editar / dar de alta productos'], ['clientes', '👥', 'Editar / dar de alta clientes'], ['creditos', '💳', 'Registrar abonos a créditos']];
 const ACCIONES_INFO = [['camara', '📷', 'Usar cámara (escanear QR de cliente)'], ['csv', '📄', 'Descargar reportes en CSV'], ['gps', '📍', 'Compartir ubicación en vivo (GPS)'], ['password', '🔑', 'Cambiar su propia contraseña']];
 const ACCIONES_DEFAULT_ROL = {
@@ -62,10 +62,10 @@ const TABS_DEFAULT_ROL = {
   },
   repartidor: {
     productos: false,
-    nota: true,
+    nota: false,
     clientes: false,
     creditos: false,
-    ruta: false,
+    ruta: true,
     repartidores: true,
     inventario: false,
     reportes: false,
@@ -264,28 +264,48 @@ function useSesion() {
 
   useEffect(() => {
     const unsub = auth.onAuthStateChanged(async fbUser => {
-      if (fbUser) {
-        try {
-          const ref = db.collection('usuarios').doc(fbUser.uid);
-          const snap = await ref.get();
-          let perfil;
-          if (snap.exists) {
-            perfil = snap.data();
-          } else {
-            // Primer inicio de sesión sin perfil: se crea como admin (útil
-            // para la primera cuenta del sistema).
-            perfil = {
-              nombre: fbUser.email.split('@')[0],
-              email: fbUser.email,
-              role: 'admin'
-            };
-            await ref.set(perfil);
-          }
-          setCurrentUser({
-            uid: fbUser.uid,
-            ...perfil
-          });
-        } catch (e) {
+      if (!fbUser) {
+        setCurrentUser(null);
+        setAuthChecked(true);
+        return;
+      }
+
+      const cacheKey = `perfil_sesion_v1_${fbUser.uid}`;
+      let perfilCache = null;
+      try {
+        perfilCache = JSON.parse(localStorage.getItem(cacheKey) || 'null');
+      } catch (e) {
+        localStorage.removeItem(cacheKey);
+      }
+
+      // La pantalla no queda detenida por la lectura remota cuando ya existe
+      // una sesión conocida. Firestore sigue refrescando el perfil en segundo
+      // plano y prevalece sobre la copia local en cuanto responde.
+      if (perfilCache && perfilCache.email === fbUser.email && perfilCache.role) {
+        setCurrentUser({ uid: fbUser.uid, ...perfilCache });
+        setAuthChecked(true);
+      }
+
+      try {
+        const ref = db.collection('usuarios').doc(fbUser.uid);
+        const snap = await ref.get();
+        let perfil;
+        if (snap.exists) {
+          perfil = snap.data();
+        } else {
+          // Primer inicio de sesión sin perfil: se crea como admin (útil
+          // para la primera cuenta del sistema).
+          perfil = {
+            nombre: fbUser.email.split('@')[0],
+            email: fbUser.email,
+            role: 'admin'
+          };
+          await ref.set(perfil);
+        }
+        localStorage.setItem(cacheKey, JSON.stringify(perfil));
+        setCurrentUser({ uid: fbUser.uid, ...perfil });
+      } catch (e) {
+        if (!perfilCache) {
           setCurrentUser({
             uid: fbUser.uid,
             nombre: fbUser.email,
@@ -293,10 +313,9 @@ function useSesion() {
             role: 'usuario'
           });
         }
-      } else {
-        setCurrentUser(null);
+      } finally {
+        setAuthChecked(true);
       }
-      setAuthChecked(true);
     });
     return unsub;
   }, []);
@@ -352,6 +371,11 @@ function useSesion() {
       ...p,
       [col]: snap.docs.filter(d => d.metadata.hasPendingWrites).length
     }));
+    const rutasQuery = currentUser.role === 'repartidor'
+      ? db.collection('rutas').where('repartidorId', '==', currentUser.uid)
+      : currentUser.role === 'admin'
+        ? db.collection('rutas').orderBy('fecha', 'desc').limit(100)
+        : null;
     const unsubs = [db.collection('productos').onSnapshot({
       includeMetadataChanges: true
     }, snap => {
@@ -384,15 +408,14 @@ function useSesion() {
         ...d.data()
       })));
       pend('creditos', snap);
-    }, errorHandler), db.collection('rutas').orderBy('fecha', 'desc').limit(100).onSnapshot({
+    }, errorHandler), ...(rutasQuery ? [rutasQuery.onSnapshot({
       includeMetadataChanges: true
     }, snap => {
-      setRutas(snap.docs.map(d => ({
-        id: d.id,
-        ...d.data()
-      })));
+      const transferencias = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      transferencias.sort((a, b) => new Date(b.fecha || 0) - new Date(a.fecha || 0));
+      setRutas(transferencias.slice(0, 100));
       pend('rutas', snap);
-    }, errorHandler)];
+    }, errorHandler)] : [() => setRutas([])])];
     return () => unsubs.forEach(u => u());
   }, [currentUser]);
 

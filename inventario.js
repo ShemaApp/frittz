@@ -115,7 +115,9 @@ function Inventario({
         motivo: devMotivo,
         accion: devAccion,
         usuarioNombre: currentUser.nombre || '',
-        usuarioEmail: currentUser.email || ''
+        usuarioEmail: currentUser.email || '',
+        capturadoPorUid: currentUser.uid,
+        capturadoPorNombre: currentUser.nombre || ''
       });
       if (devAccion === 'reingreso') {
         const nuevo = devProdSel.stock + cant;

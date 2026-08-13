@@ -77,18 +77,22 @@ function Dashboard({
   const misNotasHoy = vhoy.filter(n => n.capturadoPorUid === currentUser.uid);
   const miVentaEfectivoHoy = misNotasHoy.filter(n => esEfectivo(n.formaPago)).reduce((s, n) => s + n.total, 0);
   const misClientesHoy = new Set(misNotasHoy.map(n => n.clienteId)).size;
-  const rutaActiva = (rutas || []).find(r => r.estado === 'activa');
-  const acciones = [...(!isRepartidor ? [{
+  const rutaActiva = (rutas || []).find(r => r.estado === 'activa' && (!isRepartidor || r.repartidorId === currentUser.uid));
+  const acciones = isRepartidor ? [{
+    icon: '📦',
+    label: 'Mi transferencia',
+    onClick: () => onIrA('repartidores')
+  }] : [{
     icon: '📦',
     label: 'Agregar producto',
     onClick: onAgregarProducto
-  }] : []), {
+  }, {
     icon: '🧾',
-    label: 'Agregar pedido',
+    label: 'Venta de almacén',
     onClick: () => onIrA('nota')
   }, {
     icon: '⚡',
-    label: 'Venta rápida',
+    label: 'Venta de mostrador',
     onClick: onVentaRapida
   }, {
     icon: '💰',
@@ -118,7 +122,7 @@ function Dashboard({
     }
   }, isRepartidor ? React.createElement(React.Fragment, null, React.createElement(StatTile, {
     value: misNotasHoy.length,
-    label: "Entregas de hoy",
+    label: "Ventas de transferencia hoy",
     bg: "var(--rail)",
     color: "var(--rail-ink)",
     onClick: () => onIrA('ruta')
@@ -135,8 +139,8 @@ function Dashboard({
     color: "#fff",
     onClick: () => onIrA('ruta')
   }), React.createElement(StatTile, {
-    value: rutaActiva ? 'Activa' : 'Sin ruta',
-    label: "Estado de tu ruta",
+    value: rutaActiva ? 'Activa' : 'Sin transferencia',
+    label: "Estado de tu transferencia",
     bg: rutaActiva ? 'var(--ok)' : 'var(--warn)',
     color: "#fff",
     onClick: () => onIrA('ruta')

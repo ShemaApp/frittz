@@ -67,76 +67,71 @@ function CrearNota({
     if (!canSave) return;
     setSaving(true);
     try {
-      const stockErrors = [];
-      cartValido.forEach(item => {
-        const producto = productos.find(p => p.id === item.id);
-        if (!producto || producto.stock < item.cant) stockErrors.push(`${item.nombre} (disponible: ${producto?.stock || 0}, solicitado: ${item.cant})`);
-      });
-      if (stockErrors.length > 0) {
-        alert('❌ Stock insuficiente:\n' + stockErrors.join('\n'));
-        setSaving(false);
-        return;
-      }
-      let cl = cliSel;
-      if (cliMode === 'nuevo') {
-        const ref = await db.collection('clientes').add({
-          nombre: nuevoC.nombre,
-          telefono: nuevoC.telefono || '',
-          domicilio: '',
-          activo: true
-        });
-        cl = {
-          id: ref.id,
-          nombre: nuevoC.nombre,
-          telefono: nuevoC.telefono || ''
-        };
-      }
+      const fecha = new Date().toISOString();
+      const clienteRef = cliMode === 'nuevo' ? db.collection('clientes').doc() : db.collection('clientes').doc(cliSel.id);
+      const cl = cliMode === 'nuevo' ? {
+        id: clienteRef.id,
+        nombre: nuevoC.nombre,
+        telefono: nuevoC.telefono || ''
+      } : cliSel;
+      const notaRef = db.collection('notas').doc();
+      const creditoRef = pago === 'credito' ? db.collection('creditos').doc() : null;
       const nota = {
-        fecha: new Date().toISOString(),
+        fecha,
         clienteId: cl.id,
         clienteNombre: cl.nombre,
         clienteTelefono: cl.telefono || '',
-        items: cartValido.map(x => ({
-          ...x
-        })),
+        items: cartValido.map(x => ({ ...x })),
         total,
         formaPago: pago,
+        origen: 'almacen',
         capturadoPorUid: currentUser.uid,
-        capturadoPorNombre: currentUser.nombre
+        capturadoPorNombre: currentUser.nombre || ''
       };
-      const notaRef = await db.collection('notas').add(nota);
-      if (pago === 'credito') await db.collection('creditos').add({
-        notaId: notaRef.id,
-        clienteId: cl.id,
-        clienteNombre: cl.nombre,
-        fecha: nota.fecha,
-        total,
-        saldo: total,
-        abonos: []
-      });
-      const batch = db.batch();
-      cartValido.forEach(item => {
-        batch.update(db.collection('productos').doc(item.id), {
-          stock: firebase.firestore.FieldValue.increment(-item.cant)
+      await db.runTransaction(async tx => {
+        const existencias = await Promise.all(cartValido.map(item => tx.get(db.collection('productos').doc(item.id))));
+        existencias.forEach((snap, index) => {
+          const item = cartValido[index];
+          const disponible = snap.exists ? Number(snap.data().stock || 0) : 0;
+          if (disponible < item.cant) {
+            throw new Error('Stock insuficiente para ' + item.nombre + ' (disponible: ' + disponible + ', solicitado: ' + item.cant + ')');
+          }
+        });
+        if (cliMode === 'nuevo') {
+          tx.set(clienteRef, {
+            nombre: cl.nombre,
+            telefono: cl.telefono,
+            domicilio: '',
+            activo: true,
+            creadoPorUid: currentUser.uid
+          });
+        }
+        tx.set(notaRef, nota);
+        if (creditoRef) {
+          tx.set(creditoRef, {
+            notaId: notaRef.id,
+            clienteId: cl.id,
+            clienteNombre: cl.nombre,
+            fecha,
+            total,
+            saldo: total,
+            abonos: [],
+            capturadoPorUid: currentUser.uid
+          });
+        }
+        cartValido.forEach(item => {
+          tx.update(db.collection('productos').doc(item.id), {
+            stock: firebase.firestore.FieldValue.increment(-item.cant)
+          });
         });
       });
-      await batch.commit();
-      setDone({
-        nota: {
-          ...nota,
-          id: notaRef.id
-        },
-        cl
-      });
+      setDone({ nota: { ...nota, id: notaRef.id }, cl });
       setCart([]);
       setCliSel(null);
-      setNuevoC({
-        nombre: '',
-        telefono: ''
-      });
+      setNuevoC({ nombre: '', telefono: '' });
       setCliMode('buscar');
     } catch (e) {
-      alert('Error al guardar el pedido: ' + e.message);
+      alert('Error al guardar la venta de almacén: ' + e.message);
     }
     setSaving(false);
   };
@@ -156,7 +151,7 @@ function CrearNota({
       fontWeight: 700,
       marginBottom: 4
     }
-  }, "Pedido guardado"), React.createElement("div", {
+  }, "Venta de almacén registrada"), React.createElement("div", {
     style: {
       color: 'var(--ink-soft)',
       marginBottom: 24
@@ -175,7 +170,7 @@ function CrearNota({
     style: {
       width: '100%'
     }
-  }, "+ Nuevo pedido"));
+  }, "+ Nueva venta de almacén"));
   return React.createElement("div", {
     style: {
       padding: '16px 12px'
@@ -186,7 +181,7 @@ function CrearNota({
       fontWeight: 800,
       marginBottom: 12
     }
-  }, "🧾 Crear Pedido"), React.createElement(Card, null, React.createElement("button", {
+  }, "🧾 Venta de almacén"), React.createElement(Card, null, React.createElement("button", {
     onClick: () => setCliOpen(o => !o),
     style: {
       background: 'none',

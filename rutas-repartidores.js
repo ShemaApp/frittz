@@ -207,21 +207,13 @@ function waVentaLink(cliente, items, total, pago) {
   return `https://wa.me/${tel}?text=${encodeURIComponent(texto)}`;
 }
 const ESTADOS = {
-  pendiente: {
-    label: 'Pendiente',
-    color: '#8B8F84'
-  },
-  en_curso: {
+  activa: {
     label: 'En curso',
     color: '#3E7CA6'
   },
-  completada: {
-    label: 'Completada',
+  cerrada: {
+    label: 'Cerrada',
     color: '#2E8B45'
-  },
-  cancelada: {
-    label: 'Cancelada',
-    color: '#C23B2E'
   }
 };
 function getLoc() {
@@ -285,286 +277,6 @@ const lblStyle = {
   letterSpacing: '.5px'
 };
 const uidx = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
-function totalesParadas(paradas) {
-  const map = {};
-  (paradas || []).forEach(p => (p.items || []).forEach(it => {
-    map[it.id] = map[it.id] || {
-      nombre: it.nombre,
-      cant: 0
-    };
-    map[it.id].cant += it.cant;
-  }));
-  return Object.values(map);
-}
-function ParadaBuilder({
-  clientes,
-  productos,
-  paradas,
-  onChange
-}) {
-  const [cliSearch, setCliSearch] = useState('');
-  const [cliSel, setCliSel] = useState(null);
-  const [prodSearch, setProdSearch] = useState('');
-  const [draftItems, setDraftItems] = useState([]);
-  const cliFilt = clientes.filter(c => c.activo && c.nombre.toLowerCase().includes(cliSearch.toLowerCase()));
-  const prodFilt = productos.filter(p => p.nombre.toLowerCase().includes(prodSearch.toLowerCase()));
-  const addProd = p => setDraftItems(items => {
-    const ex = items.find(x => x.id === p.id);
-    return ex ? items.map(x => x.id === p.id ? {
-      ...x,
-      cant: x.cant + 1
-    } : x) : [...items, {
-      id: p.id,
-      nombre: p.nombre,
-      cant: 1
-    }];
-  });
-  const updQty = (id, v) => {
-    if (v < 1) {
-      setDraftItems(items => items.filter(x => x.id !== id));
-      return;
-    }
-    setDraftItems(items => items.map(x => x.id === id ? {
-      ...x,
-      cant: v
-    } : x));
-  };
-  const agregarParada = () => {
-    if (!cliSel || draftItems.length === 0) return;
-    onChange([...(paradas || []), {
-      id: uidx(),
-      clienteId: cliSel.id,
-      clienteNombre: cliSel.nombre,
-      clienteTelefono: cliSel.telefono || '',
-      items: draftItems,
-      visitado: false
-    }]);
-    setCliSel(null);
-    setCliSearch('');
-    setDraftItems([]);
-    setProdSearch('');
-  };
-  const quitarParada = id => onChange((paradas || []).filter(p => p.id !== id));
-  return React.createElement("div", null, (paradas || []).length > 0 && React.createElement("div", {
-    style: {
-      marginBottom: 12
-    }
-  }, paradas.map((p, i) => React.createElement("div", {
-    key: p.id,
-    style: {
-      background: 'var(--surface-2)',
-      borderRadius: 8,
-      padding: '8px 10px',
-      marginBottom: 6,
-      display: 'flex',
-      justifyContent: 'space-between',
-      alignItems: 'flex-start'
-    }
-  }, React.createElement("div", null, React.createElement("div", {
-    style: {
-      fontSize: 12,
-      fontWeight: 700
-    }
-  }, i + 1, ". ", p.clienteNombre), React.createElement("div", {
-    style: {
-      fontSize: 11,
-      color: 'var(--ink-faint)'
-    }
-  }, p.items.map(it => `${it.nombre} x${it.cant}`).join(', '))), React.createElement("button", {
-    onClick: () => quitarParada(p.id),
-    style: {
-      background: 'none',
-      border: 'none',
-      color: 'var(--danger-text)',
-      cursor: 'pointer',
-      fontSize: 14
-    }
-  }, "✕")))), React.createElement("div", {
-    style: lblStyle
-  }, "Cliente a visitar"), cliSel ? React.createElement("div", {
-    style: {
-      display: 'flex',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      background: 'var(--surface-2)',
-      borderRadius: 8,
-      padding: '8px 10px',
-      marginBottom: 10
-    }
-  }, React.createElement("span", {
-    style: {
-      fontSize: 13,
-      color: 'var(--accent)',
-      fontWeight: 700
-    }
-  }, cliSel.nombre), React.createElement("button", {
-    onClick: () => setCliSel(null),
-    style: {
-      background: 'none',
-      border: 'none',
-      color: 'var(--ink-soft)',
-      cursor: 'pointer'
-    }
-  }, "✕")) : React.createElement(React.Fragment, null, React.createElement("input", {
-    value: cliSearch,
-    onChange: e => setCliSearch(e.target.value),
-    placeholder: "Buscar cliente…",
-    style: inputStyle
-  }), React.createElement("div", {
-    style: {
-      maxHeight: 130,
-      overflowY: 'auto',
-      marginBottom: 10
-    }
-  }, cliFilt.map(c => React.createElement("div", {
-    key: c.id,
-    onClick: () => setCliSel(c),
-    style: {
-      padding: '7px 8px',
-      borderRadius: 6,
-      cursor: 'pointer',
-      fontSize: 13
-    }
-  }, c.nombre)))), cliSel && React.createElement(React.Fragment, null, React.createElement("div", {
-    style: lblStyle
-  }, "Productos a llevar"), React.createElement("input", {
-    value: prodSearch,
-    onChange: e => setProdSearch(e.target.value),
-    placeholder: "Buscar producto…",
-    style: inputStyle
-  }), React.createElement("div", {
-    style: {
-      maxHeight: 130,
-      overflowY: 'auto',
-      marginBottom: 10
-    }
-  }, prodFilt.map(p => React.createElement("div", {
-    key: p.id,
-    style: {
-      display: 'flex',
-      justifyContent: 'space-between',
-      padding: '6px 0',
-      borderBottom: '1px solid var(--line)'
-    }
-  }, React.createElement("span", {
-    style: {
-      fontSize: 12
-    }
-  }, p.nombre), React.createElement("button", {
-    onClick: () => addProd(p),
-    style: {
-      background: 'var(--info-bg)',
-      color: 'var(--info-text)',
-      border: 'none',
-      borderRadius: 6,
-      padding: '3px 9px',
-      fontSize: 11,
-      cursor: 'pointer'
-    }
-  }, "+ Agregar")))), draftItems.length > 0 && React.createElement("div", {
-    style: {
-      marginBottom: 10
-    }
-  }, draftItems.map(it => React.createElement("div", {
-    key: it.id,
-    style: {
-      display: 'flex',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      marginBottom: 6
-    }
-  }, React.createElement("span", {
-    style: {
-      fontSize: 12,
-      flex: 1
-    }
-  }, it.nombre), React.createElement("button", {
-    onClick: () => updQty(it.id, it.cant - 1),
-    style: {
-      background: 'var(--line-strong)',
-      border: 'none',
-      color: 'var(--ink)',
-      borderRadius: 6,
-      width: 22,
-      height: 22,
-      cursor: 'pointer'
-    }
-  }, "-"), React.createElement("input", {
-    type: "number",
-    min: "1",
-    value: it.cant,
-    onChange: e => {
-      const v = e.target.value;
-      if (v === '') return;
-      const n = parseInt(v);
-      if (!isNaN(n) && n >= 1) updQty(it.id, n);
-    },
-    onBlur: e => {
-      if (!e.target.value || parseInt(e.target.value) < 1) updQty(it.id, 1);
-    },
-    style: {
-      width: 36,
-      textAlign: 'center',
-      fontSize: 12,
-      background: 'var(--surface-2)',
-      border: '1px solid var(--line-strong)',
-      borderRadius: 6,
-      color: 'var(--ink)',
-      padding: '3px 2px'
-    }
-  }), React.createElement("button", {
-    onClick: () => updQty(it.id, it.cant + 1),
-    style: {
-      background: 'var(--line-strong)',
-      border: 'none',
-      color: 'var(--ink)',
-      borderRadius: 6,
-      width: 22,
-      height: 22,
-      cursor: 'pointer'
-    }
-  }, "+"))), React.createElement("button", {
-    onClick: agregarParada,
-    style: {
-      width: '100%',
-      background: 'var(--ok-bg)',
-      color: 'var(--ok-text)',
-      border: 'none',
-      borderRadius: 8,
-      padding: 9,
-      fontWeight: 700,
-      cursor: 'pointer',
-      fontSize: 12,
-      marginTop: 4
-    }
-  }, "✓ Agregar parada"))));
-}
-function imprimirQRHTML(cliente, dataURL) {
-  return `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"/><title>QR — ${cliente.nombre}</title>
-      <style>
-        *{box-sizing:border-box;font-family:system-ui,-apple-system,sans-serif}
-        body{padding:24px;color:#1B1D19;text-align:center}
-        img{width:240px;height:240px;margin:12px auto}
-        h1{font-size:18px;margin-bottom:2px}
-        p{color:#585D53;font-size:13px}
-        @media print{ button{display:none} }
-      </style></head><body>
-      <h1>${cliente.nombre}</h1>
-      <p>${cliente.telefono || ''}${cliente.domicilio ? ' · ' + cliente.domicilio : ''}</p>
-      ${dataURL ? `<img src="${dataURL}"/>` : '<p>No se pudo generar el QR</p>'}
-      <p>Escanea este código al entregar para abrir la nota de este cliente.</p>
-      <button onclick="window.print()" style="margin-top:14px;background:#E8A400;border:none;border-radius:8px;padding:10px 18px;font-weight:700;cursor:pointer">🖨️ Imprimir</button>
-      </body></html>`;
-}
-function imprimirQR(cliente, dataURL) {
-  const w = window.open('', '_blank');
-  if (!w) {
-    alert('Habilita las ventanas emergentes para imprimir el QR.');
-    return;
-  }
-  w.document.write(imprimirQRHTML(cliente, dataURL));
-  w.document.close();
-}
 function ClienteScanner({
   onDetected,
   onClose
@@ -665,6 +377,82 @@ function ClienteScanner({
     }
   })));
 }
+function RutaActivaCard({ ruta, currentUser, puedeGps, tracking, onTracking, onCerrar }) {
+  const puedeOperar = currentUser.role === 'admin' || ruta.repartidorId === currentUser.uid;
+  const resumen = resumenRuta(ruta);
+  const inventario = Object.entries(ruta.items || {}).map(([id, item]) => React.createElement("div", {
+    key: id,
+    style: {
+      display: 'flex',
+      justifyContent: 'space-between',
+      fontSize: 12,
+      marginBottom: 3
+    }
+  }, React.createElement("span", null, item.nombre), React.createElement("strong", null, item.cantRestante, " / ", item.cantCargada, " ", item.unidad)));
+  const acciones = puedeOperar ? React.createElement("div", {
+    key: 'acciones',
+    style: { display: 'flex', gap: 8, marginTop: 9 }
+  }, [puedeGps && React.createElement("button", {
+    key: 'gps',
+    onClick: onTracking,
+    style: {
+      flex: 1,
+      background: tracking ? 'var(--warn-bg)' : 'var(--surface-2)',
+      color: tracking ? 'var(--warn-text)' : 'var(--ink-soft)',
+      border: '1px solid var(--line-strong)',
+      borderRadius: 8,
+      padding: 8,
+      fontWeight: 700,
+      cursor: 'pointer',
+      fontSize: 11
+    }
+  }, tracking ? '📍 GPS activo' : '📍 Compartir GPS'), React.createElement("button", {
+    key: 'cerrar',
+    onClick: onCerrar,
+    style: {
+      flex: 1,
+      background: 'var(--ok-bg)',
+      color: 'var(--ok-text)',
+      border: '1px solid var(--ok)',
+      borderRadius: 8,
+      padding: 8,
+      fontWeight: 700,
+      cursor: 'pointer',
+      fontSize: 11
+    }
+  }, '🏁 Cerrar ruta')]) : null;
+  return React.createElement("div", {
+    style: {
+      background: 'var(--surface)',
+      borderRadius: 12,
+      padding: 14,
+      marginBottom: 10
+    }
+  }, [React.createElement("div", {
+    key: 'titulo',
+    style: { display: 'flex', justifyContent: 'space-between', gap: 10, marginBottom: 7 }
+  }, React.createElement("div", null, React.createElement("strong", null, ruta.repartidorNombre || 'Sin repartidor'), React.createElement("div", {
+    style: { fontSize: 11, color: 'var(--ink-faint)', marginTop: 2 }
+  }, "🚐 ", ruta.vehiculo || 'Sin vehículo', " · 📍 ", ruta.zona || 'Sin zona')), React.createElement("span", {
+    style: {
+      background: ESTADOS.activa.color + '22',
+      color: ESTADOS.activa.color,
+      borderRadius: 20,
+      padding: '3px 9px',
+      fontSize: 11,
+      fontWeight: 700,
+      height: 'fit-content'
+    }
+  }, ESTADOS.activa.label)), React.createElement("div", {
+    key: 'resumen',
+    style: { display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--ink-soft)', marginBottom: 9 }
+  }, React.createElement("span", null, "Salida: ", fDateTime(ruta.fechaSalidaReal || ruta.fecha)), React.createElement("span", null, resumen.entregas.length, " venta(s) · ", fmtx(resumen.totalVendido))), React.createElement("div", {
+    key: 'inventario',
+    style: { background: 'var(--surface-2)', borderRadius: 8, padding: 10 }
+  }, inventario.length ? inventario : React.createElement("div", {
+    style: { fontSize: 12, color: 'var(--ink-faint)' }
+  }, "Sin productos cargados")), acciones]);
+}
 function RepartidoresPanel({
   productos,
   clientes,
@@ -673,9 +461,7 @@ function RepartidoresPanel({
   onIrA
 }) {
   const [tab, setTab] = useState('activas');
-  const [rutas, setRutas] = useState([]);
-  const [planEditFor, setPlanEditFor] = useState(null);
-  const [expandPlan, setExpandPlan] = useState(null);
+  const rutas = rutasReales || [];
   const [waFor, setWaFor] = useState(null);
   const [waPhone, setWaPhone] = useState('');
   const [expandComp, setExpandComp] = useState(null);
@@ -710,140 +496,9 @@ function RepartidoresPanel({
     setTimeout(() => setMsg(''), 3000);
   };
   useEffect(() => {
-    if (!currentUser) return;
-    const unsub = dbx.collection('rutas_meta').orderBy('fechaCreacion', 'desc').limit(200).onSnapshot(snap => setRutas(snap.docs.map(d => ({
-      id: d.id,
-      ...d.data()
-    }))), () => {});
-    let unsubB = () => {};
-    if (currentUser.role === 'admin') {
-      unsubB = dbx.collection('_meta').doc('backups').onSnapshot(snap => setBackupMeta(snap.exists ? snap.data() : null), () => {});
-    }
-    return () => {
-      unsub();
-      unsubB();
-    };
-  }, [currentUser]);
-  const actualizarParadas = async (rutaId, nuevasParadas) => {
-    try {
-      await dbx.collection('rutas_meta').doc(rutaId).update({
-        paradas: nuevasParadas
-      });
-    } catch (e) {
-      flash('❌ ' + e.message);
-    }
-  };
-  const [confirmFor, setConfirmFor] = useState(null);
-  const [confirmItems, setConfirmItems] = useState([]);
-  const [confirmPago, setConfirmPago] = useState('contado');
-  const [confirmSaving, setConfirmSaving] = useState(false);
-  const abrirConfirmacion = (r, p) => {
-    setConfirmFor({
-      rutaId: r.id,
-      paradaId: p.id
-    });
-    setConfirmItems(p.items.map(it => ({
-      ...it
-    })));
-    setConfirmPago('contado');
-  };
-  const updConfirmQty = (id, v) => {
-    if (v < 1) {
-      setConfirmItems(items => items.filter(x => x.id !== id));
-      return;
-    }
-    setConfirmItems(items => items.map(x => x.id === id ? {
-      ...x,
-      cant: v
-    } : x));
-  };
-  const confirmarEntrega = async (r, p) => {
-    if (confirmItems.length === 0) {
-      flash('⚠️ Agrega al menos un producto');
-      return;
-    }
-    setConfirmSaving(true);
-    try {
-      const faltantes = [];
-      confirmItems.forEach(item => {
-        const prod = productos.find(x => x.id === item.id);
-        if (!prod || prod.stock < item.cant) faltantes.push(`${item.nombre} (disp: ${prod ? prod.stock : 0}, pedido: ${item.cant})`);
-      });
-      if (faltantes.length > 0) {
-        flash('❌ Sin stock: ' + faltantes.join(', '));
-        setConfirmSaving(false);
-        return;
-      }
-      const total = confirmItems.reduce((s, it) => {
-        const prod = productos.find(x => x.id === it.id);
-        return s + (prod ? prod.precio : 0) * it.cant;
-      }, 0);
-      const itemsConPrecio = confirmItems.map(it => {
-        const prod = productos.find(x => x.id === it.id);
-        return {
-          id: it.id,
-          nombre: it.nombre,
-          cant: it.cant,
-          precio: prod ? prod.precio : 0
-        };
-      });
-      const loc = await getLoc();
-      const clienteReg = clientes.find(x => x.id === p.clienteId);
-      const ubicacionVenta = loc && clienteReg && clienteReg.ubicacion ? {
-        ok: distanciaMetros(loc.lat, loc.lng, clienteReg.ubicacion.lat, clienteReg.ubicacion.lng) <= RADIO_VISITA_METROS,
-        distanciaM: Math.round(distanciaMetros(loc.lat, loc.lng, clienteReg.ubicacion.lat, clienteReg.ubicacion.lng))
-      } : {
-        ok: null,
-        distanciaM: null
-      };
-      const batch = dbx.batch();
-      const notaRef = dbx.collection('notas').doc();
-      batch.set(notaRef, {
-        fecha: new Date().toISOString(),
-        clienteId: p.clienteId,
-        clienteNombre: p.clienteNombre,
-        clienteTelefono: p.clienteTelefono || '',
-        items: itemsConPrecio,
-        total,
-        formaPago: confirmPago,
-        rutaMetaId: r.id,
-        ubicacionVenta,
-        capturadoPorUid: currentUser.uid,
-        capturadoPorNombre: currentUser.nombre || ''
-      });
-      if (confirmPago === 'credito') {
-        batch.set(dbx.collection('creditos').doc(), {
-          notaId: notaRef.id,
-          clienteId: p.clienteId,
-          clienteNombre: p.clienteNombre,
-          fecha: new Date().toISOString(),
-          total,
-          saldo: total,
-          abonos: []
-        });
-      }
-      itemsConPrecio.forEach(it => {
-        batch.update(dbx.collection('productos').doc(it.id), {
-          stock: firebase.firestore.FieldValue.increment(-it.cant)
-        });
-      });
-      await batch.commit();
-      const nuevas = (r.paradas || []).map(x => x.id === p.id ? {
-        ...x,
-        visitado: true,
-        notaId: notaRef.id,
-        totalEntregado: total,
-        formaPago: confirmPago,
-        fechaEntrega: new Date().toISOString()
-      } : x);
-      await actualizarParadas(r.id, nuevas);
-      setConfirmFor(null);
-      flash('✅ Entrega registrada — ' + fmtx(total));
-    } catch (e) {
-      flash('❌ ' + e.message);
-    }
-    setConfirmSaving(false);
-  };
+    if (currentUser?.role !== 'admin') return;
+    return dbx.collection('_meta').doc('backups').onSnapshot(snap => setBackupMeta(snap.exists ? snap.data() : null), () => {});
+  }, [currentUser?.role]);
   const descargarZonaOffline = async () => {
     if (!mapInstance.current) return;
     const bounds = mapInstance.current.getBounds();
@@ -922,7 +577,7 @@ function RepartidoresPanel({
   }, [tab]);
   useEffect(() => {
     if (!mapReady || !mapInstance.current) return;
-    const activas = rutas.filter(r => r.estado === 'en_curso' && r.ubicacionActual);
+    const activas = rutas.filter(r => r.estado === 'activa' && r.ubicacionActual);
     Object.keys(markersRef.current).forEach(id => {
       if (!activas.find(r => r.id === id)) {
         mapInstance.current.removeLayer(markersRef.current[id]);
@@ -948,44 +603,20 @@ function RepartidoresPanel({
       padding: [30, 30]
     });
   }, [rutas, mapReady]);
-  const iniciar = async r => {
-    const loc = await getLoc();
+  const cerrarRuta = async r => {
     try {
-      await dbx.collection('rutas_meta').doc(r.id).update({
-        estado: 'en_curso',
-        fechaSalidaReal: new Date().toISOString(),
-        ...(loc ? {
-          ubicacionInicio: loc,
-          ubicacionActual: loc
-        } : {})
+      await dbx.collection('rutas').doc(r.id).update({
+        estado: 'pendiente_recepcion',
+        estadoTransferencia: 'pendiente_recepcion',
+        fechaSolicitudCierre: new Date().toISOString(),
+        solicitadoPorUid: currentUser.uid,
+        solicitadoPorNombre: currentUser.nombre || ''
       });
-      flash('🚀 Ruta iniciada');
+      if (tracking === r.id) detenerSeguimiento();
+      flash('📦 Transferencia enviada a recepción de almacén para su conciliación');
     } catch (e) {
-      flash('❌ ' + e.message);
+      flash('❌ No se pudo solicitar la recepción de la transferencia: ' + e.message);
     }
-  };
-  const completar = async r => {
-    if (tracking === r.id) detenerSeguimiento();
-    const loc = await getLoc();
-    try {
-      await dbx.collection('rutas_meta').doc(r.id).update({
-        estado: 'completada',
-        fechaRegresoReal: new Date().toISOString(),
-        ...(loc ? {
-          ubicacionFin: loc
-        } : {})
-      });
-      flash('🏁 Ruta completada');
-    } catch (e) {
-      flash('❌ ' + e.message);
-    }
-  };
-  const cancelar = async r => {
-    if (!confirm('¿Cancelar esta ruta programada?')) return;
-    await dbx.collection('rutas_meta').doc(r.id).update({
-      estado: 'cancelada'
-    });
-    flash('Ruta cancelada');
   };
   const verQR = cliente => {
     setQrModalFor(cliente);
@@ -1048,6 +679,7 @@ function RepartidoresPanel({
         telefono: nuevoCliForm.telefono || '',
         domicilio: nuevoCliForm.domicilio || '',
         activo: true,
+        creadoPorUid: currentUser.uid,
         ubicacion: loc || null
       });
       setNuevoCliForm(null);
@@ -1062,12 +694,18 @@ function RepartidoresPanel({
       flash('❌ ' + e.message);
     }
   };
+  const rutasActivasVenta = rutas.filter(r => r.estado === 'activa' && (currentUser.role === 'admin' || r.repartidorId === currentUser.uid));
   const abrirVentaParaCliente = cliente => {
+    if (rutasActivasVenta.length === 0) {
+      flash('⚠️ No hay una transferencia activa asignada para registrar esta venta');
+      return;
+    }
     setClienteScanOpen(false);
     setClienteBuscarOpen(false);
     setCliQSearch('');
     setVentaRapida({
       cliente,
+      rutaId: rutasActivasVenta.length === 1 ? rutasActivasVenta[0].id : '',
       items: [],
       pago: 'contado',
       saving: false
@@ -1083,127 +721,126 @@ function RepartidoresPanel({
     }
     abrirVentaParaCliente(cli);
   };
-  const addProdVenta = p => setVentaRapida(v => {
-    const ex = v.items.find(x => x.id === p.id);
-    const items = ex ? v.items.map(x => x.id === p.id ? {
-      ...x,
-      cant: x.cant + 1
-    } : x) : [...v.items, {
-      id: p.id,
-      nombre: p.nombre,
-      cant: 1
-    }];
-    return {
-      ...v,
-      items
-    };
-  });
-  const updQtyVenta = (id, val) => setVentaRapida(v => ({
-    ...v,
-    items: val < 1 ? v.items.filter(x => x.id !== id) : v.items.map(x => x.id === id ? {
-      ...x,
-      cant: val
-    } : x)
-  }));
-  const guardarVentaRapida = async () => {
-    if (!ventaRapida || ventaRapida.items.length === 0) {
-      flash('⚠️ Agrega al menos un producto');
+  const saldoDisponibleTransferencia = (rutaId, productoId) => Number(rutasActivasVenta.find(r => r.id === rutaId)?.items?.[productoId]?.cantRestante || 0);
+  const addProdVenta = p => {
+    if (!ventaRapida?.rutaId) {
+      flash('⚠️ Selecciona una transferencia activa');
+      return;
+    }
+    const disponible = saldoDisponibleTransferencia(ventaRapida.rutaId, p.id);
+    const existente = ventaRapida.items.find(x => x.id === p.id);
+    if (!disponible || (existente && existente.cant >= disponible)) {
+      flash('⚠️ No hay más saldo disponible en la transferencia para ' + p.nombre);
       return;
     }
     setVentaRapida(v => ({
       ...v,
-      saving: true
+      items: existente ? v.items.map(x => x.id === p.id ? { ...x, cant: x.cant + 1 } : x) : [...v.items, {
+        id: p.id,
+        nombre: p.nombre,
+        cant: 1
+      }]
     }));
+  };
+  const updQtyVenta = (id, val) => {
+    const disponible = saldoDisponibleTransferencia(ventaRapida?.rutaId, id);
+    const cantidad = Math.min(Number(val || 0), disponible);
+    if (Number(val || 0) > disponible) flash('⚠️ La cantidad se ajustó al saldo disponible en la transferencia');
+    setVentaRapida(v => ({
+      ...v,
+      items: cantidad < 1 ? v.items.filter(x => x.id !== id) : v.items.map(x => x.id === id ? { ...x, cant: cantidad } : x)
+    }));
+  };
+  const guardarVentaRapida = async () => {
+    if (!ventaRapida?.rutaId) {
+      flash('⚠️ Selecciona la transferencia activa que realizará la venta');
+      return;
+    }
+    if (ventaRapida.items.length === 0) {
+      flash('⚠️ Agrega al menos un producto');
+      return;
+    }
+    setVentaRapida(v => ({ ...v, saving: true }));
     try {
-      const faltantes = [];
-      ventaRapida.items.forEach(item => {
-        const prod = productos.find(x => x.id === item.id);
-        if (!prod || prod.stock < item.cant) faltantes.push(`${item.nombre} (disp: ${prod ? prod.stock : 0})`);
-      });
-      if (faltantes.length > 0) {
-        flash('❌ Sin stock: ' + faltantes.join(', '));
-        setVentaRapida(v => ({
-          ...v,
-          saving: false
-        }));
-        return;
-      }
-      const itemsConPrecio = ventaRapida.items.map(it => {
-        const prod = productos.find(x => x.id === it.id);
-        return {
-          id: it.id,
-          nombre: it.nombre,
-          cant: it.cant,
-          precio: prod ? prod.precio : 0
-        };
-      });
-      const total = itemsConPrecio.reduce((s, it) => s + it.precio * it.cant, 0);
       const loc = await getLoc();
-      const ubicacionVenta = loc && ventaRapida.cliente.ubicacion ? {
-        ok: distanciaMetros(loc.lat, loc.lng, ventaRapida.cliente.ubicacion.lat, ventaRapida.cliente.ubicacion.lng) <= RADIO_VISITA_METROS,
-        distanciaM: Math.round(distanciaMetros(loc.lat, loc.lng, ventaRapida.cliente.ubicacion.lat, ventaRapida.cliente.ubicacion.lng))
-      } : {
-        ok: null,
-        distanciaM: null
-      };
-      const batch = dbx.batch();
-      const notaRef = dbx.collection('notas').doc();
-      batch.set(notaRef, {
-        fecha: new Date().toISOString(),
-        clienteId: ventaRapida.cliente.id,
-        clienteNombre: ventaRapida.cliente.nombre,
-        clienteTelefono: ventaRapida.cliente.telefono || '',
-        items: itemsConPrecio,
-        total,
-        formaPago: ventaRapida.pago,
-        origen: 'qr_cliente',
-        ubicacionVenta,
-        capturadoPorUid: currentUser.uid,
-        capturadoPorNombre: currentUser.nombre || ''
-      });
-      if (ventaRapida.pago === 'credito') {
-        batch.set(dbx.collection('creditos').doc(), {
-          notaId: notaRef.id,
+      const rutaRef = dbx.collection('rutas').doc(ventaRapida.rutaId);
+      const resultado = await dbx.runTransaction(async tx => {
+        const rutaSnap = await tx.get(rutaRef);
+        if (!rutaSnap.exists) throw new Error('La transferencia activa ya no existe');
+        const rutaActiva = rutaSnap.data();
+        if (rutaActiva.estado !== 'activa') throw new Error('La transferencia ya no está disponible para ventas');
+        if (currentUser.role !== 'admin' && rutaActiva.repartidorId !== currentUser.uid) throw new Error('No puedes vender desde una transferencia ajena');
+        const itemsConPrecio = ventaRapida.items.map(it => {
+          const producto = productos.find(p => p.id === it.id);
+          const itemRuta = rutaActiva.items?.[it.id];
+          if (!producto || !itemRuta) throw new Error('El producto no está disponible en la transferencia: ' + it.nombre);
+          if (Number(itemRuta.cantRestante || 0) < it.cant) throw new Error('Saldo transferido insuficiente para ' + it.nombre);
+          return { id: it.id, nombre: it.nombre, cant: it.cant, precio: Number(producto.precio || 0) };
+        });
+        const total = itemsConPrecio.reduce((s, it) => s + it.precio * it.cant, 0);
+        const ubicacionVenta = loc && ventaRapida.cliente.ubicacion ? {
+          ok: distanciaMetros(loc.lat, loc.lng, ventaRapida.cliente.ubicacion.lat, ventaRapida.cliente.ubicacion.lng) <= RADIO_VISITA_METROS,
+          distanciaM: Math.round(distanciaMetros(loc.lat, loc.lng, ventaRapida.cliente.ubicacion.lat, ventaRapida.cliente.ubicacion.lng))
+        } : { ok: null, distanciaM: null };
+        const fecha = new Date().toISOString();
+        const notaRef = dbx.collection('notas').doc();
+        tx.set(notaRef, {
+          fecha,
           clienteId: ventaRapida.cliente.id,
           clienteNombre: ventaRapida.cliente.nombre,
-          fecha: new Date().toISOString(),
-          total,
-          saldo: total,
-          abonos: []
-        });
-      }
-      itemsConPrecio.forEach(it => {
-        batch.update(dbx.collection('productos').doc(it.id), {
-          stock: firebase.firestore.FieldValue.increment(-it.cant)
-        });
-      });
-      await batch.commit();
-      setVentaRapida(v => ({
-        ...v,
-        saving: false,
-        done: {
-          total,
-          notaId: notaRef.id,
-          ubicacionVenta,
+          clienteTelefono: ventaRapida.cliente.telefono || '',
           items: itemsConPrecio,
-          pago: v.pago
+          total,
+          formaPago: ventaRapida.pago,
+          origen: 'transferencia_almacen',
+          transferenciaId: rutaRef.id,
+          rutaId: rutaRef.id,
+          ubicacionVenta,
+          capturadoPorUid: currentUser.uid,
+          capturadoPorNombre: currentUser.nombre || ''
+        });
+        if (ventaRapida.pago === 'credito') {
+          tx.set(dbx.collection('creditos').doc(), {
+            notaId: notaRef.id,
+            clienteId: ventaRapida.cliente.id,
+            clienteNombre: ventaRapida.cliente.nombre,
+            fecha,
+            total,
+            saldo: total,
+            abonos: [],
+            capturadoPorUid: currentUser.uid
+          });
         }
-      }));
-      flash('✅ Venta guardada — ' + fmtx(total));
+        const cambiosRuta = {
+          entregas: firebase.firestore.FieldValue.arrayUnion({
+            id: notaRef.id,
+            fecha,
+            clienteNombre: ventaRapida.cliente.nombre,
+            total,
+            formaPago: ventaRapida.pago,
+            items: itemsConPrecio,
+            capturadoPorNombre: currentUser.nombre || ''
+          })
+        };
+        itemsConPrecio.forEach(it => {
+          cambiosRuta['items.' + it.id + '.cantRestante'] = Number(rutaActiva.items[it.id].cantRestante || 0) - it.cant;
+        });
+        tx.update(rutaRef, cambiosRuta);
+        return { total, notaId: notaRef.id, ubicacionVenta, items: itemsConPrecio, pago: ventaRapida.pago };
+      });
+      setVentaRapida(v => ({ ...v, saving: false, done: resultado }));
+      flash('✅ Venta guardada — ' + fmtx(resultado.total));
     } catch (e) {
       flash('❌ ' + e.message);
-      setVentaRapida(v => ({
-        ...v,
-        saving: false
-      }));
+      setVentaRapida(v => ({ ...v, saving: false }));
     }
   };
   const exportarHistorialCSV = () => {
-    const rows = [['Fecha creación', 'Repartidor', 'Vehículo', 'Zona', 'Estado', 'Salida real', 'Regreso real', 'Duración (min)', 'Paradas', 'Entregadas', 'Total vendido']];
+    const rows = [['Fecha', 'Repartidor', 'Vehículo', 'Zona', 'Estado', 'Salida real', 'Regreso real', 'Duración (min)', 'Entregas', 'Total vendido']];
     hist.forEach(r => {
       const dur = r.fechaSalidaReal && r.fechaRegresoReal ? Math.round((new Date(r.fechaRegresoReal) - new Date(r.fechaSalidaReal)) / 60000) : '';
-      const totalParadas = (r.paradas || []).reduce((s, p) => s + (p.totalEntregado || 0), 0);
-      rows.push([fDateTime(r.fechaCreacion), r.repartidorNombre, r.vehiculo, r.zona, ESTADOS[r.estado].label, fDateTime(r.fechaSalidaReal), fDateTime(r.fechaRegresoReal), dur, (r.paradas || []).length, (r.paradas || []).filter(p => p.visitado).length, totalParadas.toFixed(2)]);
+      const resumen = resumenRuta(r);
+      rows.push([fDateTime(r.fecha), r.repartidorNombre || '', r.vehiculo || '', r.zona || '', ESTADOS[r.estado]?.label || r.estado, fDateTime(r.fechaSalidaReal), fDateTime(r.fechaRegresoReal), dur, resumen.entregas.length, resumen.totalVendido.toFixed(2)]);
     });
     downloadCSV('historial_rutas_' + Date.now() + '.csv', rows);
   };
@@ -1239,7 +876,7 @@ function RepartidoresPanel({
       const now = Date.now();
       if (now - last < 20000) return;
       last = now;
-      dbx.collection('rutas_meta').doc(r.id).update({
+      dbx.collection('rutas').doc(r.id).update({
         ubicacionActual: {
           lat: p.coords.latitude,
           lng: p.coords.longitude,
@@ -1267,8 +904,8 @@ function RepartidoresPanel({
   const puedeCamara = permisoAcciones(currentUser).camara;
   const puedeGps = currentUser.role === 'admin' || permisoAcciones(currentUser).gps;
   _permisoCSV = currentUser.role === 'admin' || permisoAcciones(currentUser).csv;
-  const activas = rutas.filter(r => r.estado === 'pendiente' || r.estado === 'en_curso');
-  const hist = rutas.filter(r => r.estado === 'completada' || r.estado === 'cancelada');
+  const activas = rutas.filter(r => r.estado === 'activa');
+  const hist = rutas.filter(r => r.estado === 'cerrada');
   const misRutas = currentUser.role === 'admin' ? activas : activas.filter(r => r.repartidorId === currentUser.uid);
   return React.createElement(React.Fragment, null, React.createElement("div", {
     style: {
@@ -1338,345 +975,28 @@ function RepartidoresPanel({
       fontWeight: 700,
       cursor: 'pointer'
     }
-  }, l))), tab === 'activas' && React.createElement(React.Fragment, null, currentUser.role !== 'admin' && React.createElement("div", {
+  }, l))), tab === 'activas' && React.createElement("div", null, currentUser.role !== 'admin' && React.createElement("div", {
     style: {
       fontSize: 11,
       color: 'var(--ink-faint)',
       marginBottom: 14,
       textAlign: 'center'
     }
-  }, "Aquí verás las rutas que el admin te asigne desde \"Ruta\" → Asignar."), misRutas.length === 0 && React.createElement("div", {
+  }, "Las ventas por QR descuentan exclusivamente del saldo de tu transferencia activa."), misRutas.length === 0 && React.createElement("div", {
     style: {
       textAlign: 'center',
       color: 'var(--ink-faint)',
       padding: '20px 0'
     }
-  }, "Sin rutas programadas"), misRutas.map(r => React.createElement("div", {
+  }, "Sin transferencias activas"), misRutas.map(r => React.createElement(RutaActivaCard, {
     key: r.id,
-    style: {
-      background: 'var(--surface)',
-      borderRadius: 12,
-      padding: 14,
-      marginBottom: 10
-    }
-  }, React.createElement("div", {
-    style: {
-      display: 'flex',
-      justifyContent: 'space-between',
-      marginBottom: 6
-    }
-  }, React.createElement("span", {
-    style: {
-      fontWeight: 700,
-      fontSize: 14
-    }
-  }, r.repartidorNombre), React.createElement("span", {
-    style: {
-      background: ESTADOS[r.estado].color + '22',
-      color: ESTADOS[r.estado].color,
-      borderRadius: 20,
-      padding: '2px 9px',
-      fontSize: 11,
-      fontWeight: 700
-    }
-  }, ESTADOS[r.estado].label)), React.createElement("div", {
-    style: {
-      fontSize: 12,
-      color: 'var(--ink-soft)'
-    }
-  }, "🚐 ", r.vehiculo || '—', " · 📍 ", r.zona || '—'), React.createElement("div", {
-    style: {
-      fontSize: 12,
-      color: 'var(--ink-faint)',
-      marginBottom: 8
-    }
-  }, r.estado === 'pendiente' ? 'Programada: ' + fDateTime(r.fechaProgramada) : 'Salió: ' + fDateTime(r.fechaSalidaReal)), (r.paradas || []).length > 0 && React.createElement("div", {
-    style: {
-      marginBottom: 8
-    }
-  }, React.createElement("button", {
-    onClick: () => setExpandPlan(expandPlan === r.id ? null : r.id),
-    style: {
-      background: 'none',
-      border: 'none',
-      color: 'var(--accent)',
-      fontSize: 12,
-      cursor: 'pointer',
-      padding: 0,
-      marginBottom: 6
-    }
-  }, "📋 ", r.paradas.filter(p => p.visitado).length, "/", r.paradas.length, " paradas ", expandPlan === r.id ? '▲' : '▼'), expandPlan === r.id && React.createElement("div", {
-    style: {
-      background: 'var(--surface-2)',
-      borderRadius: 8,
-      padding: 10,
-      marginBottom: 6
-    }
-  }, r.paradas.map(p => React.createElement("div", {
-    key: p.id,
-    style: {
-      marginBottom: 10
-    }
-  }, React.createElement("div", {
-    style: {
-      display: 'flex',
-      alignItems: 'flex-start',
-      gap: 8
-    }
-  }, React.createElement("button", {
-    onClick: () => p.visitado ? null : confirmFor && confirmFor.paradaId === p.id ? setConfirmFor(null) : abrirConfirmacion(r, p),
-    style: {
-      background: 'none',
-      border: 'none',
-      color: p.visitado ? 'var(--ok)' : 'var(--ink-faint)',
-      cursor: p.visitado ? 'default' : 'pointer',
-      fontSize: 16,
-      flexShrink: 0,
-      marginTop: 1
-    }
-  }, p.visitado ? '✅' : '⬜'), React.createElement("div", {
-    style: {
-      flex: 1
-    }
-  }, React.createElement("div", {
-    style: {
-      fontSize: 12,
-      fontWeight: 700,
-      textDecoration: p.visitado ? 'line-through' : 'none',
-      color: p.visitado ? 'var(--ink-faint)' : 'var(--ink)'
-    }
-  }, p.clienteNombre), React.createElement("div", {
-    style: {
-      fontSize: 11,
-      color: 'var(--ink-faint)'
-    }
-  }, p.items.map(it => `${it.nombre} x${it.cant}`).join(', ')), p.visitado && React.createElement("div", {
-    style: {
-      fontSize: 11,
-      color: 'var(--ok)',
-      marginTop: 2
-    }
-  }, "Entregado · ", fmtx(p.totalEntregado), " · ", p.formaPago))), confirmFor && confirmFor.paradaId === p.id && React.createElement("div", {
-    style: {
-      background: 'var(--surface)',
-      borderRadius: 8,
-      padding: 10,
-      marginTop: 6,
-      marginLeft: 24
-    }
-  }, React.createElement("div", {
-    style: {
-      fontSize: 10,
-      color: 'var(--ink-faint)',
-      fontWeight: 700,
-      marginBottom: 6
-    }
-  }, "CONFIRMAR ENTREGA"), confirmItems.map(it => React.createElement("div", {
-    key: it.id,
-    style: {
-      display: 'flex',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      marginBottom: 6
-    }
-  }, React.createElement("span", {
-    style: {
-      fontSize: 12,
-      flex: 1
-    }
-  }, it.nombre), React.createElement("button", {
-    onClick: () => updConfirmQty(it.id, it.cant - 1),
-    style: {
-      background: 'var(--line-strong)',
-      border: 'none',
-      color: 'var(--ink)',
-      borderRadius: 6,
-      width: 22,
-      height: 22,
-      cursor: 'pointer'
-    }
-  }, "-"), React.createElement("input", {
-    type: "number",
-    min: "1",
-    value: it.cant,
-    onChange: e => {
-      const v = e.target.value;
-      if (v === '') return;
-      const n = parseInt(v);
-      if (!isNaN(n) && n >= 1) updConfirmQty(it.id, n);
-    },
-    onBlur: e => {
-      if (!e.target.value || parseInt(e.target.value) < 1) updConfirmQty(it.id, 1);
-    },
-    style: {
-      width: 36,
-      textAlign: 'center',
-      fontSize: 12,
-      background: 'var(--surface-2)',
-      border: '1px solid var(--line-strong)',
-      borderRadius: 6,
-      color: 'var(--ink)',
-      padding: '3px 2px'
-    }
-  }), React.createElement("button", {
-    onClick: () => updConfirmQty(it.id, it.cant + 1),
-    style: {
-      background: 'var(--line-strong)',
-      border: 'none',
-      color: 'var(--ink)',
-      borderRadius: 6,
-      width: 22,
-      height: 22,
-      cursor: 'pointer'
-    }
-  }, "+"))), React.createElement("div", {
-    style: {
-      display: 'flex',
-      gap: 6,
-      marginBottom: 8
-    }
-  }, [['contado', '💵 Contado', 'var(--ok-bg)', 'var(--ok-text)'], ['credito', '📋 Crédito', 'var(--warn-bg)', 'var(--warn-text)']].map(([v, l, bg, col]) => React.createElement("button", {
-    key: v,
-    onClick: () => setConfirmPago(v),
-    style: {
-      flex: 1,
-      padding: 7,
-      borderRadius: 8,
-      border: 'none',
-      background: confirmPago === v ? bg : 'var(--surface-2)',
-      color: confirmPago === v ? col : 'var(--ink-soft)',
-      fontSize: 11,
-      fontWeight: 700,
-      cursor: 'pointer'
-    }
-  }, l))), React.createElement("button", {
-    onClick: () => confirmarEntrega(r, p),
-    disabled: confirmSaving,
-    style: {
-      width: '100%',
-      background: 'var(--accent)',
-      color: 'var(--surface-2)',
-      border: 'none',
-      borderRadius: 8,
-      padding: 8,
-      fontWeight: 700,
-      cursor: 'pointer',
-      fontSize: 12,
-      opacity: confirmSaving ? 0.6 : 1
-    }
-  }, confirmSaving ? 'Guardando…' : '✓ Confirmar entrega')))), React.createElement("div", {
-    style: {
-      borderTop: '1px solid var(--line-strong)',
-      paddingTop: 8,
-      marginTop: 4
-    }
-  }, React.createElement("div", {
-    style: {
-      fontSize: 10,
-      color: 'var(--ink-faint)',
-      fontWeight: 700,
-      marginBottom: 3
-    }
-  }, "PARA CARGAR EN TOTAL"), totalesParadas(r.paradas).map((it, i) => React.createElement("div", {
-    key: i,
-    style: {
-      fontSize: 11,
-      color: 'var(--ink-soft)'
-    }
-  }, "• ", it.nombre, " x", it.cant))))), (r.estado === 'pendiente' || r.estado === 'en_curso') && (planEditFor === r.id ? React.createElement("div", {
-    style: {
-      background: 'var(--surface-2)',
-      borderRadius: 8,
-      padding: 10,
-      marginBottom: 8
-    }
-  }, React.createElement(ParadaBuilder, {
-    clientes: clientes,
-    productos: productos,
-    paradas: r.paradas,
-    onChange: ps => actualizarParadas(r.id, ps)
-  }), React.createElement("button", {
-    onClick: () => setPlanEditFor(null),
-    style: {
-      width: '100%',
-      background: 'var(--surface)',
-      color: 'var(--ink-soft)',
-      border: 'none',
-      borderRadius: 8,
-      padding: 8,
-      fontSize: 12,
-      cursor: 'pointer',
-      marginTop: 4
-    }
-  }, "Listo")) : React.createElement("button", {
-    onClick: () => setPlanEditFor(r.id),
-    style: {
-      background: 'transparent',
-      color: 'var(--ink-soft)',
-      border: '1px dashed var(--line-strong)',
-      borderRadius: 8,
-      padding: '6px 10px',
-      fontSize: 11,
-      cursor: 'pointer',
-      marginBottom: 8,
-      width: '100%'
-    }
-  }, "+ Agregar cliente al plan")), React.createElement("div", {
-    style: {
-      display: 'flex',
-      gap: 8
-    }
-  }, r.estado === 'pendiente' && React.createElement("button", {
-    onClick: () => iniciar(r),
-    style: {
-      flex: 1,
-      background: 'var(--ok-bg)',
-      color: 'var(--ok-text)',
-      border: 'none',
-      borderRadius: 8,
-      padding: 8,
-      fontWeight: 700,
-      cursor: 'pointer',
-      fontSize: 12
-    }
-  }, "🚀 Iniciar"), r.estado === 'pendiente' && React.createElement("button", {
-    onClick: () => cancelar(r),
-    style: {
-      background: 'transparent',
-      color: 'var(--danger-text)',
-      border: '1.5px solid var(--danger-text)',
-      borderRadius: 8,
-      padding: '7px 12px',
-      fontSize: 12,
-      cursor: 'pointer'
-    }
-  }, "✕"), r.estado === 'en_curso' && puedeGps && React.createElement("button", {
-    onClick: () => tracking === r.id ? detenerSeguimiento() : iniciarSeguimiento(r),
-    style: {
-      flex: 1,
-      background: tracking === r.id ? 'var(--warn-bg)' : 'var(--surface-2)',
-      color: tracking === r.id ? 'var(--warn-text)' : 'var(--ink-soft)',
-      border: '1px solid var(--line-strong)',
-      borderRadius: 8,
-      padding: 8,
-      fontWeight: 700,
-      cursor: 'pointer',
-      fontSize: 12
-    }
-  }, tracking === r.id ? '📍 Compartiendo…' : '📍 Compartir ubicación'), r.estado === 'en_curso' && React.createElement("button", {
-    onClick: () => completar(r),
-    style: {
-      flex: 1,
-      background: 'var(--accent)',
-      color: 'var(--surface-2)',
-      border: 'none',
-      borderRadius: 8,
-      padding: 8,
-      fontWeight: 700,
-      cursor: 'pointer',
-      fontSize: 12
-    }
-  }, "🏁 Completar"))))), tab === 'mapa' && currentUser.role === 'admin' && React.createElement("div", null, React.createElement("div", {
+    ruta: r,
+    currentUser,
+    puedeGps,
+    tracking: tracking === r.id,
+    onTracking: () => tracking === r.id ? detenerSeguimiento() : iniciarSeguimiento(r),
+    onCerrar: () => cerrarRuta(r)
+  }))), tab === 'mapa' && currentUser.role === 'admin' && React.createElement("div", null, React.createElement("div", {
     ref: mapRef,
     style: {
       width: '100%',
@@ -2359,9 +1679,18 @@ function RepartidoresPanel({
       color: 'var(--ink-faint)',
       marginBottom: 14
     }
-  }, "📍 Se guarda con tu ubicación actual, para verificar la visita en campo."), React.createElement("div", {
+  }, "📍 Se guarda con tu ubicación actual, para verificar la visita en campo."), rutasActivasVenta.length > 1 && React.createElement(React.Fragment, null, React.createElement("div", {
     style: lblStyle
-  }, "Agregar productos"), React.createElement("input", {
+  }, "Transferencia activa"), React.createElement("select", {
+    value: ventaRapida.rutaId,
+    onChange: e => {
+      setVentaRapida(v => ({ ...v, rutaId: e.target.value, items: [] }));
+      setVentaProdSearch('');
+    },
+    style: Object.assign({}, inputStyle, { marginBottom: 12 })
+  }, React.createElement("option", { value: "" }, "Selecciona la transferencia…"), rutasActivasVenta.map(r => React.createElement("option", { key: r.id, value: r.id }, (r.repartidorNombre || 'Sin repartidor') + (r.vehiculo ? ' · ' + r.vehiculo : ''))))), React.createElement("div", {
+    style: lblStyle
+  }, "Agregar productos de la transferencia"), React.createElement("input", {
     value: ventaProdSearch,
     onChange: e => setVentaProdSearch(e.target.value),
     placeholder: "Buscar producto…",
@@ -2372,7 +1701,10 @@ function RepartidoresPanel({
       overflowY: 'auto',
       marginBottom: 12
     }
-  }, productos.filter(p => p.nombre.toLowerCase().includes(ventaProdSearch.toLowerCase())).map(p => React.createElement("div", {
+  }, productos.filter(p => {
+    const rutaVenta = rutasActivasVenta.find(r => r.id === ventaRapida.rutaId);
+    return Number(rutaVenta?.items?.[p.id]?.cantRestante || 0) > 0 && p.nombre.toLowerCase().includes(ventaProdSearch.toLowerCase());
+  }).map(p => React.createElement("div", {
     key: p.id,
     style: {
       display: 'flex',
@@ -2389,7 +1721,7 @@ function RepartidoresPanel({
       fontSize: 10,
       color: 'var(--accent)'
     }
-  }, fmtx(p.precio))), React.createElement("button", {
+  }, fmtx(p.precio), " · Transferencia: ", rutasActivasVenta.find(r => r.id === ventaRapida.rutaId)?.items?.[p.id]?.cantRestante || 0)), React.createElement("button", {
     onClick: () => addProdVenta(p),
     style: {
       background: 'var(--info-bg)',

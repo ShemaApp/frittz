@@ -5,6 +5,9 @@ function RutaReparto({
   currentUser
 }) {
   const [scanOpen, setScanOpen] = useState(false);
+  const [productoNoEncontrado, setProductoNoEncontrado] = useState('');
+  const [altaProducto, setAltaProducto] = useState(null);
+  const [guardandoProducto, setGuardandoProducto] = useState(false);
   const [cart, setCart] = useState([]);
   const [msg, setMsg] = useState('');
   const [manualOpen, setManualOpen] = useState(false);
@@ -25,8 +28,9 @@ function RutaReparto({
     setMsg(m);
     setTimeout(() => setMsg(''), 2500);
   };
-  const rutaActiva = rutas.find(r => r.estado === 'activa');
-  const historial = rutas.filter(r => r.id !== rutaActiva?.id);
+  const rutasVisibles = rutas.filter(r => currentUser.role === 'admin' || r.repartidorId === currentUser.uid);
+  const rutaActiva = rutasVisibles.find(r => r.estado === 'activa');
+  const historial = rutasVisibles.filter(r => r.id !== rutaActiva?.id);
   const [usuarios, setUsuarios] = useState([]);
   useEffect(() => {
     if (currentUser.role !== 'admin') return;
@@ -38,32 +42,127 @@ function RutaReparto({
   }, [currentUser.role]);
   const [progForm, setProgForm] = useState(null);
   const [progSaving, setProgSaving] = useState(false);
-  const crearRutaAsignada = async () => {
-    if (!progForm.repartidorId) {
+  const [recepcion, setRecepcion] = useState(null);
+  const transferenciasPendientes = currentUser.role === 'admin' ? rutas.filter(r => r.estado === 'pendiente_recepcion') : [];
+  const abrirRecepcion = transferencia => {
+    const items = {};
+    Object.entries(transferencia.items || {}).forEach(([id, item]) => {
+      const restante = Number(item.cantRestante || 0);
+      items[id] = {
+        nombre: item.nombre || '',
+        unidad: item.unidad || '',
+        restante,
+        cantidadDevuelta: restante
+      };
+    });
+    setRecepcion({
+      transferenciaId: transferencia.id,
+      responsable: transferencia.repartidorNombre || 'Sin responsable',
+      items,
+      motivoMerma: ''
+    });
+  };
+  const actualizarDevolucion = (id, valor) => {
+    const cantidad = Math.max(0, Number(valor) || 0);
+    setRecepcion(r => r ? {
+      ...r,
+      items: {
+        ...r.items,
+        [id]: { ...r.items[id], cantidadDevuelta: Math.min(cantidad, r.items[id].restante) }
+      }
+    } : r);
+  };
+  const recibirTransferencia = async () => {
+    if (!recepcion) return;
+    const hayMerma = Object.values(recepcion.items).some(item => Number(item.cantidadDevuelta || 0) < Number(item.restante || 0));
+    if (hayMerma && !recepcion.motivoMerma.trim()) {
+      flash('⚠️ Indica el motivo de la diferencia antes de cerrar la transferencia');
+      return;
+    }
+    setSaving(true);
+    try {
+      const fecha = new Date().toISOString();
+      const transferenciaRef = db.collection('rutas').doc(recepcion.transferenciaId);
+      const devolucionRef = db.collection('devoluciones').doc();
+      await db.runTransaction(async tx => {
+        const transferenciaSnap = await tx.get(transferenciaRef);
+        if (!transferenciaSnap.exists) throw new Error('La transferencia ya no existe');
+        const transferencia = transferenciaSnap.data();
+        if (transferencia.estado !== 'pendiente_recepcion') throw new Error('La transferencia no está pendiente de recepción');
+        const detalle = Object.entries(recepcion.items).map(([id, input]) => {
+          const itemActual = transferencia.items && transferencia.items[id];
+          if (!itemActual) throw new Error('El producto ya no existe en la transferencia');
+          const restante = Number(itemActual.cantRestante || 0);
+          const devuelto = Number(input.cantidadDevuelta || 0);
+          if (!Number.isFinite(devuelto) || devuelto < 0 || devuelto > restante) throw new Error('Cantidad devuelta inválida para ' + input.nombre);
+          return {
+            id,
+            nombre: itemActual.nombre || input.nombre || '',
+            unidad: itemActual.unidad || input.unidad || '',
+            restante,
+            devuelto,
+            merma: restante - devuelto
+          };
+        });
+        const productosSnap = await Promise.all(detalle.map(item => tx.get(db.collection('productos').doc(item.id))));
+        productosSnap.forEach((snap, index) => {
+          if (!snap.exists) throw new Error('El producto ya no existe: ' + detalle[index].nombre);
+        });
+        const cambios = {
+          estado: 'cerrada',
+          estadoTransferencia: 'cerrada',
+          fechaRegresoReal: fecha,
+          fechaRecepcionAlmacen: fecha,
+          recibidoPorUid: currentUser.uid,
+          recibidoPorNombre: currentUser.nombre || '',
+          motivoMerma: hayMerma ? recepcion.motivoMerma.trim() : '',
+          conciliada: true
+        };
+        detalle.forEach(item => {
+          cambios['items.' + item.id + '.cantRestante'] = 0;
+          cambios['items.' + item.id + '.cantDevuelta'] = item.devuelto;
+          cambios['items.' + item.id + '.cantMerma'] = item.merma;
+          if (item.devuelto > 0) {
+            tx.update(db.collection('productos').doc(item.id), {
+              stock: firebase.firestore.FieldValue.increment(item.devuelto)
+            });
+          }
+        });
+        tx.update(transferenciaRef, cambios);
+        tx.set(devolucionRef, {
+          tipo: 'retorno_transferencia',
+          transferenciaId: transferenciaRef.id,
+          rutaId: transferenciaRef.id,
+          fecha,
+          responsableUid: transferencia.repartidorId || '',
+          responsableNombre: transferencia.repartidorNombre || '',
+          items: detalle.map(item => ({
+            productoId: item.id,
+            productoNombre: item.nombre,
+            unidad: item.unidad,
+            cantidadTransferidaPendiente: item.restante,
+            cantidadDevuelta: item.devuelto,
+            cantidadMerma: item.merma
+          })),
+          motivoMerma: hayMerma ? recepcion.motivoMerma.trim() : '',
+          capturadoPorUid: currentUser.uid,
+          capturadoPorNombre: currentUser.nombre || ''
+        });
+      });
+      setRecepcion(null);
+      flash('✅ Transferencia recibida y conciliada con almacén');
+    } catch (e) {
+      flash('❌ Error al recibir la transferencia: ' + e.message);
+    }
+    setSaving(false);
+  };
+  const confirmarAsignacion = () => {
+    if (currentUser.role !== 'admin') return;
+    if (!progForm?.repartidorId) {
       flash('⚠️ Elige a qué repartidor se la asignas');
       return;
     }
-    setProgSaving(true);
-    try {
-      await db.collection('rutas_meta').add({
-        repartidorId: progForm.repartidorId,
-        repartidorNombre: progForm.repartidorNombre,
-        vehiculo: progForm.vehiculo || '',
-        zona: progForm.zona || '',
-        fechaProgramada: progForm.fechaProgramada ? new Date(progForm.fechaProgramada).toISOString() : '',
-        fechaRegresoProgramada: progForm.fechaRegresoProgramada ? new Date(progForm.fechaRegresoProgramada).toISOString() : '',
-        estado: 'pendiente',
-        fechaCreacion: new Date().toISOString(),
-        paradas: progForm.paradas || [],
-        asignadaPorUid: currentUser.uid,
-        asignadaPorNombre: currentUser.nombre
-      });
-      setProgForm(null);
-      flash('✅ Ruta asignada a ' + progForm.repartidorNombre);
-    } catch (e) {
-      flash('❌ ' + e.message);
-    }
-    setProgSaving(false);
+    flash('✅ Repartidor asignado. Ahora agrega el cargamento e inicia la ruta.');
   };
   const addToCart = p => {
     setCart(c => {
@@ -82,12 +181,93 @@ function RutaReparto({
   };
   const handleScan = code => {
     setScanOpen(false);
-    const p = productos.find(x => x.codigoBarras && x.codigoBarras === code);
-    if (!p) {
-      flash('⚠️ Código no encontrado: ' + code);
+    const codigo = String(code || '').trim();
+    if (!codigo) return;
+    const p = productos.find(x => String(x.codigoBarras || '').trim() === codigo);
+    if (p) {
+      addToCart(p);
       return;
     }
-    addToCart(p);
+    const puedeCrearProducto = currentUser.role === 'admin' || permisoEdita(currentUser).productos;
+    if (!puedeCrearProducto) {
+      flash('⚠️ Código no encontrado. Solicita a almacén que dé de alta el producto.');
+      return;
+    }
+    setProductoNoEncontrado(codigo);
+  };
+  const abrirAltaProductoEscaneado = () => {
+    setAltaProducto({
+      codigoBarras: productoNoEncontrado,
+      nombre: '',
+      precio: '',
+      stock: '1',
+      unidad: '',
+      motivo: 'Alta por escaneo'
+    });
+    setProductoNoEncontrado('');
+  };
+  const guardarProductoEscaneado = async () => {
+    if (!altaProducto?.nombre?.trim() || altaProducto.precio === '') {
+      flash('⚠️ Indica nombre y precio del producto');
+      return;
+    }
+    if (!Number.isFinite(Number(altaProducto.stock)) || Number(altaProducto.stock) < 1) {
+      flash('⚠️ Indica al menos una unidad disponible para la transferencia');
+      return;
+    }
+    const codigo = String(altaProducto.codigoBarras || '').trim();
+    if (!codigo) {
+      flash('⚠️ El código de barras es obligatorio');
+      return;
+    }
+    setGuardandoProducto(true);
+    try {
+      const item = {
+        nombre: altaProducto.nombre.trim(),
+        precio: Number(altaProducto.precio),
+        stock: Math.max(0, Number(altaProducto.stock || 0)),
+        unidad: altaProducto.unidad.trim(),
+        codigoBarras: codigo
+      };
+      let creado = null;
+      let duplicado = null;
+      await db.runTransaction(async tx => {
+        const coincidencias = await tx.get(db.collection('productos').where('codigoBarras', '==', codigo).limit(1));
+        if (!coincidencias.empty) {
+          const existente = coincidencias.docs[0];
+          duplicado = { id: existente.id, ...existente.data() };
+          return;
+        }
+        const productoRef = db.collection('productos').doc();
+        const historialRef = db.collection('inventario_historial').doc();
+        const fecha = new Date().toISOString();
+        tx.set(productoRef, item);
+        tx.set(historialRef, {
+          productoId: productoRef.id,
+          productoNombre: item.nombre,
+          stockAnterior: 0,
+          stockNuevo: item.stock,
+          diferencia: item.stock,
+          motivo: altaProducto.motivo.trim() || 'Alta por escaneo',
+          usuarioUid: currentUser.uid,
+          usuarioNombre: currentUser.nombre || '',
+          usuarioEmail: currentUser.email || '',
+          fecha
+        });
+        creado = { id: productoRef.id, ...item };
+      });
+      setAltaProducto(null);
+      if (duplicado) {
+        addToCart(duplicado);
+        flash('ℹ️ El código ya existía; se agregó el producto encontrado');
+      } else if (creado) {
+        addToCart(creado);
+        flash('✅ Producto creado y agregado a la transferencia');
+      }
+    } catch (e) {
+      flash('❌ No se pudo guardar el producto: ' + e.message);
+    }
+    setGuardandoProducto(false);
   };
   const updQty = (id, v) => {
     if (v < 1) {
@@ -100,15 +280,24 @@ function RutaReparto({
     } : x));
   };
   const guardarRuta = async () => {
-    if (cart.length === 0) return;
+    if (currentUser.role !== 'admin') {
+      flash('⚠️ Solo almacén puede crear una transferencia');
+      return;
+    }
+    if (cart.length === 0) {
+      flash('⚠️ Agrega al menos un producto a la transferencia');
+      return;
+    }
+    const asignacion = progForm;
+    if (!asignacion?.repartidorId) {
+      flash('⚠️ Asigna la transferencia a un responsable antes de confirmar la salida');
+      return;
+    }
     setSaving(true);
     try {
-      const batch = db.batch();
+      const fecha = new Date().toISOString();
       const itemsMap = {};
       cart.forEach(item => {
-        batch.update(db.collection('productos').doc(item.id), {
-          stock: firebase.firestore.FieldValue.increment(-item.cant)
-        });
         itemsMap[item.id] = {
           nombre: item.nombre,
           unidad: item.unidad,
@@ -116,18 +305,41 @@ function RutaReparto({
           cantRestante: item.cant
         };
       });
-      const rutaRef = db.collection('rutas').doc();
-      batch.set(rutaRef, {
-        fecha: new Date().toISOString(),
-        estado: 'activa',
-        items: itemsMap,
-        entregas: []
+      await db.runTransaction(async tx => {
+        const existencias = await Promise.all(cart.map(item => tx.get(db.collection('productos').doc(item.id))));
+        existencias.forEach((snap, index) => {
+          const item = cart[index];
+          if (!snap.exists || Number(snap.data().stock || 0) < item.cant) throw new Error('Stock insuficiente para ' + item.nombre);
+        });
+        const rutaRef = db.collection('rutas').doc();
+        cart.forEach(item => tx.update(db.collection('productos').doc(item.id), {
+          stock: firebase.firestore.FieldValue.increment(-item.cant)
+        }));
+        tx.set(rutaRef, {
+          fecha,
+          fechaSalidaReal: fecha,
+          fechaProgramada: asignacion.fechaProgramada ? new Date(asignacion.fechaProgramada).toISOString() : fecha,
+          fechaRegresoProgramada: asignacion.fechaRegresoProgramada ? new Date(asignacion.fechaRegresoProgramada).toISOString() : '',
+          tipo: 'transferencia_almacen',
+          origen: 'almacen',
+          estado: 'activa',
+          estadoTransferencia: 'abierta',
+          repartidorId: asignacion.repartidorId,
+          repartidorNombre: asignacion.repartidorNombre || '',
+          vehiculo: asignacion.vehiculo || '',
+          zona: asignacion.zona || '',
+          autocarga: !!asignacion.autocarga,
+          asignadaPorUid: currentUser.uid,
+          asignadaPorNombre: currentUser.nombre || '',
+          items: itemsMap,
+          entregas: []
+        });
       });
-      await batch.commit();
       setCart([]);
-      flash('✅ Camión cargado — ruta iniciada');
+      setProgForm(null);
+      flash('✅ Transferencia creada y disponible para ventas');
     } catch (e) {
-      flash('❌ Error al guardar la ruta: ' + e.message);
+      flash('❌ Error al crear la transferencia: ' + e.message);
     }
     setSaving(false);
   };
@@ -173,83 +385,96 @@ function RutaReparto({
           nombre: nuevoC.nombre,
           telefono: nuevoC.telefono || '',
           domicilio: '',
-          activo: true
+          activo: true,
+          creadoPorUid: currentUser.uid
         });
-        cl = {
-          id: ref.id,
-          nombre: nuevoC.nombre,
-          telefono: nuevoC.telefono || ''
-        };
+        cl = { id: ref.id, nombre: nuevoC.nombre, telefono: nuevoC.telefono || '' };
       }
-      const total = entCart.reduce((s, x) => s + x.precio * x.cant, 0);
-      const items = entCart.map(x => ({
-        id: x.id,
-        nombre: x.nombre,
-        precio: x.precio,
-        cant: x.cant
-      }));
-      const batch = db.batch();
+      const fecha = new Date().toISOString();
+      const transferenciaRef = db.collection('rutas').doc(rutaActiva.id);
       const notaRef = db.collection('notas').doc();
-      batch.set(notaRef, {
-        fecha: new Date().toISOString(),
-        clienteId: cl.id,
-        clienteNombre: cl.nombre,
-        clienteTelefono: cl.telefono || '',
-        items,
-        total,
-        formaPago: pago,
-        rutaId: rutaActiva.id,
-        capturadoPorUid: currentUser.uid,
-        capturadoPorNombre: currentUser.nombre
-      });
-      if (pago === 'credito') {
-        batch.set(db.collection('creditos').doc(), {
-          notaId: notaRef.id,
+      const total = entCart.reduce((s, x) => s + x.precio * x.cant, 0);
+      await db.runTransaction(async tx => {
+        const transferenciaSnap = await tx.get(transferenciaRef);
+        if (!transferenciaSnap.exists) throw new Error('La transferencia ya no existe');
+        const transferencia = transferenciaSnap.data();
+        if (transferencia.estado !== 'activa') throw new Error('La transferencia ya no está disponible para ventas');
+        if (currentUser.role !== 'admin' && transferencia.repartidorId !== currentUser.uid) throw new Error('No puedes registrar una venta desde una transferencia ajena');
+        const items = entCart.map(item => {
+          const itemTransferido = transferencia.items && transferencia.items[item.id];
+          if (!itemTransferido) throw new Error('El producto no pertenece a esta transferencia: ' + item.nombre);
+          const restante = Number(itemTransferido.cantRestante || 0);
+          if (restante < item.cant) throw new Error('Saldo transferido insuficiente para ' + item.nombre);
+          return { id: item.id, nombre: item.nombre, precio: item.precio, cant: item.cant };
+        });
+        tx.set(notaRef, {
+          fecha,
           clienteId: cl.id,
           clienteNombre: cl.nombre,
-          fecha: new Date().toISOString(),
-          total,
-          saldo: total,
-          abonos: []
-        });
-      }
-      const rutaUpdate = {
-        entregas: firebase.firestore.FieldValue.arrayUnion({
-          id: notaRef.id,
-          fecha: new Date().toISOString(),
-          clienteNombre: cl.nombre,
+          clienteTelefono: cl.telefono || '',
+          items,
           total,
           formaPago: pago,
-          items,
-          capturadoPorNombre: currentUser.nombre
-        })
-      };
-      entCart.forEach(x => {
-        rutaUpdate[`items.${x.id}.cantRestante`] = firebase.firestore.FieldValue.increment(-x.cant);
+          origen: 'transferencia_almacen',
+          transferenciaId: transferenciaRef.id,
+          rutaId: transferenciaRef.id,
+          capturadoPorUid: currentUser.uid,
+          capturadoPorNombre: currentUser.nombre || ''
+        });
+        if (pago === 'credito') {
+          tx.set(db.collection('creditos').doc(), {
+            notaId: notaRef.id,
+            clienteId: cl.id,
+            clienteNombre: cl.nombre,
+            fecha,
+            total,
+            saldo: total,
+            abonos: [],
+            capturadoPorUid: currentUser.uid
+          });
+        }
+        const cambios = {
+          entregas: firebase.firestore.FieldValue.arrayUnion({
+            id: notaRef.id,
+            fecha,
+            clienteNombre: cl.nombre,
+            total,
+            formaPago: pago,
+            items,
+            capturadoPorNombre: currentUser.nombre || ''
+          })
+        };
+        items.forEach(item => {
+          cambios['items.' + item.id + '.cantRestante'] = Number(transferencia.items[item.id].cantRestante || 0) - item.cant;
+        });
+        tx.update(transferenciaRef, cambios);
       });
-      batch.update(db.collection('rutas').doc(rutaActiva.id), rutaUpdate);
-      await batch.commit();
       setEntCart([]);
       setCliSel(null);
-      setNuevoC({
-        nombre: '',
-        telefono: ''
-      });
+      setNuevoC({ nombre: '', telefono: '' });
       setCliMode('buscar');
       setEntOpen(false);
-      flash('✅ Entrega registrada a ' + cl.nombre);
+      flash('✅ Venta desde transferencia registrada a ' + cl.nombre);
     } catch (e) {
-      flash('❌ Error al guardar la entrega: ' + e.message);
+      flash('❌ Error al guardar la venta: ' + e.message);
     }
     setSaving(false);
   };
   const cerrarRuta = async () => {
     if (!rutaActiva) return;
-    if (!confirm('¿Cerrar esta ruta? Ya no podrás registrar más entregas en ella.')) return;
-    await db.collection('rutas').doc(rutaActiva.id).update({
-      estado: 'cerrada'
-    });
-    flash('🏁 Ruta cerrada');
+    if (!confirm('¿Enviar esta transferencia a recepción de almacén? Ya no se podrán registrar más ventas hasta que se concilie.')) return;
+    try {
+      await db.collection('rutas').doc(rutaActiva.id).update({
+        estado: 'pendiente_recepcion',
+        estadoTransferencia: 'pendiente_recepcion',
+        fechaSolicitudCierre: new Date().toISOString(),
+        solicitadoPorUid: currentUser.uid,
+        solicitadoPorNombre: currentUser.nombre || ''
+      });
+      flash('📦 Transferencia enviada a recepción de almacén');
+    } catch (e) {
+      flash('❌ No se pudo solicitar la recepción: ' + e.message);
+    }
   };
   return React.createElement("div", {
     style: {
@@ -261,7 +486,7 @@ function RutaReparto({
       fontWeight: 800,
       marginBottom: 12
     }
-  }, "🚚 Ruta de reparto"), msg && React.createElement("div", {
+  }, "📦 Transferencias de almacén"), msg && React.createElement("div", {
     style: {
       background: 'var(--ok-bg)',
       borderRadius: 8,
@@ -277,8 +502,7 @@ function RutaReparto({
       vehiculo: '',
       zona: '',
       fechaProgramada: '',
-      fechaRegresoProgramada: '',
-      paradas: []
+      fechaRegresoProgramada: ''
     }),
     style: {
       background: 'none',
@@ -297,11 +521,11 @@ function RutaReparto({
     style: {
       fontWeight: 700
     }
-  }, "📋 Asignar ruta a un repartidor"), progForm ? React.createElement(CUp, null) : React.createElement(CDown, null))), progForm && React.createElement("div", {
+  }, "📋 Crear transferencia de almacén"), progForm ? React.createElement(CUp, null) : React.createElement(CDown, null))), progForm && React.createElement("div", {
     style: {
       marginTop: 12
     }
-  }, React.createElement(Lbl, null, "Repartidor"), React.createElement("select", {
+  }, React.createElement(Lbl, null, "Responsable de transferencia"), React.createElement("select", {
     value: progForm.repartidorId,
     onChange: e => {
       const u = usuarios.find(x => x.id === e.target.value);
@@ -339,7 +563,7 @@ function RutaReparto({
       ...f,
       vehiculo: e.target.value
     })),
-    placeholder: "Camioneta blanca, placas…",
+    placeholder: "Unidad o medio de distribución…",
     style: {
       marginBottom: 10
     }
@@ -378,22 +602,22 @@ function RutaReparto({
       borderTop: '1px solid var(--line-strong)',
       margin: '4px 0 14px'
     }
-  }), React.createElement(Lbl, null, "Clientes y productos por visitar (opcional)"), React.createElement(ParadaBuilder, {
-    clientes: clientes,
-    productos: productos,
-    paradas: progForm.paradas,
-    onChange: ps => setProgForm(f => ({
-      ...f,
-      paradas: ps
-    }))
-  }), React.createElement(BFill, {
-    onClick: crearRutaAsignada,
+  }), React.createElement("div", {
+    style: {
+      borderTop: '1px solid var(--line-strong)',
+      margin: '4px 0 14px',
+      paddingTop: 12,
+      fontSize: 12,
+      color: 'var(--ink-faint)'
+    }
+  }, "La transferencia queda asignada a un responsable. Las ventas de distribución consumen únicamente su saldo transferido."), React.createElement(BFill, {
+    onClick: confirmarAsignacion,
     style: {
       width: '100%',
       marginTop: 10
     },
     disabled: progSaving
-  }, progSaving ? 'Guardando…' : '✅ Asignar ruta'))), !rutaActiva && React.createElement(React.Fragment, null, React.createElement(Card, null, React.createElement(BFill, {
+  }, progSaving ? 'Validando…' : '✅ Confirmar asignación'))), !rutaActiva && React.createElement(React.Fragment, null, React.createElement(Card, null, React.createElement(BFill, {
     onClick: () => setScanOpen(true),
     style: {
       width: '100%',
@@ -407,7 +631,7 @@ function RutaReparto({
       marginTop: 8,
       textAlign: 'center'
     }
-  }, "Escanea cada producto que subas al camión; se descuenta del inventario del almacén.")), React.createElement(Card, null, React.createElement("button", {
+  }, "Escanea cada producto que transfieras; se descuenta del inventario disponible de almacén.")), React.createElement(Card, null, React.createElement("button", {
     onClick: () => setManualOpen(o => !o),
     style: {
       background: 'none',
@@ -554,7 +778,7 @@ function RutaReparto({
       marginTop: 6
     },
     disabled: saving
-  }, saving ? 'Guardando…' : '🚚 Iniciar ruta con este cargamento'))), rutaActiva && React.createElement(React.Fragment, null, React.createElement(Card, {
+  }, saving ? 'Guardando…' : '📦 Confirmar transferencia desde almacén'))), rutaActiva && React.createElement(React.Fragment, null, React.createElement(Card, {
     style: {
       borderLeft: '3px solid var(--accent-text)'
     }
@@ -568,9 +792,9 @@ function RutaReparto({
       fontWeight: 700,
       fontSize: 14
     }
-  }, "📦 Camión cargado"), React.createElement(Tag, {
+  }, "📦 Transferencia activa"), React.createElement(Tag, {
     color: "var(--accent-text)"
-  }, "Ruta activa")), Object.entries(rutaActiva.items).map(([id, it]) => React.createElement(Row, {
+  }, "Transferencia abierta")), Object.entries(rutaActiva.items).map(([id, it]) => React.createElement(Row, {
     key: id,
     style: {
       justifyContent: 'space-between',
@@ -592,7 +816,7 @@ function RutaReparto({
       width: '100%',
       marginTop: 10
     }
-  }, "🏁 Cerrar ruta")), React.createElement(Card, null, React.createElement("button", {
+  }, "📥 Enviar a recepción de almacén")), React.createElement(Card, null, React.createElement("button", {
     onClick: () => setEntOpen(o => !o),
     style: {
       background: 'none',
@@ -611,7 +835,7 @@ function RutaReparto({
     style: {
       fontWeight: 700
     }
-  }, "➕ Registrar entrega"), entOpen ? React.createElement(CUp, null) : React.createElement(CDown, null))), entOpen && React.createElement("div", {
+  }, "➕ Registrar venta desde transferencia"), entOpen ? React.createElement(CUp, null) : React.createElement(CDown, null))), entOpen && React.createElement("div", {
     style: {
       marginTop: 12
     }
@@ -688,7 +912,7 @@ function RutaReparto({
     style: {
       marginBottom: 10
     }
-  })), React.createElement(Lbl, null, "Productos disponibles en el camión"), React.createElement("div", {
+  })), React.createElement(Lbl, null, "Productos disponibles en la transferencia"), React.createElement("div", {
     style: {
       maxHeight: 180,
       overflowY: 'auto',
@@ -699,7 +923,7 @@ function RutaReparto({
       fontSize: 12,
       color: 'var(--ink-faint)'
     }
-  }, "Sin inventario disponible en el camión."), disponibles.map(([id, it]) => React.createElement(Row, {
+  }, "Sin saldo disponible en la transferencia."), disponibles.map(([id, it]) => React.createElement(Row, {
     key: id,
     style: {
       justifyContent: 'space-between',
@@ -834,7 +1058,7 @@ function RutaReparto({
       fontWeight: 700,
       marginBottom: 10
     }
-  }, "ENTREGAS DE ESTA RUTA (", rutaActiva.entregas.length, ")"), rutaActiva.entregas.map((e, i) => React.createElement(Row, {
+  }, "VENTAS DE ESTA TRANSFERENCIA (", rutaActiva.entregas.length, ")"), rutaActiva.entregas.map((e, i) => React.createElement(Row, {
     key: i,
     style: {
       justifyContent: 'space-between',
@@ -857,17 +1081,89 @@ function RutaReparto({
       fontWeight: 700,
       color: 'var(--accent-text)'
     }
-  }, fmt(e.total)))))), scanOpen && React.createElement(BarcodeScanner, {
+  }, fmt(e.total)))))), currentUser.role === 'admin' && transferenciasPendientes.length > 0 && React.createElement(Card, null, React.createElement("div", {
+    style: { fontSize: 11, color: 'var(--warn-text)', fontWeight: 700, marginBottom: 10 }
+  }, "RECEPCIONES PENDIENTES (", transferenciasPendientes.length, ")"), transferenciasPendientes.map(t => React.createElement(Row, {
+    key: t.id,
+    style: { justifyContent: 'space-between', gap: 8, paddingBottom: 8, borderBottom: '1px solid var(--line)', marginBottom: 8 }
+  }, React.createElement("div", null, React.createElement("div", { style: { fontSize: 13, fontWeight: 700 } }, t.repartidorNombre || 'Sin responsable'), React.createElement("div", { style: { fontSize: 11, color: 'var(--ink-faint)' } }, (t.entregas || []).length, " ventas registradas")), React.createElement(BFill, {
+    onClick: () => abrirRecepcion(t),
+    style: { fontSize: 12, padding: '7px 10px' }
+  }, "Recibir")))), recepcion && React.createElement(Modal, {
+    title: '📥 Recibir transferencia de ' + recepcion.responsable,
+    onClose: () => !saving && setRecepcion(null)
+  }, React.createElement("div", { style: { fontSize: 12, color: 'var(--ink-soft)', marginBottom: 12, lineHeight: 1.45 } }, "Confirma lo recibido en almacén. Las cantidades devueltas regresan al stock general; cualquier diferencia se registra como merma."), Object.entries(recepcion.items).map(([id, item]) => React.createElement(Row, {
+    key: id,
+    style: { justifyContent: 'space-between', gap: 8, marginBottom: 10 }
+  }, React.createElement("div", null, React.createElement("div", { style: { fontSize: 13, fontWeight: 600 } }, item.nombre), React.createElement("div", { style: { fontSize: 11, color: 'var(--ink-faint)' } }, "Pendiente en transferencia: ", item.restante, " ", item.unidad)), React.createElement(Inp, {
+    type: 'number',
+    min: 0,
+    max: item.restante,
+    value: item.cantidadDevuelta,
+    onChange: e => actualizarDevolucion(id, e.target.value),
+    style: { width: 84, marginBottom: 0, textAlign: 'center' }
+  }))), Object.values(recepcion.items).some(item => Number(item.cantidadDevuelta || 0) < Number(item.restante || 0)) && React.createElement(React.Fragment, null, React.createElement(Lbl, null, "Motivo de merma o diferencia"), React.createElement(Inp, {
+    value: recepcion.motivoMerma,
+    onChange: e => setRecepcion(r => ({ ...r, motivoMerma: e.target.value })),
+    placeholder: "Ej. producto dañado, faltante confirmado",
+    style: { marginBottom: 12 }
+  })), React.createElement(BFill, {
+    onClick: recibirTransferencia,
+    disabled: saving,
+    style: { width: '100%' }
+  }, saving ? 'Conciliando…' : '✅ Recibir y cerrar transferencia')), scanOpen && React.createElement(BarcodeScanner, {
     onDetected: handleScan,
     onClose: () => setScanOpen(false)
-  }), historial.length > 0 && React.createElement(Card, null, React.createElement("div", {
+  }), productoNoEncontrado && React.createElement(Modal, {
+    title: 'Producto no encontrado',
+    onClose: () => setProductoNoEncontrado('')
+  }, React.createElement("div", { style: { fontSize: 13, color: 'var(--ink-soft)', lineHeight: 1.5, marginBottom: 16 } }, 'El código ', React.createElement("strong", null, productoNoEncontrado), ' no existe en el catálogo. ¿Quieres agregar este producto?'), React.createElement(Row, { style: { gap: 8, justifyContent: 'flex-end' } }, React.createElement(BOut, { onClick: () => setProductoNoEncontrado('') }, 'Cancelar'), React.createElement(BFill, { onClick: abrirAltaProductoEscaneado }, 'Agregar producto'))), altaProducto && React.createElement(Modal, {
+    title: '➕ Agregar producto escaneado',
+    onClose: () => !guardandoProducto && setAltaProducto(null)
+  }, React.createElement("div", { style: { fontSize: 12, color: 'var(--ink-soft)', marginBottom: 12, lineHeight: 1.45 } }, 'Completa los datos del producto. El código escaneado se conservará y se verificará nuevamente al guardar.'), React.createElement(Lbl, null, 'Código de barras'), React.createElement(Inp, {
+    value: altaProducto.codigoBarras,
+    readOnly: true,
+    style: { marginBottom: 10, background: 'var(--surface-2)' }
+  }), React.createElement(Lbl, null, 'Nombre del producto'), React.createElement(Inp, {
+    value: altaProducto.nombre,
+    onChange: e => setAltaProducto(p => ({ ...p, nombre: e.target.value })),
+    placeholder: 'Ej. Agua purificada 1 L',
+    style: { marginBottom: 10 }
+  }), React.createElement(Row, { style: { gap: 8 } }, React.createElement("div", { style: { flex: 1 } }, React.createElement(Lbl, null, 'Precio'), React.createElement(Inp, {
+    type: 'number',
+    min: 0,
+    step: '0.01',
+    value: altaProducto.precio,
+    onChange: e => setAltaProducto(p => ({ ...p, precio: e.target.value })),
+    style: { marginBottom: 10 }
+  })), React.createElement("div", { style: { flex: 1 } }, React.createElement(Lbl, null, 'Stock inicial'), React.createElement(Inp, {
+    type: 'number',
+    min: 0,
+    step: '1',
+    value: altaProducto.stock,
+    onChange: e => setAltaProducto(p => ({ ...p, stock: e.target.value })),
+    style: { marginBottom: 10 }
+  }))), React.createElement(Lbl, null, 'Unidad'), React.createElement(Inp, {
+    value: altaProducto.unidad,
+    onChange: e => setAltaProducto(p => ({ ...p, unidad: e.target.value })),
+    placeholder: 'pieza, caja, garrafón…',
+    style: { marginBottom: 10 }
+  }), React.createElement(Lbl, null, 'Motivo de alta'), React.createElement(Inp, {
+    value: altaProducto.motivo,
+    onChange: e => setAltaProducto(p => ({ ...p, motivo: e.target.value })),
+    style: { marginBottom: 14 }
+  }), React.createElement(BFill, {
+    onClick: guardarProductoEscaneado,
+    disabled: guardandoProducto,
+    style: { width: '100%' }
+  }, guardandoProducto ? 'Guardando…' : '💾 Guardar y agregar a transferencia')), historial.length > 0 && React.createElement(Card, null, React.createElement("div", {
     style: {
       fontSize: 11,
       color: 'var(--ink-faint)',
       fontWeight: 700,
       marginBottom: 10
     }
-  }, "HISTORIAL DE RUTAS"), historial.map(r => React.createElement("div", {
+  }, "HISTORIAL DE TRANSFERENCIAS"), historial.map(r => React.createElement("div", {
     key: r.id,
     style: {
       paddingBottom: 8,
@@ -914,7 +1210,7 @@ function RutaReparto({
       fontWeight: 700,
       marginBottom: 4
     }
-  }, "CARGADO"), Array.isArray(r.items) ? r.items.map(it => React.createElement("div", {
+  }, "TRANSFERIDO"), Array.isArray(r.items) ? r.items.map(it => React.createElement("div", {
     key: it.id,
     style: {
       fontSize: 12,

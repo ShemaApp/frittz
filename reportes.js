@@ -27,7 +27,7 @@ function Reportes({
   const generarRespaldo = async () => {
     setBackupGenerating(true);
     try {
-      const colecciones = ['productos', 'clientes', 'notas', 'creditos', 'rutas', 'rutas_meta', 'devoluciones', 'inventario_historial', 'usuarios'];
+      const colecciones = ['productos', 'clientes', 'notas', 'creditos', 'rutas', 'devoluciones', 'inventario_historial', 'usuarios'];
       const data = {
         generado: new Date().toISOString(),
         generadoPor: currentUser.nombre || currentUser.email
@@ -126,6 +126,8 @@ function Reportes({
       const total = notas.reduce((s, n) => s + (n.total || 0), 0);
       const totalContado = notas.filter(n => n.formaPago === 'contado').reduce((s, n) => s + (n.total || 0), 0);
       const totalCredito = notas.filter(n => n.formaPago === 'credito').reduce((s, n) => s + (n.total || 0), 0);
+      const totalAlmacen = notas.filter(n => n.origen === 'almacen' || !n.origen).reduce((s, n) => s + (n.total || 0), 0);
+      const totalTransferencias = notas.filter(n => n.origen === 'transferencia_almacen' || n.origen === 'qr_cliente_ruta').reduce((s, n) => s + (n.total || 0), 0);
       const porCliente = {};
       const porProducto = {};
       notas.forEach(n => {
@@ -148,6 +150,8 @@ function Reportes({
         total,
         totalContado,
         totalCredito,
+        totalAlmacen,
+        totalTransferencias,
         count: notas.length,
         topClientes,
         topProductos
@@ -160,9 +164,10 @@ function Reportes({
   };
   const exportarReporteCSV = () => {
     if (!reporteData) return;
-    const rows = [['Fecha', 'Cliente', 'Productos', 'Total', 'Forma de pago']];
+    const rows = [['Fecha', 'Cliente', 'Productos', 'Total', 'Forma de pago', 'Origen', 'Transferencia']];
     reporteData.notas.forEach(n => {
-      rows.push([fDateTime(n.fecha), n.clienteNombre, (n.items || []).map(it => it.nombre + ' x' + it.cant).join(' | '), (n.total || 0).toFixed(2), n.formaPago]);
+      const origen = n.origen === 'transferencia_almacen' || n.origen === 'qr_cliente_ruta' ? 'Transferencia de almacén' : 'Almacén';
+      rows.push([fDateTime(n.fecha), n.clienteNombre, (n.items || []).map(it => it.nombre + ' x' + it.cant).join(' | '), (n.total || 0).toFixed(2), n.formaPago, origen, n.transferenciaId || '']);
     });
     downloadCSV('reporte_ventas_' + Date.now() + '.csv', rows);
   };
@@ -170,7 +175,7 @@ function Reportes({
     if (!reporteData) return;
     const clientesTxt = reporteData.topClientes.map(([n, t]) => `• ${n}: ${fmtx(t)}`).join('\n') || 'Sin datos';
     const productosTxt = reporteData.topProductos.map(([n, d]) => `• ${n}: ${d.cant} unidades — ${fmtx(d.total)}`).join('\n') || 'Sin datos';
-    const cuerpo = `REPORTE DE VENTAS\n${fDateTime(reporteData.desde)} — ${fDateTime(reporteData.hasta)}\n\nPedidos: ${reporteData.count}\nTotal vendido: ${fmtx(reporteData.total)}\nContado: ${fmtx(reporteData.totalContado)}\nCrédito: ${fmtx(reporteData.totalCredito)}\n\nTOP CLIENTES\n${clientesTxt}\n\nTOP PRODUCTOS\n${productosTxt}`;
+    const cuerpo = `REPORTE DE VENTAS\n${fDateTime(reporteData.desde)} — ${fDateTime(reporteData.hasta)}\n\nVentas: ${reporteData.count}\nTotal vendido: ${fmtx(reporteData.total)}\nVentas de almacén: ${fmtx(reporteData.totalAlmacen)}\nVentas desde transferencia: ${fmtx(reporteData.totalTransferencias)}\nContado: ${fmtx(reporteData.totalContado)}\nCrédito: ${fmtx(reporteData.totalCredito)}\n\nTOP CLIENTES\n${clientesTxt}\n\nTOP PRODUCTOS\n${productosTxt}`;
     const link = `mailto:${encodeURIComponent(reporteEmail || '')}?subject=${encodeURIComponent('Reporte de ventas — Productos de la Costa')}&body=${encodeURIComponent(cuerpo)}`;
     window.location.href = link;
   };
@@ -220,8 +225,11 @@ function Reportes({
         id: d.id,
         ...d.data()
       })).sort((a, b) => new Date(a.fecha) - new Date(b.fecha));
-      const rows = [['Fecha', 'Cliente', 'Vendedor', 'Productos', 'Total', 'Forma de pago']];
-      notas.forEach(n => rows.push([fDateTime(n.fecha), n.clienteNombre, n.capturadoPorNombre || '', (n.items || []).map(it => it.nombre + ' x' + it.cant).join(' | '), (n.total || 0).toFixed(2), n.formaPago]));
+      const rows = [['Fecha', 'Cliente', 'Vendedor', 'Productos', 'Total', 'Forma de pago', 'Origen', 'Transferencia']];
+      notas.forEach(n => {
+        const origen = n.origen === 'transferencia_almacen' || n.origen === 'qr_cliente_ruta' ? 'Transferencia de almacén' : 'Almacén';
+        rows.push([fDateTime(n.fecha), n.clienteNombre, n.capturadoPorNombre || '', (n.items || []).map(it => it.nombre + ' x' + it.cant).join(' | '), (n.total || 0).toFixed(2), n.formaPago, origen, n.transferenciaId || '']);
+      });
       downloadCSV('ventas_semana_' + Date.now() + '.csv', rows);
       flash('✅ Ventas de la semana exportadas — ' + notas.length);
     } catch (e) {
@@ -674,7 +682,29 @@ function Reportes({
       fontWeight: 700,
       color: 'var(--warn-text)'
     }
-  }, fmtx(reporteData.totalCredito)))), reporteData.topClientes.length > 0 && React.createElement(React.Fragment, null, React.createElement("div", {
+  }, fmtx(reporteData.totalCredito))), React.createElement("div", null, React.createElement("div", {
+    style: {
+      fontSize: 11,
+      color: 'var(--ink-soft)'
+    }
+  }, "Desde almacén"), React.createElement("div", {
+    style: {
+      fontSize: 15,
+      fontWeight: 700,
+      color: 'var(--accent-text)'
+    }
+  }, fmtx(reporteData.totalAlmacen))), React.createElement("div", null, React.createElement("div", {
+    style: {
+      fontSize: 11,
+      color: 'var(--ink-soft)'
+    }
+  }, "Desde transferencia"), React.createElement("div", {
+    style: {
+      fontSize: 15,
+      fontWeight: 700,
+      color: 'var(--info-text)'
+    }
+  }, fmtx(reporteData.totalTransferencias)))), reporteData.topClientes.length > 0 && React.createElement(React.Fragment, null, React.createElement("div", {
     style: {
       fontSize: 11,
       color: 'var(--ink-faint)',

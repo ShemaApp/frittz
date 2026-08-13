@@ -1,3 +1,72 @@
+let clientesQRLoading = false;
+const textoQRCliente = clienteId => 'PDLC-CLIENTE:' + clienteId;
+function asegurarLibreriaQRClientes(callback) {
+  if (window.QRCode) {
+    callback(true);
+    return;
+  }
+  if (clientesQRLoading) {
+    const espera = setInterval(() => {
+      if (window.QRCode) {
+        clearInterval(espera);
+        callback(true);
+      }
+    }, 150);
+    setTimeout(() => {
+      clearInterval(espera);
+      if (!window.QRCode) callback(false);
+    }, 8000);
+    return;
+  }
+  clientesQRLoading = true;
+  const previo = document.getElementById('clientes-qrcode-lib');
+  if (previo) {
+    previo.addEventListener('load', () => callback(!!window.QRCode), { once: true });
+    previo.addEventListener('error', () => callback(false), { once: true });
+    return;
+  }
+  const script = document.createElement('script');
+  script.id = 'clientes-qrcode-lib';
+  script.src = 'https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js';
+  script.onload = () => {
+    clientesQRLoading = false;
+    callback(!!window.QRCode);
+  };
+  script.onerror = () => {
+    clientesQRLoading = false;
+    callback(false);
+  };
+  document.body.appendChild(script);
+}
+function generarImagenQRCliente(texto, tamanio, callback) {
+  asegurarLibreriaQRClientes(lista => {
+    if (!lista) {
+      callback(null);
+      return;
+    }
+    const contenedor = document.createElement('div');
+    contenedor.style.cssText = 'position:fixed;left:-9999px;top:-9999px';
+    document.body.appendChild(contenedor);
+    try {
+      new window.QRCode(contenedor, {
+        text: texto,
+        width: tamanio,
+        height: tamanio,
+        correctLevel: window.QRCode.CorrectLevel.M
+      });
+      setTimeout(() => {
+        const canvas = contenedor.querySelector('canvas');
+        const imagen = contenedor.querySelector('img');
+        const url = canvas ? canvas.toDataURL('image/png') : imagen ? imagen.src : null;
+        document.body.removeChild(contenedor);
+        callback(url);
+      }, 150);
+    } catch (e) {
+      document.body.removeChild(contenedor);
+      callback(null);
+    }
+  });
+}
 function Clientes({
   clientes,
   notas,
@@ -56,7 +125,33 @@ function Clientes({
     setQrFor(c);
     setQrUrl(null);
     setExpandedId(null);
-    renderQRDataURL(qrTextForCliente(c.id), 220, url => setQrUrl(url));
+    generarImagenQRCliente(textoQRCliente(c.id), 220, url => setQrUrl(url));
+  };
+  const descargarQR = () => {
+    if (!qrFor || !qrUrl) return;
+    const enlace = document.createElement('a');
+    enlace.href = qrUrl;
+    enlace.download = 'qr-cliente-' + (qrFor.nombre || qrFor.id).replace(/[^a-z0-9_-]+/gi, '-').replace(/^-+|-+$/g, '') + '.png';
+    document.body.appendChild(enlace);
+    enlace.click();
+    document.body.removeChild(enlace);
+  };
+  const copiarQR = async () => {
+    if (!qrFor) return;
+    const texto = textoQRCliente(qrFor.id);
+    try {
+      if (navigator.clipboard?.writeText) await navigator.clipboard.writeText(texto);else {
+        const input = document.createElement('textarea');
+        input.value = texto;
+        document.body.appendChild(input);
+        input.select();
+        document.execCommand('copy');
+        document.body.removeChild(input);
+      }
+      alert('Código QR copiado.');
+    } catch (e) {
+      alert('No se pudo copiar el código.');
+    }
   };
   const [capturando, setCapturando] = useState(false);
   const capturarUbicacion = () => {
@@ -408,7 +503,7 @@ function Clientes({
       color: 'var(--ink-faint)',
       marginTop: 12
     }
-  }, "Este es el código que identifica a ", qrFor.nombre, " al escanear (ventas rápidas, registro en ruta)."))), detallesFor && React.createElement(Modal, {
+  }, "Este es el código que identifica a ", qrFor.nombre, " al escanear en una venta desde transferencia."), React.createElement(Row, { style: { gap: 8, marginTop: 14, justifyContent: 'center' } }, React.createElement(BOut, { onClick: copiarQR, style: { flex: 1 }, disabled: !qrUrl }, '📋 Copiar código'), React.createElement(BFill, { onClick: descargarQR, style: { flex: 1 }, disabled: !qrUrl }, '⬇️ Descargar QR')))), detallesFor && React.createElement(Modal, {
     title: 'ℹ️ Detalles de ' + detallesFor.nombre,
     onClose: () => setDetallesFor(null)
   }, React.createElement("div", {
