@@ -25,6 +25,7 @@ function RutaReparto({
   const [pago, setPago] = useState('efectivo');
   const [saving, setSaving] = useState(false);
   const [expandId, setExpandId] = useState(null);
+  const [offlineVentaResumen, setOfflineVentaResumen] = useState({ total: 0, pendientes: 0, incidencias: 0, registros: [] });
   const flash = m => {
     setMsg(m);
     setTimeout(() => setMsg(''), 2500);
@@ -42,6 +43,10 @@ function RutaReparto({
     }))), () => {});
     return unsub;
   }, [currentUser.role]);
+  useEffect(() => {
+    if (typeof frittzSuscribirVentasOffline !== 'function') return undefined;
+    return frittzSuscribirVentasOffline(setOfflineVentaResumen);
+  }, []);
   const [progForm, setProgForm] = useState(null);
   const [progSaving, setProgSaving] = useState(false);
   const [pedidosIncluidos, setPedidosIncluidos] = useState([]);
@@ -383,34 +388,51 @@ function RutaReparto({
     if (currentUser.role !== 'repartidor' || rutaActiva.repartidorId !== currentUser.uid) { flash('⚠️ Solo el repartidor asignado puede entregar este pedido'); return; }
     setSaving(true);
     try {
-      const fecha = new Date().toISOString();
-      const rutaRef = db.collection('rutas').doc(rutaActiva.id);
-      const pedidoRef = db.collection('pedidos').doc(pedidoEntrega.id);
-      const notaRef = db.collection('notas').doc();
-      await db.runTransaction(async tx => {
-        const [rutaSnap, pedidoSnap] = await Promise.all([tx.get(rutaRef), tx.get(pedidoRef)]);
-        if (!rutaSnap.exists || !pedidoSnap.exists) throw new Error('La transferencia o el pedido ya no existe');
-        const rutaActual = rutaSnap.data(); const pedidoActual = pedidoSnap.data();
-        if (rutaActual.estado !== 'activa' || pedidoActual.estado !== 'transferencia_confirmada' || pedidoActual.transferenciaId !== rutaRef.id) throw new Error('El pedido ya no está disponible para entrega');
-        if (rutaActual.repartidorId !== currentUser.uid || pedidoActual.repartidorId !== currentUser.uid) throw new Error('El pedido no está asignado a tu transferencia');
-        (pedidoActual.items || []).forEach(item => {
-          const itemRuta = rutaActual.items?.[item.id];
-          if (!itemRuta || Number(itemRuta.cantRestante || 0) < Number(item.cant || 0) || Number(itemRuta.cantReservadaPedidos || 0) < Number(item.cant || 0)) throw new Error('La reserva no está disponible para ' + item.nombre);
-        });
-        const totalPedido = Number(pedidoActual.total || 0);
-        tx.set(notaRef, { fecha, clienteId: pedidoActual.clienteId, clienteNombre: pedidoActual.clienteNombre, clienteTelefono: pedidoActual.clienteTelefono || '', items: (pedidoActual.items || []).map(item => ({ ...item })), total: totalPedido, formaPago: pedidoActual.formaPagoPrevista || 'efectivo', origen: 'transferencia_almacen', tipoVenta: 'pedido_transferencia', transferenciaId: rutaRef.id, rutaId: rutaRef.id, pedidoId: pedidoRef.id, capturadoPorUid: currentUser.uid, capturadoPorNombre: currentUser.nombre || '' });
-        if (pedidoActual.formaPagoPrevista === 'credito') tx.set(db.collection('creditos').doc(), { notaId: notaRef.id, clienteId: pedidoActual.clienteId, clienteNombre: pedidoActual.clienteNombre, fecha, total: totalPedido, saldo: totalPedido, abonos: [], capturadoPorUid: currentUser.uid });
-        const cambios = { entregas: firebase.firestore.FieldValue.arrayUnion({ id: notaRef.id, pedidoId: pedidoRef.id, fecha, clienteNombre: pedidoActual.clienteNombre, total: totalPedido, formaPago: pedidoActual.formaPagoPrevista || 'efectivo', items: pedidoActual.items || [], tipoVenta: 'pedido_transferencia', capturadoPorNombre: currentUser.nombre || '' }) };
-        (pedidoActual.items || []).forEach(item => { const actual = rutaActual.items[item.id]; cambios['items.' + item.id + '.cantRestante'] = Number(actual.cantRestante || 0) - Number(item.cant || 0); cambios['items.' + item.id + '.cantReservadaPedidos'] = Number(actual.cantReservadaPedidos || 0) - Number(item.cant || 0); });
-        tx.update(rutaRef, cambios);
-        tx.update(pedidoRef, { estado: 'entregado', notaId: notaRef.id, fechaEntrega: fecha, entregadoPorUid: currentUser.uid, entregadoPorNombre: currentUser.nombre || '', fechaActualizacion: fecha });
+      const items = (pedidoEntrega.items || []).map(item => ({
+        id: item.id,
+        nombre: item.nombre || '',
+        unidad: item.unidad || '',
+        precio: Number(item.precio || 0),
+        cant: Number(item.cant || 0)
+      }));
+      const total = Number(pedidoEntrega.total || items.reduce((s, item) => s + item.precio * item.cant, 0));
+      const resultado = await frittzGuardarVentaTransferencia({
+        transferenciaId: rutaActiva.id,
+        rutaId: rutaActiva.id,
+        repartidorUid: currentUser.uid,
+        repartidorNombre: currentUser.nombre || '',
+        cliente: {
+          id: pedidoEntrega.clienteId,
+          nombre: pedidoEntrega.clienteNombre,
+          telefono: pedidoEntrega.clienteTelefono || ''
+        },
+        items,
+        total,
+        formaPago: pedidoEntrega.formaPagoPrevista || 'efectivo',
+        tipoVenta: 'pedido_transferencia',
+        pedidoId: pedidoEntrega.id
       });
-      setPedidoEntrega(null); flash('✅ Pedido entregado y venta registrada desde tu transferencia');
-    } catch (e) { flash('❌ No se pudo entregar el pedido: ' + e.message); }
+      setPedidoEntrega(null);
+      if (resultado.estado === 'pendiente_local') {
+        flash('📴 Entrega guardada en pendientes; se sincronizará al volver la conexión');
+      } else if (resultado.estado === 'incidencia_inventario') {
+        flash('⚠️ Entrega guardada con incidencia; revisa el cierre de caja');
+      } else {
+        flash('✅ Pedido entregado y venta registrada desde tu transferencia');
+      }
+    } catch (e) {
+      flash('❌ No se pudo entregar el pedido: ' + e.message);
+    }
     setSaving(false);
   };
   const cliFilt = clientes.filter(c => c.activo && c.nombre.toLowerCase().includes(cliSearch.toLowerCase()));
-  const disponibles = rutaActiva ? Object.entries(rutaActiva.items).filter(([id, it]) => Number(it.cantRestante || 0) - Number(it.cantReservadaPedidos || 0) > 0).map(([id, it]) => [id, { ...it, saldoLibre: Number(it.cantRestante || 0) - Number(it.cantReservadaPedidos || 0) }]) : [];
+  const disponibles = rutaActiva ? Object.entries(rutaActiva.items).map(([id, it]) => {
+    const pendientes = (offlineVentaResumen.registros || [])
+      .filter(venta => venta.transferenciaId === rutaActiva.id && ['pendiente', 'reintentando'].includes(venta.estado))
+      .reduce((sum, venta) => sum + (venta.items || []).filter(x => x.id === id).reduce((s, x) => s + Number(x.cant || 0), 0), 0);
+    const saldoLibre = Math.max(0, Number(it.cantRestante || 0) - Number(it.cantReservadaPedidos || 0) - pendientes);
+    return [id, { ...it, saldoLibre, pendientesOffline: pendientes }];
+  }).filter(([, it]) => it.saldoLibre > 0) : [];
   const addEnt = (id, it) => {
     const prod = productos.find(p => p.id === id);
     setEntCart(c => {
@@ -457,73 +479,37 @@ function RutaReparto({
         });
         cl = { id: ref.id, nombre: nuevoC.nombre, telefono: nuevoC.telefono || '' };
       }
-      const fecha = new Date().toISOString();
-      const transferenciaRef = db.collection('rutas').doc(rutaActiva.id);
-      const notaRef = db.collection('notas').doc();
-      const total = entCart.reduce((s, x) => s + x.precio * x.cant, 0);
-      await db.runTransaction(async tx => {
-        const transferenciaSnap = await tx.get(transferenciaRef);
-        if (!transferenciaSnap.exists) throw new Error('La transferencia ya no existe');
-        const transferencia = transferenciaSnap.data();
-        if (transferencia.estado !== 'activa') throw new Error('La transferencia ya no está disponible para ventas');
-        if (currentUser.role !== 'repartidor' || transferencia.repartidorId !== currentUser.uid) throw new Error('Solo el repartidor asignado puede vender desde esta transferencia');
-        const items = entCart.map(item => {
-          const itemTransferido = transferencia.items && transferencia.items[item.id];
-          if (!itemTransferido) throw new Error('El producto no pertenece a esta transferencia: ' + item.nombre);
-          const restante = Number(itemTransferido.cantRestante || 0);
-          const libre = restante - Number(itemTransferido.cantReservadaPedidos || 0);
-          if (libre < item.cant) throw new Error('Saldo libre insuficiente para ' + item.nombre);
-          return { id: item.id, nombre: item.nombre, precio: item.precio, cant: item.cant };
-        });
-        tx.set(notaRef, {
-          fecha,
-          clienteId: cl.id,
-          clienteNombre: cl.nombre,
-          clienteTelefono: cl.telefono || '',
-          items,
-          total,
-          formaPago: pago,
-          origen: 'transferencia_almacen',
-          tipoVenta: 'rapida_repartidor',
-          transferenciaId: transferenciaRef.id,
-          rutaId: transferenciaRef.id,
-          capturadoPorUid: currentUser.uid,
-          capturadoPorNombre: currentUser.nombre || ''
-        });
-        if (pago === 'credito') {
-          tx.set(db.collection('creditos').doc(), {
-            notaId: notaRef.id,
-            clienteId: cl.id,
-            clienteNombre: cl.nombre,
-            fecha,
-            total,
-            saldo: total,
-            abonos: [],
-            capturadoPorUid: currentUser.uid
-          });
-        }
-        const cambios = {
-          entregas: firebase.firestore.FieldValue.arrayUnion({
-            id: notaRef.id,
-            fecha,
-            clienteNombre: cl.nombre,
-            total,
-            formaPago: pago,
-            items,
-            capturadoPorNombre: currentUser.nombre || ''
-          })
-        };
-        items.forEach(item => {
-          cambios['items.' + item.id + '.cantRestante'] = Number(transferencia.items[item.id].cantRestante || 0) - item.cant;
-        });
-        tx.update(transferenciaRef, cambios);
+      const items = entCart.map(item => ({
+        id: item.id,
+        nombre: item.nombre,
+        unidad: item.unidad || '',
+        precio: Number(item.precio || 0),
+        cant: Number(item.cant || 0)
+      }));
+      const total = items.reduce((s, x) => s + x.precio * x.cant, 0);
+      const resultado = await frittzGuardarVentaTransferencia({
+        transferenciaId: rutaActiva.id,
+        rutaId: rutaActiva.id,
+        repartidorUid: currentUser.uid,
+        repartidorNombre: currentUser.nombre || '',
+        cliente: cl,
+        items,
+        total,
+        formaPago: pago,
+        tipoVenta: 'rapida_repartidor'
       });
       setEntCart([]);
       setCliSel(null);
       setNuevoC({ nombre: '', telefono: '' });
       setCliMode('buscar');
       setEntOpen(false);
-      flash('✅ Venta desde transferencia registrada a ' + cl.nombre);
+      if (resultado.estado === 'pendiente_local') {
+        flash('📴 Venta guardada en pendientes; se sincronizará al volver la conexión');
+      } else if (resultado.estado === 'incidencia_inventario') {
+        flash('⚠️ Venta guardada con incidencia; revisa el cierre de caja');
+      } else {
+        flash('✅ Venta desde transferencia registrada a ' + cl.nombre);
+      }
     } catch (e) {
       flash('❌ Error al guardar la venta: ' + e.message);
     }
@@ -531,6 +517,15 @@ function RutaReparto({
   };
   const cerrarRuta = async () => {
     if (!rutaActiva) return;
+    if (saving) {
+      flash('⏳ Espera a que termine la operación actual');
+      return;
+    }
+    const pendientesOffline = typeof frittzVentasPendientesRuta === 'function' ? await frittzVentasPendientesRuta(rutaActiva.id) : { total: 0 };
+    if (pendientesOffline.total > 0) {
+      flash('⚠️ Hay ' + pendientesOffline.total + ' venta(s) offline pendiente(s) de sincronizar; conecta el dispositivo antes de cerrar');
+      return;
+    }
     if (!confirm('¿Enviar esta transferencia a recepción de almacén? Ya no se podrán registrar más ventas hasta que se concilie.')) return;
     try {
       await db.collection('rutas').doc(rutaActiva.id).update({

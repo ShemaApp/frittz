@@ -490,6 +490,7 @@ function RepartidoresPanel({
   const [nuevoCliForm, setNuevoCliForm] = useState(null);
   const [ventaRapida, setVentaRapida] = useState(null);
   const [ventaProdSearch, setVentaProdSearch] = useState('');
+  const [offlineVentaResumen, setOfflineVentaResumen] = useState({ total: 0, pendientes: 0, incidencias: 0, registros: [] });
   const [backupMeta, setBackupMeta] = useState(null);
   const flash = m => {
     setMsg(m);
@@ -499,6 +500,10 @@ function RepartidoresPanel({
     if (currentUser?.role !== 'admin') return;
     return dbx.collection('_meta').doc('backups').onSnapshot(snap => setBackupMeta(snap.exists ? snap.data() : null), () => {});
   }, [currentUser?.role]);
+  useEffect(() => {
+    if (typeof frittzSuscribirVentasOffline !== 'function') return undefined;
+    return frittzSuscribirVentasOffline(setOfflineVentaResumen);
+  }, []);
   const descargarZonaOffline = async () => {
     if (!mapInstance.current) return;
     const bounds = mapInstance.current.getBounds();
@@ -604,6 +609,11 @@ function RepartidoresPanel({
     });
   }, [rutas, mapReady]);
   const cerrarRuta = async r => {
+    const pendientesOffline = typeof frittzVentasPendientesRuta === 'function' ? await frittzVentasPendientesRuta(r.id) : { total: 0 };
+    if (pendientesOffline.total > 0) {
+      flash('⚠️ Hay ' + pendientesOffline.total + ' venta(s) offline pendiente(s) de sincronizar; conecta el dispositivo antes de cerrar');
+      return;
+    }
     try {
       await dbx.collection('rutas').doc(r.id).update({
         estado: 'pendiente_recepcion',
@@ -727,7 +737,10 @@ function RepartidoresPanel({
   };
   const saldoDisponibleTransferencia = (rutaId, productoId) => {
     const item = rutasActivasVenta.find(r => r.id === rutaId)?.items?.[productoId];
-    return Math.max(0, Number(item?.cantRestante || 0) - Number(item?.cantReservadaPedidos || 0));
+    const pendientes = (offlineVentaResumen.registros || [])
+      .filter(venta => venta.transferenciaId === rutaId && ['pendiente', 'reintentando'].includes(venta.estado))
+      .reduce((sum, venta) => sum + (venta.items || []).filter(x => x.id === productoId).reduce((s, x) => s + Number(x.cant || 0), 0), 0);
+    return Math.max(0, Number(item?.cantRestante || 0) - Number(item?.cantReservadaPedidos || 0) - pendientes);
   };
   const addProdVenta = p => {
     if (!ventaRapida?.rutaId) {
@@ -770,73 +783,42 @@ function RepartidoresPanel({
     setVentaRapida(v => ({ ...v, saving: true }));
     try {
       const loc = await getLoc();
-      const rutaRef = dbx.collection('rutas').doc(ventaRapida.rutaId);
-      const resultado = await dbx.runTransaction(async tx => {
-        const rutaSnap = await tx.get(rutaRef);
-        if (!rutaSnap.exists) throw new Error('La transferencia activa ya no existe');
-        const rutaActiva = rutaSnap.data();
-        if (rutaActiva.estado !== 'activa') throw new Error('La transferencia ya no está disponible para ventas');
-        if (currentUser.role !== 'repartidor' || rutaActiva.repartidorId !== currentUser.uid) throw new Error('Solo el repartidor asignado puede vender desde esta transferencia');
-        const itemsConPrecio = ventaRapida.items.map(it => {
-          const producto = productos.find(p => p.id === it.id);
-          const itemRuta = rutaActiva.items?.[it.id];
-          if (!producto || !itemRuta) throw new Error('El producto no está disponible en la transferencia: ' + it.nombre);
-          if (Number(itemRuta.cantRestante || 0) - Number(itemRuta.cantReservadaPedidos || 0) < it.cant) throw new Error('Saldo libre insuficiente; hay unidades reservadas para pedidos en ' + it.nombre);
-          return { id: it.id, nombre: it.nombre, cant: it.cant, precio: Number(producto.precio || 0) };
-        });
-        const total = itemsConPrecio.reduce((s, it) => s + it.precio * it.cant, 0);
-        const ubicacionVenta = loc && ventaRapida.cliente.ubicacion ? {
-          ok: distanciaMetros(loc.lat, loc.lng, ventaRapida.cliente.ubicacion.lat, ventaRapida.cliente.ubicacion.lng) <= RADIO_VISITA_METROS,
-          distanciaM: Math.round(distanciaMetros(loc.lat, loc.lng, ventaRapida.cliente.ubicacion.lat, ventaRapida.cliente.ubicacion.lng))
-        } : { ok: null, distanciaM: null };
-        const fecha = new Date().toISOString();
-        const notaRef = dbx.collection('notas').doc();
-        tx.set(notaRef, {
-          fecha,
-          clienteId: ventaRapida.cliente.id,
-          clienteNombre: ventaRapida.cliente.nombre,
-          clienteTelefono: ventaRapida.cliente.telefono || '',
-          items: itemsConPrecio,
-          total,
-          formaPago: ventaRapida.pago,
-          origen: 'transferencia_almacen',
-          transferenciaId: rutaRef.id,
-          rutaId: rutaRef.id,
-          ubicacionVenta,
-          capturadoPorUid: currentUser.uid,
-          capturadoPorNombre: currentUser.nombre || ''
-        });
-        if (ventaRapida.pago === 'credito') {
-          tx.set(dbx.collection('creditos').doc(), {
-            notaId: notaRef.id,
-            clienteId: ventaRapida.cliente.id,
-            clienteNombre: ventaRapida.cliente.nombre,
-            fecha,
-            total,
-            saldo: total,
-            abonos: [],
-            capturadoPorUid: currentUser.uid
-          });
-        }
-        const cambiosRuta = {
-          entregas: firebase.firestore.FieldValue.arrayUnion({
-            id: notaRef.id,
-            fecha,
-            clienteNombre: ventaRapida.cliente.nombre,
-            total,
-            formaPago: ventaRapida.pago,
-            items: itemsConPrecio,
-            capturadoPorNombre: currentUser.nombre || ''
-          })
+      const cliente = ventaRapida.cliente;
+      const ubicacionVenta = loc && cliente.ubicacion ? {
+        ok: distanciaMetros(loc.lat, loc.lng, cliente.ubicacion.lat, cliente.ubicacion.lng) <= RADIO_VISITA_METROS,
+        distanciaM: Math.round(distanciaMetros(loc.lat, loc.lng, cliente.ubicacion.lat, cliente.ubicacion.lng))
+      } : { ok: null, distanciaM: null };
+      const itemsConPrecio = ventaRapida.items.map(it => {
+        const producto = productos.find(p => p.id === it.id);
+        return {
+          id: it.id,
+          nombre: it.nombre,
+          unidad: producto?.unidad || '',
+          cant: Number(it.cant || 0),
+          precio: Number(producto?.precio || it.precio || 0)
         };
-        itemsConPrecio.forEach(it => {
-          cambiosRuta['items.' + it.id + '.cantRestante'] = Number(rutaActiva.items[it.id].cantRestante || 0) - it.cant;
-        });
-        tx.update(rutaRef, cambiosRuta);
-        return { total, notaId: notaRef.id, ubicacionVenta, items: itemsConPrecio, pago: ventaRapida.pago };
+      });
+      const total = itemsConPrecio.reduce((s, it) => s + it.precio * it.cant, 0);
+      const resultado = await frittzGuardarVentaTransferencia({
+        transferenciaId: ventaRapida.rutaId,
+        rutaId: ventaRapida.rutaId,
+        repartidorUid: currentUser.uid,
+        repartidorNombre: currentUser.nombre || '',
+        cliente,
+        items: itemsConPrecio,
+        total,
+        formaPago: ventaRapida.pago,
+        tipoVenta: 'rapida_repartidor',
+        ubicacionVenta
       });
       setVentaRapida(v => ({ ...v, saving: false, done: resultado }));
-      flash('✅ Venta guardada — ' + fmtx(resultado.total));
+      if (resultado.estado === 'pendiente_local') {
+        flash('📴 Venta guardada en pendientes; se sincronizará al volver la conexión');
+      } else if (resultado.estado === 'incidencia_inventario') {
+        flash('⚠️ Venta guardada con incidencia; revisa el cierre de caja');
+      } else {
+        flash('✅ Venta guardada — ' + fmtx(resultado.total));
+      }
     } catch (e) {
       flash('❌ ' + e.message);
       setVentaRapida(v => ({ ...v, saving: false }));
@@ -1709,8 +1691,7 @@ function RepartidoresPanel({
       marginBottom: 12
     }
   }, productos.filter(p => {
-    const rutaVenta = rutasActivasVenta.find(r => r.id === ventaRapida.rutaId);
-    return Number(rutaVenta?.items?.[p.id]?.cantRestante || 0) > 0 && p.nombre.toLowerCase().includes(ventaProdSearch.toLowerCase());
+    return saldoDisponibleTransferencia(ventaRapida.rutaId, p.id) > 0 && p.nombre.toLowerCase().includes(ventaProdSearch.toLowerCase());
   }).map(p => React.createElement("div", {
     key: p.id,
     style: {
@@ -1728,7 +1709,7 @@ function RepartidoresPanel({
       fontSize: 10,
       color: 'var(--accent)'
     }
-  }, fmtx(p.precio), " · Transferencia: ", rutasActivasVenta.find(r => r.id === ventaRapida.rutaId)?.items?.[p.id]?.cantRestante || 0)), React.createElement("button", {
+  }, fmtx(p.precio), " · Saldo libre: ", saldoDisponibleTransferencia(ventaRapida.rutaId, p.id))), React.createElement("button", {
     onClick: () => addProdVenta(p),
     style: {
       background: 'var(--info-bg)',

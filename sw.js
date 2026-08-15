@@ -5,7 +5,7 @@
 
 // Cambia esta versión en cada publicación para invalidar el shell anterior.
 const CACHE_PREFIX = 'pdlc-';
-const CACHE_NAME = 'pdlc-v45-shell-buscador-localidades';
+const CACHE_NAME = 'pdlc-v46-offline-ventas-transferencia';
 // Cache aparte para tiles de mapa offline: a propósito NO se borra cuando
 // sube la versión del shell (ver 'activate' más abajo) — si viviera en
 // CACHE_NAME, cada actualización de la app borraría el mapa descargado.
@@ -19,6 +19,7 @@ const SHELL_URLS = [
   './firebase-init.js',
   './offline.html',
   './app-core.js',
+  './ventas-offline.js',
   './sesion.js',
   './auth.js',
   './dashboard.js',

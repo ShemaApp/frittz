@@ -12,6 +12,11 @@ function App() {
   const [modoNota, setModoNota] = useState('pedidos');
   const [abrirFormProducto, setAbrirFormProducto] = useState(false);
   const [abrirUsuarios, setAbrirUsuarios] = useState(false);
+  const [offlineVentaResumen, setOfflineVentaResumen] = useState({ total: 0, pendientes: 0, incidencias: 0, registros: [] });
+  useEffect(() => {
+    if (typeof frittzSuscribirVentasOffline !== 'function') return undefined;
+    return frittzSuscribirVentasOffline(setOfflineVentaResumen);
+  }, []);
   const ALL_TABS = [['home', '🏠', 'Inicio'], ['productos', '📦', 'Productos'], ['nota', '📋', 'Pedidos'], ['clientes', '👥', 'Clientes'], ['creditos', '💳', 'Créditos'], ['ruta', '📦', 'Transferencias'], ['repartidores', '🧭', 'Distribución'], ['inventario', '📋', 'Inventario'], ['reportes', '📈', 'Reportes'], ['gerencia', '💰', 'Gerencia']];
   const permTabs = permisoTabs(currentUser);
   const tabsPermitidos = ['home', ...ALL_TABS.filter(([id]) => id !== 'home' && permTabs[id]).map(([id]) => id)];
@@ -66,7 +71,8 @@ function App() {
     onUnlock: () => setLocked(false),
     onUsePassword: () => auth.signOut()
   });
-  const mostrarBanner = !isOnline || totalPendientes > 0;
+  const pendientesTotales = totalPendientes + Number(offlineVentaResumen.pendientes || 0);
+  const mostrarBanner = !isOnline || pendientesTotales > 0;
   return React.createElement("div", {
     style: {
       minHeight: '100vh',
@@ -209,7 +215,7 @@ function App() {
       padding: '6px 12px',
       boxSizing: 'border-box'
     }
-  }, isOnline ? `⏳ Sincronizando ${totalPendientes} cambio${totalPendientes === 1 ? '' : 's'}…` : `📡 Sin conexión — puedes seguir trabajando, se sincroniza solo${totalPendientes > 0 ? ` (${totalPendientes} en cola)` : ''}`), firestoreError && React.createElement("div", {
+  }, isOnline ? `⏳ Sincronizando ${pendientesTotales} cambio${pendientesTotales === 1 ? '' : 's'}…` : `📡 Sin conexión — puedes seguir trabajando, se sincroniza solo${pendientesTotales > 0 ? ` (${pendientesTotales} en cola)` : ''}`), firestoreError && React.createElement("div", {
     style: {
       margin: '0 12px 10px',
       background: 'var(--danger-bg)',

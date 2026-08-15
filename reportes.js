@@ -165,10 +165,13 @@ function Reportes({
   };
   const exportarReporteCSV = () => {
     if (!reporteData) return;
-    const rows = [['Fecha', 'Cliente', 'Productos', 'Total', 'Forma de pago', 'Origen', 'Tipo de venta', 'Medio operativo', 'Responsable', 'Transferencia']];
+    const rows = [['Fecha', 'Cliente', 'Productos solicitados', 'Total', 'Forma de pago', 'Origen', 'Tipo de venta', 'Medio operativo', 'Responsable', 'Transferencia', 'Estado', 'Requiere revisión', 'Unidades aplicadas', 'Unidades faltantes', 'Detalle de incidencia']];
     reporteData.notas.forEach(n => {
       const origen = n.origen === 'transferencia_almacen' || n.origen === 'qr_cliente_ruta' ? 'Transferencia de almacén' : 'Almacén';
-      rows.push([fDateTime(n.fecha), n.clienteNombre, (n.items || []).map(it => it.nombre + ' x' + it.cant).join(' | '), (n.total || 0).toFixed(2), n.formaPago, origen, n.tipoVenta || '', n.medioOperacion || '', n.capturadoPorNombre || '', n.transferenciaId || '']);
+      const faltantes = n.incidenciaInventario?.itemsFaltantes || [];
+      const aplicadas = (n.itemsAplicadosInventario || []).reduce((s, item) => s + Number(item.cant || 0), 0);
+      const solicitadas = (n.items || []).reduce((s, item) => s + Number(item.cant || 0), 0);
+      rows.push([fDateTime(n.fecha), n.clienteNombre, (n.items || []).map(it => it.nombre + ' x' + it.cant).join(' | '), (n.total || 0).toFixed(2), n.formaPago, origen, n.tipoVenta || '', n.medioOperacion || '', n.capturadoPorNombre || '', n.transferenciaId || '', n.estado || 'confirmada', n.requiereRevision ? 'Sí' : 'No', aplicadas, Math.max(0, solicitadas - aplicadas), faltantes.length ? JSON.stringify(faltantes) : '']);
     });
     downloadCSV('reporte_ventas_' + Date.now() + '.csv', rows);
   };
@@ -257,8 +260,13 @@ function Reportes({
       })));
       const ventasFilas = ventas.map(venta => {
         const items = Array.isArray(venta.items) ? venta.items : [];
+        const itemsAplicados = Array.isArray(venta.itemsAplicadosInventario) ? venta.itemsAplicadosInventario : [];
+        const itemsFaltantes = Array.isArray(venta.incidenciaInventario?.itemsFaltantes) ? venta.incidenciaInventario.itemsFaltantes : [];
+        const unidadesSolicitadas = items.reduce((suma, item) => suma + numeroExcel(item.cant), 0);
+        const unidadesAplicadas = itemsAplicados.reduce((suma, item) => suma + numeroExcel(item.cant), 0);
         return {
           'Venta ID': venta.id,
+          'Venta offline ID': venta.ventaOfflineId || '',
           Fecha: fechaExcel(venta.fecha),
           'Cliente ID': venta.clienteId || '',
           Cliente: venta.clienteNombre || '',
@@ -271,8 +279,13 @@ function Reportes({
           'Medio operativo': venta.medioOperacion || '',
           'Tipo de responsable': venta.responsableTipo || '',
           'Transferencia ID': venta.transferenciaId || venta.rutaId || '',
+          Estado: venta.estado || 'confirmada',
+          'Requiere revisión': venta.requiereRevision ? 'Sí' : 'No',
           'Líneas de venta': items.length,
-          'Unidades vendidas': items.reduce((suma, item) => suma + numeroExcel(item.cant), 0),
+          'Unidades solicitadas': unidadesSolicitadas,
+          'Unidades aplicadas inventario': unidadesAplicadas,
+          'Unidades faltantes': Math.max(0, unidadesSolicitadas - unidadesAplicadas),
+          'Detalle incidencia': itemsFaltantes.length ? JSON.stringify(itemsFaltantes) : '',
           Total: numeroExcel(venta.total),
           'GPS venta disponible': venta.ubicacionVenta ? 'Sí' : 'No'
         };
@@ -280,27 +293,34 @@ function Reportes({
       const ventaDetalleFilas = [];
       ventas.forEach(venta => {
         (Array.isArray(venta.items) ? venta.items : []).forEach((item, indice) => {
-          const cantidad = numeroExcel(item.cant);
-          const precio = numeroExcel(item.precio);
-          ventaDetalleFilas.push({
-            'Venta ID': venta.id,
-            Línea: indice + 1,
-            'Fecha venta': fechaExcel(venta.fecha),
-            'Cliente ID': venta.clienteId || '',
-            Cliente: venta.clienteNombre || '',
-            'Producto ID': item.id || item.productoId || '',
-            Producto: item.nombre || item.productoNombre || '',
-            Unidad: item.unidad || '',
-            Cantidad: cantidad,
-            'Precio unitario': precio,
-            Subtotal: cantidad * precio,
-            Origen: origenExcel(venta.origen),
-            'Tipo de venta': venta.tipoVenta || '',
-            'Medio operativo': venta.medioOperacion || '',
-            'Tipo de responsable': venta.responsableTipo || '',
-            'Transferencia ID': venta.transferenciaId || venta.rutaId || '',
-            'Forma de pago': venta.formaPago || ''
-          });
+            const cantidad = numeroExcel(item.cant);
+            const precio = numeroExcel(item.precio);
+            const aplicado = numeroExcel((venta.itemsAplicadosInventario || []).find(x => x.id === (item.id || item.productoId))?.cant);
+            const faltante = numeroExcel((venta.incidenciaInventario?.itemsFaltantes || []).find(x => x.id === (item.id || item.productoId))?.cantFaltante);
+            ventaDetalleFilas.push({
+              'Venta ID': venta.id,
+              'Venta offline ID': venta.ventaOfflineId || '',
+              Línea: indice + 1,
+              'Fecha venta': fechaExcel(venta.fecha),
+              'Cliente ID': venta.clienteId || '',
+              Cliente: venta.clienteNombre || '',
+              'Producto ID': item.id || item.productoId || '',
+              Producto: item.nombre || item.productoNombre || '',
+              Unidad: item.unidad || '',
+              'Cantidad solicitada': cantidad,
+              'Cantidad aplicada inventario': aplicado,
+              'Cantidad faltante': faltante || Math.max(0, cantidad - aplicado),
+              'Precio unitario': precio,
+              Subtotal: cantidad * precio,
+              Estado: venta.estado || 'confirmada',
+              'Requiere revisión': venta.requiereRevision ? 'Sí' : 'No',
+              Origen: origenExcel(venta.origen),
+              'Tipo de venta': venta.tipoVenta || '',
+              'Medio operativo': venta.medioOperacion || '',
+              'Tipo de responsable': venta.responsableTipo || '',
+              'Transferencia ID': venta.transferenciaId || venta.rutaId || '',
+              'Forma de pago': venta.formaPago || ''
+            });
         });
       });
       const transferenciasFilas = transferencias.map(transferencia => ({
@@ -459,8 +479,8 @@ function Reportes({
         Valor: clientesFilas.length
       }];
       agregarHojaExcel(libro, 'Resumen', ['Indicador', 'Valor'], resumenFilas, [], []);
-      agregarHojaExcel(libro, 'Ventas', ['Venta ID', 'Fecha', 'Cliente ID', 'Cliente', 'Teléfono', 'Vendedor UID', 'Vendedor', 'Forma de pago', 'Origen', 'Transferencia ID', 'Líneas de venta', 'Unidades vendidas', 'Total', 'GPS venta disponible'], ventasFilas, ['Total'], ['Fecha']);
-      agregarHojaExcel(libro, 'VentaDetalle', ['Venta ID', 'Línea', 'Fecha venta', 'Cliente ID', 'Cliente', 'Producto ID', 'Producto', 'Unidad', 'Cantidad', 'Precio unitario', 'Subtotal', 'Origen', 'Transferencia ID', 'Forma de pago'], ventaDetalleFilas, ['Precio unitario', 'Subtotal'], ['Fecha venta']);
+      agregarHojaExcel(libro, 'Ventas', ['Venta ID', 'Venta offline ID', 'Fecha', 'Cliente ID', 'Cliente', 'Teléfono', 'Vendedor UID', 'Vendedor', 'Forma de pago', 'Origen', 'Transferencia ID', 'Estado', 'Requiere revisión', 'Líneas de venta', 'Unidades solicitadas', 'Unidades aplicadas inventario', 'Unidades faltantes', 'Detalle incidencia', 'Total', 'GPS venta disponible'], ventasFilas, ['Total'], ['Fecha']);
+      agregarHojaExcel(libro, 'VentaDetalle', ['Venta ID', 'Venta offline ID', 'Línea', 'Fecha venta', 'Cliente ID', 'Cliente', 'Producto ID', 'Producto', 'Unidad', 'Cantidad solicitada', 'Cantidad aplicada inventario', 'Cantidad faltante', 'Precio unitario', 'Subtotal', 'Estado', 'Requiere revisión', 'Origen', 'Transferencia ID', 'Forma de pago'], ventaDetalleFilas, ['Precio unitario', 'Subtotal'], ['Fecha venta']);
       agregarHojaExcel(libro, 'Transferencias', ['Transferencia ID', 'Fecha de salida', 'Fecha programada', 'Regreso programado', 'Fecha de recepción', 'Estado', 'Estado transferencia', 'Origen', 'Responsable', 'Responsable UID', 'Vehículo', 'Zona', 'Asignada por', 'Recibida por', 'Motivo de merma', 'Conciliada'], transferenciasFilas, [], ['Fecha de salida', 'Fecha programada', 'Regreso programado', 'Fecha de recepción']);
       agregarHojaExcel(libro, 'TransferenciaDetalle', ['Transferencia ID', 'Fecha de salida', 'Estado', 'Producto ID', 'Producto', 'Unidad', 'Cantidad cargada', 'Cantidad restante', 'Cantidad devuelta', 'Merma', 'Responsable', 'Zona'], transferenciaDetalleFilas, [], ['Fecha de salida']);
       agregarHojaExcel(libro, 'Créditos', ['Crédito ID', 'Venta ID', 'Fecha', 'Cliente ID', 'Cliente', 'Total', 'Abonado', 'Saldo', 'Estado', 'Cantidad de abonos', 'Capturado por UID'], creditosFilas, ['Total', 'Abonado', 'Saldo'], ['Fecha']);
