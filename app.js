@@ -3,16 +3,16 @@ function App() {
     currentUser, authChecked, firestoreError,
     locked, setLocked,
     isOnline,
-    productos, clientes, notas, creditos, rutas,
-    pendCounts, totalPendientes,
+    productos, clientes, notas, creditos, rutas, pedidos,
+    pendCounts, totalPendientes, notificacionesTransferencias,
   } = useSesion();
   const [tab, setTab] = useState('home');
   const [navOpen, setNavOpen] = useState(false);
   const historialTabs = useRef([]);
-  const [ventaRapida, setVentaRapida] = useState(false);
+  const [modoNota, setModoNota] = useState('pedidos');
   const [abrirFormProducto, setAbrirFormProducto] = useState(false);
   const [abrirUsuarios, setAbrirUsuarios] = useState(false);
-  const ALL_TABS = [['home', '🏠', 'Inicio'], ['productos', '📦', 'Productos'], ['nota', '🧾', 'Pedido'], ['clientes', '👥', 'Clientes'], ['creditos', '💳', 'Créditos'], ['ruta', '📦', 'Transferencias'], ['repartidores', '🧭', 'Distribución'], ['inventario', '📋', 'Inventario'], ['reportes', '📈', 'Reportes'], ['gerencia', '💰', 'Gerencia']];
+  const ALL_TABS = [['home', '🏠', 'Inicio'], ['productos', '📦', 'Productos'], ['nota', '📋', 'Pedidos'], ['clientes', '👥', 'Clientes'], ['creditos', '💳', 'Créditos'], ['ruta', '📦', 'Transferencias'], ['repartidores', '🧭', 'Distribución'], ['inventario', '📋', 'Inventario'], ['reportes', '📈', 'Reportes'], ['gerencia', '💰', 'Gerencia']];
   const permTabs = permisoTabs(currentUser);
   const tabsPermitidos = ['home', ...ALL_TABS.filter(([id]) => id !== 'home' && permTabs[id]).map(([id]) => id)];
   const TABS = ALL_TABS.filter(([id]) => tabsPermitidos.includes(id));
@@ -23,9 +23,11 @@ function App() {
       setTab(tabsPermitidos[0]);
     }
   }, [currentUser]);
-  const navegarA = destino => {
+  const navegarA = (destino, opciones = {}) => {
     setNavOpen(false);
-    if (!destino || destino === tab) return;
+    if (!destino) return;
+    if (destino === 'nota' && !opciones.conservarModoNota) setModoNota('pedidos');
+    if (destino === tab) return;
     historialTabs.current.push(tab);
     setTab(destino);
   };
@@ -43,7 +45,9 @@ function App() {
     clientes,
     notas,
     creditos,
-    rutas
+    rutas,
+    pedidos,
+    notificacionesTransferencias
   };
   if (!authChecked) return React.createElement("div", {
     style: {
@@ -131,7 +135,35 @@ function App() {
     style: {
       gap: 6
     }
-  }, React.createElement("span", {
+  }, notificacionesTransferencias.length > 0 && React.createElement("button", {
+    onClick: () => navegarA('ruta'),
+    title: 'Ver transferencias pendientes',
+    'aria-label': 'Ver transferencias pendientes',
+    style: {
+      position: 'relative',
+      background: 'none',
+      border: 'none',
+      color: 'var(--warn)',
+      cursor: 'pointer',
+      padding: '4px 6px',
+      fontSize: 17
+    }
+  }, '🔔', React.createElement("span", {
+    style: {
+      position: 'absolute',
+      top: -2,
+      right: -2,
+      minWidth: 15,
+      height: 15,
+      borderRadius: 10,
+      background: 'var(--danger)',
+      color: '#fff',
+      fontSize: 9,
+      lineHeight: '15px',
+      fontWeight: 800,
+      textAlign: 'center'
+    }
+  }, notificacionesTransferencias.length)), React.createElement("span", {
     style: {
       fontSize: 12,
       color: 'var(--rail-ink-faint)'
@@ -190,10 +222,11 @@ function App() {
   }, firestoreError), tab === 'home' && React.createElement(Dashboard, {
     ...ctx,
     currentUser: currentUser,
+    notificacionesTransferencias: notificacionesTransferencias,
     onIrA: navegarA,
     onVentaRapida: () => {
-      setVentaRapida(true);
-      navegarA('nota');
+      setModoNota('almacen');
+      navegarA('nota', { conservarModoNota: true });
     },
     onAgregarProducto: () => {
       setAbrirFormProducto(true);
@@ -211,8 +244,7 @@ function App() {
   }), tab === 'nota' && React.createElement(CrearNota, {
     ...ctx,
     currentUser: currentUser,
-    ventaRapida: ventaRapida,
-    onVentaRapidaConsumida: () => setVentaRapida(false)
+    ventaRapida: modoNota === 'almacen'
   }), tab === 'clientes' && React.createElement(Clientes, {
     ...ctx,
     currentUser: currentUser

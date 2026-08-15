@@ -694,8 +694,12 @@ function RepartidoresPanel({
       flash('❌ ' + e.message);
     }
   };
-  const rutasActivasVenta = rutas.filter(r => r.estado === 'activa' && (currentUser.role === 'admin' || r.repartidorId === currentUser.uid));
+  const rutasActivasVenta = rutas.filter(r => r.estado === 'activa' && currentUser.role === 'repartidor' && r.repartidorId === currentUser.uid);
   const abrirVentaParaCliente = cliente => {
+    if (currentUser.role !== 'repartidor') {
+      flash('⚠️ Las ventas desde transferencia solo las registra el repartidor asignado.');
+      return;
+    }
     if (rutasActivasVenta.length === 0) {
       flash('⚠️ No hay una transferencia activa asignada para registrar esta venta');
       return;
@@ -721,7 +725,10 @@ function RepartidoresPanel({
     }
     abrirVentaParaCliente(cli);
   };
-  const saldoDisponibleTransferencia = (rutaId, productoId) => Number(rutasActivasVenta.find(r => r.id === rutaId)?.items?.[productoId]?.cantRestante || 0);
+  const saldoDisponibleTransferencia = (rutaId, productoId) => {
+    const item = rutasActivasVenta.find(r => r.id === rutaId)?.items?.[productoId];
+    return Math.max(0, Number(item?.cantRestante || 0) - Number(item?.cantReservadaPedidos || 0));
+  };
   const addProdVenta = p => {
     if (!ventaRapida?.rutaId) {
       flash('⚠️ Selecciona una transferencia activa');
@@ -769,12 +776,12 @@ function RepartidoresPanel({
         if (!rutaSnap.exists) throw new Error('La transferencia activa ya no existe');
         const rutaActiva = rutaSnap.data();
         if (rutaActiva.estado !== 'activa') throw new Error('La transferencia ya no está disponible para ventas');
-        if (currentUser.role !== 'admin' && rutaActiva.repartidorId !== currentUser.uid) throw new Error('No puedes vender desde una transferencia ajena');
+        if (currentUser.role !== 'repartidor' || rutaActiva.repartidorId !== currentUser.uid) throw new Error('Solo el repartidor asignado puede vender desde esta transferencia');
         const itemsConPrecio = ventaRapida.items.map(it => {
           const producto = productos.find(p => p.id === it.id);
           const itemRuta = rutaActiva.items?.[it.id];
           if (!producto || !itemRuta) throw new Error('El producto no está disponible en la transferencia: ' + it.nombre);
-          if (Number(itemRuta.cantRestante || 0) < it.cant) throw new Error('Saldo transferido insuficiente para ' + it.nombre);
+          if (Number(itemRuta.cantRestante || 0) - Number(itemRuta.cantReservadaPedidos || 0) < it.cant) throw new Error('Saldo libre insuficiente; hay unidades reservadas para pedidos en ' + it.nombre);
           return { id: it.id, nombre: it.nombre, cant: it.cant, precio: Number(producto.precio || 0) };
         });
         const total = itemsConPrecio.reduce((s, it) => s + it.precio * it.cant, 0);
@@ -1082,7 +1089,7 @@ function RepartidoresPanel({
       gap: 8,
       marginBottom: 14
     }
-  }, puedeCamara && React.createElement("button", {
+  }, puedeCamara && currentUser.role === 'repartidor' && React.createElement("button", {
     onClick: () => setClienteScanOpen(true),
     style: {
       flex: 1,
@@ -1095,7 +1102,7 @@ function RepartidoresPanel({
       cursor: 'pointer',
       fontSize: 12
     }
-  }, "📷 Escanear para vender"), React.createElement("button", {
+  }, "📷 Escanear para vender"), currentUser.role === 'repartidor' && React.createElement("button", {
     onClick: () => setClienteBuscarOpen(o => !o),
     style: {
       flex: 1,
@@ -1108,7 +1115,7 @@ function RepartidoresPanel({
       cursor: 'pointer',
       fontSize: 12
     }
-  }, "🔍 Buscar manualmente")), clienteBuscarOpen && React.createElement("div", {
+  }, "🔍 Buscar manualmente")), clienteBuscarOpen && currentUser.role === 'repartidor' && React.createElement("div", {
     style: {
       marginBottom: 14
     }

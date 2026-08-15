@@ -2,6 +2,7 @@ function RutaReparto({
   productos,
   clientes,
   rutas,
+  pedidos,
   currentUser
 }) {
   const [scanOpen, setScanOpen] = useState(false);
@@ -31,6 +32,7 @@ function RutaReparto({
   const rutasVisibles = rutas.filter(r => currentUser.role === 'admin' || r.repartidorId === currentUser.uid);
   const rutaActiva = rutasVisibles.find(r => r.estado === 'activa');
   const historial = rutasVisibles.filter(r => r.id !== rutaActiva?.id);
+  const pedidosEnTransferencia = (pedidos || []).filter(p => p.estado === 'transferencia_confirmada' && p.transferenciaId === rutaActiva?.id);
   const [usuarios, setUsuarios] = useState([]);
   useEffect(() => {
     if (currentUser.role !== 'admin') return;
@@ -42,7 +44,9 @@ function RutaReparto({
   }, [currentUser.role]);
   const [progForm, setProgForm] = useState(null);
   const [progSaving, setProgSaving] = useState(false);
+  const [pedidosIncluidos, setPedidosIncluidos] = useState([]);
   const [recepcion, setRecepcion] = useState(null);
+  const [pedidoEntrega, setPedidoEntrega] = useState(null);
   const transferenciasPendientes = currentUser.role === 'admin' ? rutas.filter(r => r.estado === 'pendiente_recepcion') : [];
   const abrirRecepcion = transferencia => {
     const items = {};
@@ -163,6 +167,22 @@ function RutaReparto({
       return;
     }
     flash('✅ Repartidor asignado. Ahora agrega el cargamento e inicia la ruta.');
+  };
+  const pedidosPendientesRepartidor = (pedidos || []).filter(p => p.estado === 'asignado_pendiente_transferencia' && p.repartidorId === progForm?.repartidorId);
+  const togglePedidoTransferencia = pedido => {
+    const yaIncluido = pedidosIncluidos.includes(pedido.id);
+    setPedidosIncluidos(actual => yaIncluido ? actual.filter(id => id !== pedido.id) : [...actual, pedido.id]);
+    setCart(actual => {
+      const factor = yaIncluido ? -1 : 1;
+      const siguiente = actual.map(item => {
+        const pedidoItem = (pedido.items || []).find(x => x.id === item.id);
+        return pedidoItem ? { ...item, cant: Number(item.cant || 0) + factor * Number(pedidoItem.cant || 0) } : item;
+      }).filter(item => Number(item.cant || 0) > 0);
+      (pedido.items || []).forEach(pedidoItem => {
+        if (!siguiente.some(item => item.id === pedidoItem.id) && factor > 0) siguiente.push({ id: pedidoItem.id, nombre: pedidoItem.nombre, unidad: pedidoItem.unidad || '', cant: Number(pedidoItem.cant || 0) });
+      });
+      return siguiente;
+    });
   };
   const addToCart = p => {
     setCart(c => {
@@ -296,17 +316,25 @@ function RutaReparto({
     setSaving(true);
     try {
       const fecha = new Date().toISOString();
+      const pedidosSeleccionados = (pedidos || []).filter(p => pedidosIncluidos.includes(p.id));
       const itemsMap = {};
       cart.forEach(item => {
+        const reservado = pedidosSeleccionados.reduce((sum, pedido) => sum + Number((pedido.items || []).find(x => x.id === item.id)?.cant || 0), 0);
         itemsMap[item.id] = {
           nombre: item.nombre,
           unidad: item.unidad,
           cantCargada: item.cant,
-          cantRestante: item.cant
+          cantRestante: item.cant,
+          cantReservadaPedidos: reservado
         };
       });
       await db.runTransaction(async tx => {
         const existencias = await Promise.all(cart.map(item => tx.get(db.collection('productos').doc(item.id))));
+        const pedidosSnaps = await Promise.all(pedidosSeleccionados.map(pedido => tx.get(db.collection('pedidos').doc(pedido.id))));
+        pedidosSnaps.forEach((snap, index) => {
+          const pedido = pedidosSeleccionados[index];
+          if (!snap.exists || snap.data().estado !== 'asignado_pendiente_transferencia' || snap.data().repartidorId !== asignacion.repartidorId) throw new Error('El pedido ya no está disponible para esta transferencia: ' + pedido.clienteNombre);
+        });
         existencias.forEach((snap, index) => {
           const item = cart[index];
           if (!snap.exists || Number(snap.data().stock || 0) < item.cant) throw new Error('Stock insuficiente para ' + item.nombre);
@@ -332,10 +360,17 @@ function RutaReparto({
           asignadaPorUid: currentUser.uid,
           asignadaPorNombre: currentUser.nombre || '',
           items: itemsMap,
+          pedidosIds: pedidosSeleccionados.map(p => p.id),
+          reservasPedidos: pedidosSeleccionados.map(p => ({ pedidoId: p.id, clienteNombre: p.clienteNombre, items: p.items || [] })),
           entregas: []
         });
+        pedidosSeleccionados.forEach(pedido => tx.update(db.collection('pedidos').doc(pedido.id), {
+          estado: 'transferencia_confirmada', transferenciaId: rutaRef.id, fechaConfirmacionTransferencia: fecha,
+          confirmadaPorUid: currentUser.uid, confirmadaPorNombre: currentUser.nombre || '', fechaActualizacion: fecha
+        }));
       });
       setCart([]);
+      setPedidosIncluidos([]);
       setProgForm(null);
       flash('✅ Transferencia creada y disponible para ventas');
     } catch (e) {
@@ -343,13 +378,44 @@ function RutaReparto({
     }
     setSaving(false);
   };
+  const entregarPedido = async () => {
+    if (!pedidoEntrega?.id || !rutaActiva) return;
+    if (currentUser.role !== 'repartidor' || rutaActiva.repartidorId !== currentUser.uid) { flash('⚠️ Solo el repartidor asignado puede entregar este pedido'); return; }
+    setSaving(true);
+    try {
+      const fecha = new Date().toISOString();
+      const rutaRef = db.collection('rutas').doc(rutaActiva.id);
+      const pedidoRef = db.collection('pedidos').doc(pedidoEntrega.id);
+      const notaRef = db.collection('notas').doc();
+      await db.runTransaction(async tx => {
+        const [rutaSnap, pedidoSnap] = await Promise.all([tx.get(rutaRef), tx.get(pedidoRef)]);
+        if (!rutaSnap.exists || !pedidoSnap.exists) throw new Error('La transferencia o el pedido ya no existe');
+        const rutaActual = rutaSnap.data(); const pedidoActual = pedidoSnap.data();
+        if (rutaActual.estado !== 'activa' || pedidoActual.estado !== 'transferencia_confirmada' || pedidoActual.transferenciaId !== rutaRef.id) throw new Error('El pedido ya no está disponible para entrega');
+        if (rutaActual.repartidorId !== currentUser.uid || pedidoActual.repartidorId !== currentUser.uid) throw new Error('El pedido no está asignado a tu transferencia');
+        (pedidoActual.items || []).forEach(item => {
+          const itemRuta = rutaActual.items?.[item.id];
+          if (!itemRuta || Number(itemRuta.cantRestante || 0) < Number(item.cant || 0) || Number(itemRuta.cantReservadaPedidos || 0) < Number(item.cant || 0)) throw new Error('La reserva no está disponible para ' + item.nombre);
+        });
+        const totalPedido = Number(pedidoActual.total || 0);
+        tx.set(notaRef, { fecha, clienteId: pedidoActual.clienteId, clienteNombre: pedidoActual.clienteNombre, clienteTelefono: pedidoActual.clienteTelefono || '', items: (pedidoActual.items || []).map(item => ({ ...item })), total: totalPedido, formaPago: pedidoActual.formaPagoPrevista || 'efectivo', origen: 'transferencia_almacen', tipoVenta: 'pedido_transferencia', transferenciaId: rutaRef.id, rutaId: rutaRef.id, pedidoId: pedidoRef.id, capturadoPorUid: currentUser.uid, capturadoPorNombre: currentUser.nombre || '' });
+        if (pedidoActual.formaPagoPrevista === 'credito') tx.set(db.collection('creditos').doc(), { notaId: notaRef.id, clienteId: pedidoActual.clienteId, clienteNombre: pedidoActual.clienteNombre, fecha, total: totalPedido, saldo: totalPedido, abonos: [], capturadoPorUid: currentUser.uid });
+        const cambios = { entregas: firebase.firestore.FieldValue.arrayUnion({ id: notaRef.id, pedidoId: pedidoRef.id, fecha, clienteNombre: pedidoActual.clienteNombre, total: totalPedido, formaPago: pedidoActual.formaPagoPrevista || 'efectivo', items: pedidoActual.items || [], tipoVenta: 'pedido_transferencia', capturadoPorNombre: currentUser.nombre || '' }) };
+        (pedidoActual.items || []).forEach(item => { const actual = rutaActual.items[item.id]; cambios['items.' + item.id + '.cantRestante'] = Number(actual.cantRestante || 0) - Number(item.cant || 0); cambios['items.' + item.id + '.cantReservadaPedidos'] = Number(actual.cantReservadaPedidos || 0) - Number(item.cant || 0); });
+        tx.update(rutaRef, cambios);
+        tx.update(pedidoRef, { estado: 'entregado', notaId: notaRef.id, fechaEntrega: fecha, entregadoPorUid: currentUser.uid, entregadoPorNombre: currentUser.nombre || '', fechaActualizacion: fecha });
+      });
+      setPedidoEntrega(null); flash('✅ Pedido entregado y venta registrada desde tu transferencia');
+    } catch (e) { flash('❌ No se pudo entregar el pedido: ' + e.message); }
+    setSaving(false);
+  };
   const cliFilt = clientes.filter(c => c.activo && c.nombre.toLowerCase().includes(cliSearch.toLowerCase()));
-  const disponibles = rutaActiva ? Object.entries(rutaActiva.items).filter(([id, it]) => it.cantRestante > 0) : [];
+  const disponibles = rutaActiva ? Object.entries(rutaActiva.items).filter(([id, it]) => Number(it.cantRestante || 0) - Number(it.cantReservadaPedidos || 0) > 0).map(([id, it]) => [id, { ...it, saldoLibre: Number(it.cantRestante || 0) - Number(it.cantReservadaPedidos || 0) }]) : [];
   const addEnt = (id, it) => {
     const prod = productos.find(p => p.id === id);
     setEntCart(c => {
       const ex = c.find(x => x.id === id);
-      if (ex) return ex.cant < it.cantRestante ? c.map(x => x.id === id ? {
+      if (ex) return ex.cant < it.saldoLibre ? c.map(x => x.id === id ? {
         ...x,
         cant: x.cant + 1
       } : x) : c;
@@ -359,7 +425,7 @@ function RutaReparto({
         unidad: it.unidad,
         precio: prod ? prod.precio : 0,
         cant: 1,
-        max: it.cantRestante
+        max: it.saldoLibre
       }];
     });
   };
@@ -377,6 +443,7 @@ function RutaReparto({
   const canSaveEnt = clienteEnt?.nombre && entCart.length > 0;
   const guardarEntrega = async () => {
     if (!canSaveEnt || !rutaActiva) return;
+    if (currentUser.role !== 'repartidor' || rutaActiva.repartidorId !== currentUser.uid) { flash('⚠️ Solo el repartidor asignado puede registrar ventas desde esta transferencia'); return; }
     setSaving(true);
     try {
       let cl = cliSel;
@@ -399,12 +466,13 @@ function RutaReparto({
         if (!transferenciaSnap.exists) throw new Error('La transferencia ya no existe');
         const transferencia = transferenciaSnap.data();
         if (transferencia.estado !== 'activa') throw new Error('La transferencia ya no está disponible para ventas');
-        if (currentUser.role !== 'admin' && transferencia.repartidorId !== currentUser.uid) throw new Error('No puedes registrar una venta desde una transferencia ajena');
+        if (currentUser.role !== 'repartidor' || transferencia.repartidorId !== currentUser.uid) throw new Error('Solo el repartidor asignado puede vender desde esta transferencia');
         const items = entCart.map(item => {
           const itemTransferido = transferencia.items && transferencia.items[item.id];
           if (!itemTransferido) throw new Error('El producto no pertenece a esta transferencia: ' + item.nombre);
           const restante = Number(itemTransferido.cantRestante || 0);
-          if (restante < item.cant) throw new Error('Saldo transferido insuficiente para ' + item.nombre);
+          const libre = restante - Number(itemTransferido.cantReservadaPedidos || 0);
+          if (libre < item.cant) throw new Error('Saldo libre insuficiente para ' + item.nombre);
           return { id: item.id, nombre: item.nombre, precio: item.precio, cant: item.cant };
         });
         tx.set(notaRef, {
@@ -416,6 +484,7 @@ function RutaReparto({
           total,
           formaPago: pago,
           origen: 'transferencia_almacen',
+          tipoVenta: 'rapida_repartidor',
           transferenciaId: transferenciaRef.id,
           rutaId: transferenciaRef.id,
           capturadoPorUid: currentUser.uid,
@@ -534,6 +603,7 @@ function RutaReparto({
         repartidorId: e.target.value,
         repartidorNombre: u ? u.nombre : ''
       }));
+      setPedidosIncluidos([]);
     },
     style: {
       background: 'var(--surface-2)',
@@ -597,7 +667,7 @@ function RutaReparto({
     style: {
       marginBottom: 10
     }
-  }), React.createElement("div", {
+  }), progForm.repartidorId && React.createElement(React.Fragment, null, React.createElement(Lbl, null, 'Pedidos pendientes de este repartidor'), pedidosPendientesRepartidor.length === 0 ? React.createElement('div', { style: { fontSize: 12, color: 'var(--ink-faint)', marginBottom: 10 } }, 'No hay pedidos asignados pendientes de cargar.') : React.createElement('div', { style: { marginBottom: 10 } }, pedidosPendientesRepartidor.map(pedido => React.createElement('label', { key: pedido.id, style: { display: 'block', padding: '8px 0', borderBottom: '1px solid var(--line)', cursor: 'pointer' } }, React.createElement('input', { type: 'checkbox', checked: pedidosIncluidos.includes(pedido.id), onChange: () => togglePedidoTransferencia(pedido), style: { marginRight: 7 } }), React.createElement('strong', { style: { fontSize: 12 } }, pedido.clienteNombre), React.createElement('div', { style: { fontSize: 11, color: 'var(--ink-faint)', marginLeft: 22, marginTop: 2 } }, (pedido.items || []).map(item => item.nombre + ' ×' + item.cant).join(', ') + ' · ' + fmt(pedido.total || 0))))), React.createElement('div', { style: { fontSize: 11, color: 'var(--accent-text)', marginBottom: 10 } }, 'Al confirmar la carga, los pedidos seleccionados quedarán vinculados a esta transferencia.'))), React.createElement("div", {
     style: {
       borderTop: '1px solid var(--line-strong)',
       margin: '4px 0 14px'
@@ -816,7 +886,7 @@ function RutaReparto({
       width: '100%',
       marginTop: 10
     }
-  }, "📥 Enviar a recepción de almacén")), React.createElement(Card, null, React.createElement("button", {
+  }, "📥 Enviar a recepción de almacén")), currentUser.role === 'repartidor' && pedidosEnTransferencia.length > 0 && React.createElement(Card, null, React.createElement('div', { style: { fontWeight: 700, marginBottom: 8 } }, '📋 Pedidos pendientes de entregar'), pedidosEnTransferencia.map(pedido => React.createElement('div', { key: pedido.id, style: { padding: '9px 0', borderBottom: '1px solid var(--line)' } }, React.createElement(Row, { style: { justifyContent: 'space-between', gap: 8 } }, React.createElement('div', null, React.createElement('div', { style: { fontSize: 13, fontWeight: 700 } }, pedido.clienteNombre), React.createElement('div', { style: { fontSize: 11, color: 'var(--ink-faint)' } }, (pedido.items || []).map(item => item.nombre + ' ×' + item.cant).join(', '))), React.createElement('strong', { style: { fontSize: 12, color: 'var(--accent-text)' } }, fmt(pedido.total || 0))), React.createElement(BFill, { onClick: () => setPedidoEntrega(pedido), style: { marginTop: 8, padding: '6px 10px', fontSize: 11 } }, 'Confirmar entrega')))), currentUser.role === 'repartidor' && React.createElement(Card, null, React.createElement("button", {
     onClick: () => setEntOpen(o => !o),
     style: {
       background: 'none',
@@ -1114,7 +1184,7 @@ function RutaReparto({
   }, saving ? 'Conciliando…' : '✅ Recibir y cerrar transferencia')), scanOpen && React.createElement(BarcodeScanner, {
     onDetected: handleScan,
     onClose: () => setScanOpen(false)
-  }), productoNoEncontrado && React.createElement(Modal, {
+  }), pedidoEntrega && React.createElement(Modal, { title: 'Confirmar entrega de pedido', onClose: () => !saving && setPedidoEntrega(null) }, React.createElement('div', { style: { fontWeight: 700, marginBottom: 8 } }, pedidoEntrega.clienteNombre), React.createElement('div', { style: { fontSize: 12, color: 'var(--ink-soft)', marginBottom: 12 } }, (pedidoEntrega.items || []).map(item => item.nombre + ' ×' + item.cant).join(', ')), React.createElement('div', { style: { fontSize: 12, marginBottom: 14 } }, 'Al confirmar se registrará la venta desde tu transferencia y se aplicará el pago previsto: ', React.createElement('strong', null, pedidoEntrega.formaPagoPrevista || 'efectivo'), '.'), React.createElement(BFill, { onClick: entregarPedido, disabled: saving, style: { width: '100%' } }, saving ? 'Registrando…' : 'Confirmar entrega y venta')), productoNoEncontrado && React.createElement(Modal, {
     title: 'Producto no encontrado',
     onClose: () => setProductoNoEncontrado('')
   }, React.createElement("div", { style: { fontSize: 13, color: 'var(--ink-soft)', lineHeight: 1.5, marginBottom: 16 } }, 'El código ', React.createElement("strong", null, productoNoEncontrado), ' no existe en el catálogo. ¿Quieres agregar este producto?'), React.createElement(Row, { style: { gap: 8, justifyContent: 'flex-end' } }, React.createElement(BOut, { onClick: () => setProductoNoEncontrado('') }, 'Cancelar'), React.createElement(BFill, { onClick: abrirAltaProductoEscaneado }, 'Agregar producto'))), altaProducto && React.createElement(Modal, {
@@ -1242,5 +1312,5 @@ function RutaReparto({
       color: 'var(--accent-text)',
       fontWeight: 700
     }
-  }, fmt(e.total))))))))));
+  }, fmt(e.total)))))))));
 }

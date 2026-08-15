@@ -10,7 +10,7 @@
 
 /* ── Modelo de permisos: constantes de rol + helpers de acceso ──
    (movido de app-core.js, sin cambios de lógica) */
-const TABS_INFO = [['productos', '📦', 'Productos'], ['nota', '🧾', 'Venta de almacén'], ['clientes', '👥', 'Clientes'], ['creditos', '💳', 'Créditos'], ['ruta', '📦', 'Transferencias'], ['repartidores', '🧭', 'Distribución'], ['inventario', '📋', 'Inventario'], ['reportes', '📈', 'Reportes'], ['gerencia', '💰', 'Gerencia']];
+const TABS_INFO = [['productos', '📦', 'Productos'], ['nota', '📋', 'Pedidos'], ['clientes', '👥', 'Clientes'], ['creditos', '💳', 'Créditos'], ['ruta', '📦', 'Transferencias'], ['repartidores', '🧭', 'Distribución'], ['inventario', '📋', 'Inventario'], ['reportes', '📈', 'Reportes'], ['gerencia', '💰', 'Gerencia']];
 const EDICION_INFO = [['productos', '📦', 'Editar / dar de alta productos'], ['clientes', '👥', 'Editar / dar de alta clientes'], ['creditos', '💳', 'Registrar abonos a créditos']];
 const ACCIONES_INFO = [['camara', '📷', 'Usar cámara (escanear QR de cliente)'], ['csv', '📄', 'Descargar reportes en CSV'], ['gps', '📍', 'Compartir ubicación en vivo (GPS)'], ['password', '🔑', 'Cambiar su propia contraseña']];
 const ACCIONES_DEFAULT_ROL = {
@@ -238,14 +238,50 @@ function useSesion() {
   const [notas, setNotas] = useState([]);
   const [creditos, setCreditos] = useState([]);
   const [rutas, setRutas] = useState([]);
+  const [pedidos, setPedidos] = useState([]);
   const [pendCounts, setPendCounts] = useState({
     productos: 0,
     clientes: 0,
     notas: 0,
     creditos: 0,
-    rutas: 0
+    rutas: 0,
+    pedidos: 0
   });
   const totalPendientes = Object.values(pendCounts).reduce((s, n) => s + n, 0);
+  const notificacionesTransferencias = (() => {
+    if (!currentUser) return [];
+    const avisos = [];
+    const fechaAviso = valor => valor || new Date().toISOString();
+    if (currentUser.role === 'admin') {
+      (rutas || []).filter(r => r.estado === 'pendiente_recepcion').forEach(r => avisos.push({
+        id: 'recepcion-' + r.id,
+        tipo: 'recepcion',
+        titulo: 'Transferencia pendiente de recepción',
+        detalle: `${r.repartidorNombre || 'Repartidor'} tiene mercancía pendiente de conciliar`,
+        fecha: fechaAviso(r.fechaRegresoReal || r.fecha),
+        rutaId: r.id
+      }));
+      (pedidos || []).filter(p => p.estado === 'asignado_pendiente_transferencia').forEach(p => avisos.push({
+        id: 'carga-pedido-' + p.id,
+        tipo: 'carga',
+        titulo: 'Pedido esperando confirmación de transferencia',
+        detalle: `${p.clienteNombre || 'Cliente'} · ${p.repartidorNombre || 'sin repartidor'}`,
+        fecha: fechaAviso(p.fechaActualizacion || p.fechaCreacion),
+        rutaId: null
+      }));
+    }
+    if (currentUser.role === 'repartidor') {
+      (pedidos || []).filter(p => p.estado === 'transferencia_confirmada' && p.repartidorId === currentUser.uid).forEach(p => avisos.push({
+        id: 'entrega-pedido-' + p.id,
+        tipo: 'entrega',
+        titulo: 'Pedido pendiente de entrega',
+        detalle: `${p.clienteNombre || 'Cliente'} · transferencia confirmada`,
+        fecha: fechaAviso(p.fechaConfirmacionTransferencia || p.fechaActualizacion),
+        rutaId: p.transferenciaId || null
+      }));
+    }
+    return avisos.sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
+  })();
 
   useEffect(() => {
     const on = () => setIsOnline(true),
@@ -376,6 +412,9 @@ function useSesion() {
       : currentUser.role === 'admin'
         ? db.collection('rutas').orderBy('fecha', 'desc').limit(100)
         : null;
+    const pedidosQuery = currentUser.role === 'repartidor'
+      ? db.collection('pedidos').where('repartidorId', '==', currentUser.uid)
+      : db.collection('pedidos').orderBy('fechaCreacion', 'desc').limit(500);
     const unsubs = [db.collection('productos').onSnapshot({
       includeMetadataChanges: true
     }, snap => {
@@ -408,6 +447,13 @@ function useSesion() {
         ...d.data()
       })));
       pend('creditos', snap);
+    }, errorHandler), pedidosQuery.onSnapshot({
+      includeMetadataChanges: true
+    }, snap => {
+      const lista = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      lista.sort((a, b) => new Date(b.fechaCreacion || 0) - new Date(a.fechaCreacion || 0));
+      setPedidos(lista);
+      pend('pedidos', snap);
     }, errorHandler), ...(rutasQuery ? [rutasQuery.onSnapshot({
       includeMetadataChanges: true
     }, snap => {
@@ -423,7 +469,7 @@ function useSesion() {
     currentUser, authChecked, firestoreError,
     locked, setLocked,
     isOnline,
-    productos, clientes, notas, creditos, rutas,
-    pendCounts, totalPendientes,
+    productos, clientes, notas, creditos, rutas, pedidos,
+    pendCounts, totalPendientes, notificacionesTransferencias,
   };
 }

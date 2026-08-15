@@ -165,10 +165,10 @@ function Reportes({
   };
   const exportarReporteCSV = () => {
     if (!reporteData) return;
-    const rows = [['Fecha', 'Cliente', 'Productos', 'Total', 'Forma de pago', 'Origen', 'Transferencia']];
+    const rows = [['Fecha', 'Cliente', 'Productos', 'Total', 'Forma de pago', 'Origen', 'Tipo de venta', 'Medio operativo', 'Responsable', 'Transferencia']];
     reporteData.notas.forEach(n => {
       const origen = n.origen === 'transferencia_almacen' || n.origen === 'qr_cliente_ruta' ? 'Transferencia de almacén' : 'Almacén';
-      rows.push([fDateTime(n.fecha), n.clienteNombre, (n.items || []).map(it => it.nombre + ' x' + it.cant).join(' | '), (n.total || 0).toFixed(2), n.formaPago, origen, n.transferenciaId || '']);
+      rows.push([fDateTime(n.fecha), n.clienteNombre, (n.items || []).map(it => it.nombre + ' x' + it.cant).join(' | '), (n.total || 0).toFixed(2), n.formaPago, origen, n.tipoVenta || '', n.medioOperacion || '', n.capturadoPorNombre || '', n.transferenciaId || '']);
     });
     downloadCSV('reporte_ventas_' + Date.now() + '.csv', rows);
   };
@@ -267,6 +267,9 @@ function Reportes({
           Vendedor: venta.capturadoPorNombre || '',
           'Forma de pago': venta.formaPago || '',
           Origen: origenExcel(venta.origen),
+          'Tipo de venta': venta.tipoVenta || '',
+          'Medio operativo': venta.medioOperacion || '',
+          'Tipo de responsable': venta.responsableTipo || '',
           'Transferencia ID': venta.transferenciaId || venta.rutaId || '',
           'Líneas de venta': items.length,
           'Unidades vendidas': items.reduce((suma, item) => suma + numeroExcel(item.cant), 0),
@@ -292,6 +295,9 @@ function Reportes({
             'Precio unitario': precio,
             Subtotal: cantidad * precio,
             Origen: origenExcel(venta.origen),
+            'Tipo de venta': venta.tipoVenta || '',
+            'Medio operativo': venta.medioOperacion || '',
+            'Tipo de responsable': venta.responsableTipo || '',
             'Transferencia ID': venta.transferenciaId || venta.rutaId || '',
             'Forma de pago': venta.formaPago || ''
           });
@@ -526,10 +532,10 @@ function Reportes({
         id: d.id,
         ...d.data()
       })).sort((a, b) => new Date(a.fecha) - new Date(b.fecha));
-      const rows = [['Fecha', 'Cliente', 'Vendedor', 'Productos', 'Total', 'Forma de pago', 'Origen', 'Transferencia']];
+      const rows = [['Fecha', 'Cliente', 'Vendedor', 'Productos', 'Total', 'Forma de pago', 'Origen', 'Tipo de venta', 'Medio operativo', 'Responsable', 'Transferencia']];
       notas.forEach(n => {
         const origen = n.origen === 'transferencia_almacen' || n.origen === 'qr_cliente_ruta' ? 'Transferencia de almacén' : 'Almacén';
-        rows.push([fDateTime(n.fecha), n.clienteNombre, n.capturadoPorNombre || '', (n.items || []).map(it => it.nombre + ' x' + it.cant).join(' | '), (n.total || 0).toFixed(2), n.formaPago, origen, n.transferenciaId || '']);
+        rows.push([fDateTime(n.fecha), n.clienteNombre, n.capturadoPorNombre || '', (n.items || []).map(it => it.nombre + ' x' + it.cant).join(' | '), (n.total || 0).toFixed(2), n.formaPago, origen, n.tipoVenta || '', n.medioOperacion || '', n.responsableTipo || '', n.transferenciaId || '']);
       });
       downloadCSV('ventas_semana_' + Date.now() + '.csv', rows);
       flash('✅ Ventas de la semana exportadas — ' + notas.length);

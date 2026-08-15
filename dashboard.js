@@ -48,6 +48,7 @@ function Dashboard({
   clientes,
   rutas,
   currentUser,
+  notificacionesTransferencias = [],
   onIrA,
   onVentaRapida
 }) {
@@ -61,6 +62,7 @@ function Dashboard({
   const pend = creditos.filter(c => c.saldo > 0);
   const tcred = pend.reduce((s, c) => s + c.saldo, 0);
   const bajo = productos.filter(p => p.stock < 10);
+  const avisosTransferencia = notificacionesTransferencias.slice(0, 4);
   const bmap = notas.reduce((m, n) => {
     m[n.clienteId] = m[n.clienteId] || {
       nombre: n.clienteNombre,
@@ -82,8 +84,8 @@ function Dashboard({
   };
   const acciones = (isRepartidor ? [{
     icon: '🧾',
-    label: 'Registrar venta',
-    detalle: rutaActiva ? 'Usar saldo transferido' : 'Revisar transferencia',
+    label: 'Venta rápida',
+    detalle: rutaActiva ? 'Vender desde mi transferencia' : 'Revisar transferencia',
     onClick: irA('ruta')
   }, {
     icon: '🧭',
@@ -97,16 +99,17 @@ function Dashboard({
     onClick: irA('gerencia')
   }] : [{
     icon: '🧾',
-    label: 'Nueva venta',
-    detalle: 'Registrar pedido de almacén',
+    label: 'Nuevo pedido',
+    detalle: 'Solicitud sin descontar inventario',
     onClick: irA('nota'),
     tab: 'nota'
   }, {
     icon: '⚡',
-    label: 'Venta mostrador',
-    detalle: 'Cobro rápido en punto de venta',
+    label: 'Venta rápida',
+    detalle: 'Venta directa desde almacén, sin transferencia',
     onClick: onVentaRapida,
-    tab: 'nota'
+    tab: 'nota',
+    soloAdmin: true
   }, {
     icon: '👥',
     label: 'Clientes y QR',
@@ -122,7 +125,7 @@ function Dashboard({
   }, {
     icon: '📦',
     label: 'Transferencias',
-    detalle: 'Crear, vender o recibir',
+    detalle: 'Cargar, conciliar o recibir',
     onClick: irA('ruta'),
     tab: 'ruta',
     soloAdmin: true
@@ -145,7 +148,60 @@ function Dashboard({
       fontWeight: 800,
       marginBottom: 14
     }
-  }, "📊 Inicio"), React.createElement("div", {
+  }, "📊 Inicio"), avisosTransferencia.length > 0 && React.createElement(Card, {
+    style: {
+      marginBottom: 14,
+      border: '1px solid var(--warn)66'
+    }
+  }, React.createElement(Row, {
+    style: {
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: 8
+    }
+  }, React.createElement("div", {
+    style: {
+      fontSize: 13,
+      fontWeight: 800,
+      color: 'var(--warn-text)'
+    }
+  }, '🔔 Transferencias pendientes'), React.createElement("button", {
+    onClick: () => onIrA('ruta'),
+    style: {
+      border: 'none',
+      background: 'none',
+      color: 'var(--accent)',
+      fontSize: 11,
+      fontWeight: 700,
+      cursor: 'pointer'
+    }
+  }, 'Ver módulo →')), avisosTransferencia.map(aviso => React.createElement("button", {
+    key: aviso.id,
+    onClick: () => onIrA('ruta'),
+    style: {
+      display: 'block',
+      width: '100%',
+      textAlign: 'left',
+      border: 'none',
+      borderTop: '1px solid var(--line)',
+      background: 'transparent',
+      padding: '8px 0 0',
+      marginTop: 8,
+      cursor: 'pointer'
+    }
+  }, React.createElement("div", {
+    style: {
+      fontSize: 12,
+      fontWeight: 700,
+      color: 'var(--ink)'
+    }
+  }, aviso.titulo), React.createElement("div", {
+    style: {
+      fontSize: 11,
+      color: 'var(--ink-faint)',
+      marginTop: 2
+    }
+  }, aviso.detalle)))), React.createElement("div", {
     style: {
       display: 'grid',
       gridTemplateColumns: '1fr 1fr',
@@ -178,7 +234,7 @@ function Dashboard({
     onClick: irA('ruta')
   })) : React.createElement(React.Fragment, null, React.createElement(StatTile, {
     value: vhoy.length,
-    label: "Pedidos de hoy",
+    label: "Ventas de hoy",
     bg: "var(--rail)",
     color: "var(--rail-ink)",
     onClick: irA('nota')
@@ -332,7 +388,7 @@ function Dashboard({
       fontWeight: 700,
       marginBottom: 8
     }
-  }, "PEDIDOS DE HOY"), vhoy.map(n => React.createElement(Row, {
+  }, "VENTAS DE HOY"), vhoy.map(n => React.createElement(Row, {
     key: n.id,
     style: {
       justifyContent: 'space-between',

@@ -48,6 +48,94 @@ const claveLocalidad = valor => normalizarLocalidad(valor).normalize('NFD').repl
 const LOCALIDAD_NUEVA = '__nueva_localidad__';
 const LOCALIDAD_SIN_CLASIFICAR = '__sin_localidad__';
 
+function SelectorLocalidad({ value, localidades, nuevaValue, onSeleccionar, onCrear, onCambiar }) {
+  const [texto, setTexto] = useState(value || '');
+  const [abierto, setAbierto] = useState(false);
+  useEffect(() => {
+    if (nuevaValue === undefined && claveLocalidad(value) === claveLocalidad(texto)) setTexto(value || '');
+  }, [value, nuevaValue]);
+  const termino = claveLocalidad(texto);
+  const exacta = localidades.find(localidad => claveLocalidad(localidad) === termino);
+  const sugerencias = localidades.filter(localidad => !termino || claveLocalidad(localidad).includes(termino)).slice(0, 12);
+  if (nuevaValue !== undefined) return React.createElement('div', { style: { marginBottom: 6 } },
+    React.createElement(Row, { style: { justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 } },
+      React.createElement('span', { style: { fontSize: 12, fontWeight: 800, color: 'var(--accent-text)' } }, 'Nueva localidad'),
+      React.createElement(BOut, { onClick: onCambiar, style: { padding: '5px 8px', fontSize: 11 } }, 'Elegir existente')),
+    React.createElement(Inp, {
+      value: nuevaValue,
+      placeholder: 'Nombre de la nueva localidad',
+      onChange: e => onCrear(normalizarLocalidad(e.target.value))
+    }));
+  return React.createElement('div', { style: { position: 'relative', marginBottom: 6 } },
+    React.createElement(Inp, {
+      value: texto,
+      placeholder: 'Escribe para buscar localidad…',
+      onFocus: () => setAbierto(true),
+      onChange: e => {
+        setTexto(e.target.value);
+        setAbierto(true);
+        if (exacta && claveLocalidad(e.target.value) !== claveLocalidad(exacta)) onCambiar();
+      },
+      onBlur: () => setTimeout(() => setAbierto(false), 150),
+      'aria-label': 'Buscar localidad'
+    }),
+    abierto && React.createElement('div', {
+      style: {
+        position: 'absolute',
+        zIndex: 20,
+        left: 0,
+        right: 0,
+        top: 'calc(100% + 4px)',
+        maxHeight: 220,
+        overflowY: 'auto',
+        background: 'var(--surface)',
+        border: '1px solid var(--line-strong)',
+        borderRadius: 8,
+        boxShadow: '0 8px 20px rgba(0,0,0,.12)'
+      }
+    }, sugerencias.length ? sugerencias.map(localidad => React.createElement('button', {
+      key: localidad,
+      type: 'button',
+      onMouseDown: e => e.preventDefault(),
+      onClick: () => {
+        setTexto(localidad);
+        setAbierto(false);
+        onSeleccionar(localidad);
+      },
+      style: {
+        display: 'block',
+        width: '100%',
+        padding: '9px 10px',
+        textAlign: 'left',
+        border: 'none',
+        borderBottom: '1px solid var(--line)',
+        background: 'var(--surface)',
+        color: 'var(--ink)',
+        cursor: 'pointer',
+        fontSize: 12
+      }
+    }, localidad)) : React.createElement('div', { style: { padding: '10px', fontSize: 12, color: 'var(--ink-faint)' } }, 'No hay coincidencias.')), texto.trim() && !exacta && React.createElement('button', {
+      type: 'button',
+      onMouseDown: e => e.preventDefault(),
+      onClick: () => {
+        setAbierto(false);
+        onCrear(normalizarLocalidad(texto));
+      },
+      style: {
+        display: 'block',
+        width: '100%',
+        padding: '10px',
+        textAlign: 'left',
+        border: 'none',
+        background: 'var(--surface-2)',
+        color: 'var(--accent-text)',
+        cursor: 'pointer',
+        fontSize: 12,
+        fontWeight: 800
+      }
+    }, '+ Crear "' + normalizarLocalidad(texto) + '"'));
+}
+
 function asegurarLibreriaQRClientes(callback) {
   if (window.QRCode) {
     callback(true);
@@ -992,38 +1080,21 @@ function Clientes({
     style: {
       marginBottom: 10
     }
-  }), React.createElement(Lbl, null, "Localidad (ejido o rancho)"), React.createElement("select", {
-    value: form.localidadNueva !== undefined ? LOCALIDAD_NUEVA : form.localidad || form.domicilio || '',
-    onChange: e => {
-      const valor = e.target.value;
-      if (valor === LOCALIDAD_NUEVA) {
-        setForm(f => ({ ...f, localidadNueva: '' }));
-      } else {
-        setForm(f => {
-          const siguiente = { ...f, localidad: valor };
-          delete siguiente.localidadNueva;
-          return siguiente;
-        });
-      }
-    },
-    style: {
-      width: '100%',
-      padding: '9px 10px',
-      border: '1px solid var(--line-strong)',
-      borderRadius: 6,
-      background: 'var(--surface-2)',
-      color: 'var(--ink)',
-      fontSize: 13,
-      marginBottom: form.localidadNueva !== undefined ? 8 : 6
-    }
-  }, React.createElement("option", { value: '' }, 'Selecciona una localidad'), localidades.map(localidad => React.createElement("option", {
-    key: localidad,
-    value: localidad
-  }, localidad)), React.createElement("option", { value: LOCALIDAD_NUEVA }, '+ Crear nueva localidad…')), form.localidadNueva !== undefined && React.createElement(Inp, {
-    value: form.localidadNueva,
-    placeholder: 'Nombre de la nueva localidad',
-    onChange: e => setForm(f => ({ ...f, localidadNueva: e.target.value })),
-    style: { marginBottom: 6 }
+  }), React.createElement(Lbl, null, "Localidad (ejido o rancho)"), React.createElement(SelectorLocalidad, {
+    value: form.localidad || form.domicilio || '',
+    localidades,
+    nuevaValue: form.localidadNueva,
+    onSeleccionar: valor => setForm(f => {
+      const siguiente = { ...f, localidad: valor };
+      delete siguiente.localidadNueva;
+      return siguiente;
+    }),
+    onCrear: valor => setForm(f => ({ ...f, localidadNueva: valor })),
+    onCambiar: () => setForm(f => {
+      const siguiente = { ...f, localidad: '' };
+      delete siguiente.localidadNueva;
+      return siguiente;
+    })
   }), React.createElement("div", {
     style: {
       fontSize: 11,
