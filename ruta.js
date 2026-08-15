@@ -1,10 +1,18 @@
 function RutaReparto({
-  productos,
-  clientes,
-  rutas,
-  pedidos,
-  currentUser
+  productos = [],
+  clientes = [],
+  rutas = [],
+  pedidos = [],
+  currentUser = {}
 }) {
+  // Transferencias debe seguir renderizando aunque Firestore todavía no haya
+  // entregado alguna colección o un documento antiguo tenga campos incompletos.
+  productos = Array.isArray(productos) ? productos : [];
+  clientes = Array.isArray(clientes) ? clientes : [];
+  rutas = Array.isArray(rutas) ? rutas : [];
+  pedidos = Array.isArray(pedidos) ? pedidos : [];
+  currentUser = currentUser || {};
+  const runtime = typeof window !== 'undefined' ? window : globalThis;
   const [scanOpen, setScanOpen] = useState(false);
   const [productoNoEncontrado, setProductoNoEncontrado] = useState('');
   const [altaProducto, setAltaProducto] = useState(null);
@@ -44,8 +52,9 @@ function RutaReparto({
     return unsub;
   }, [currentUser.role]);
   useEffect(() => {
-    if (typeof frittzSuscribirVentasOffline !== 'function') return undefined;
-    return frittzSuscribirVentasOffline(setOfflineVentaResumen);
+    const subscribe = runtime && runtime.frittzSuscribirVentasOffline;
+    if (typeof subscribe !== 'function') return undefined;
+    return subscribe(setOfflineVentaResumen);
   }, []);
   const [progForm, setProgForm] = useState(null);
   const [progSaving, setProgSaving] = useState(false);
@@ -396,7 +405,9 @@ function RutaReparto({
         cant: Number(item.cant || 0)
       }));
       const total = Number(pedidoEntrega.total || items.reduce((s, item) => s + item.precio * item.cant, 0));
-      const resultado = await frittzGuardarVentaTransferencia({
+      const guardarVenta = runtime && runtime.frittzGuardarVentaTransferencia;
+      if (typeof guardarVenta !== 'function') throw new Error('El módulo de ventas offline no está disponible; recarga la aplicación');
+      const resultado = await guardarVenta({
         transferenciaId: rutaActiva.id,
         rutaId: rutaActiva.id,
         repartidorUid: currentUser.uid,
@@ -425,8 +436,8 @@ function RutaReparto({
     }
     setSaving(false);
   };
-  const cliFilt = clientes.filter(c => c.activo && c.nombre.toLowerCase().includes(cliSearch.toLowerCase()));
-  const disponibles = rutaActiva ? Object.entries(rutaActiva.items).map(([id, it]) => {
+  const cliFilt = clientes.filter(c => c.activo !== false && String(c.nombre || '').toLowerCase().includes(cliSearch.toLowerCase()));
+  const disponibles = rutaActiva ? Object.entries(rutaActiva.items || {}).map(([id, it]) => {
     const pendientes = (offlineVentaResumen.registros || [])
       .filter(venta => venta.transferenciaId === rutaActiva.id && ['pendiente', 'reintentando'].includes(venta.estado))
       .reduce((sum, venta) => sum + (venta.items || []).filter(x => x.id === id).reduce((s, x) => s + Number(x.cant || 0), 0), 0);
@@ -487,7 +498,9 @@ function RutaReparto({
         cant: Number(item.cant || 0)
       }));
       const total = items.reduce((s, x) => s + x.precio * x.cant, 0);
-      const resultado = await frittzGuardarVentaTransferencia({
+      const guardarVenta = runtime && runtime.frittzGuardarVentaTransferencia;
+      if (typeof guardarVenta !== 'function') throw new Error('El módulo de ventas offline no está disponible; recarga la aplicación');
+      const resultado = await guardarVenta({
         transferenciaId: rutaActiva.id,
         rutaId: rutaActiva.id,
         repartidorUid: currentUser.uid,
@@ -521,7 +534,8 @@ function RutaReparto({
       flash('⏳ Espera a que termine la operación actual');
       return;
     }
-    const pendientesOffline = typeof frittzVentasPendientesRuta === 'function' ? await frittzVentasPendientesRuta(rutaActiva.id) : { total: 0 };
+    const pendientesFn = runtime && runtime.frittzVentasPendientesRuta;
+    const pendientesOffline = typeof pendientesFn === 'function' ? await pendientesFn(rutaActiva.id) : { total: 0 };
     if (pendientesOffline.total > 0) {
       flash('⚠️ Hay ' + pendientesOffline.total + ' venta(s) offline pendiente(s) de sincronizar; conecta el dispositivo antes de cerrar');
       return;
@@ -682,7 +696,7 @@ function RutaReparto({
       marginTop: 10
     },
     disabled: progSaving
-  }, progSaving ? 'Validando…' : '✅ Confirmar asignación'))), !rutaActiva && React.createElement(React.Fragment, null, React.createElement(Card, null, React.createElement(BFill, {
+  }, progSaving ? 'Validando…' : '✅ Confirmar asignación')), !rutaActiva && React.createElement(React.Fragment, null, React.createElement(Card, null, React.createElement(BFill, {
     onClick: () => setScanOpen(true),
     style: {
       width: '100%',
@@ -1307,5 +1321,5 @@ function RutaReparto({
       color: 'var(--accent-text)',
       fontWeight: 700
     }
-  }, fmt(e.total)))))))));
+  }, fmt(e.total))))))))));
 }
