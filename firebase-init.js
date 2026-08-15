@@ -25,7 +25,7 @@ firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
 const db = firebase.firestore();
 
-const APP_CHECK_SITE_KEY = '6Led-nktAAAAAEQK6YGl3wzaSI0pEOmCw1iDGG45';
+const APP_CHECK_SITE_KEY = '6LcR2YctAAAAAAtC1DlhW23xi0H_xZLb_ARSw2Rl';
 
 if (['localhost', '127.0.0.1'].includes(location.hostname)) {
   self.FIREBASE_APPCHECK_DEBUG_TOKEN = true;
