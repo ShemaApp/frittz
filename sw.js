@@ -5,7 +5,7 @@
 
 // Cambia esta versión en cada publicación para invalidar el shell anterior.
 const CACHE_PREFIX = 'pdlc-';
-const CACHE_NAME = 'pdlc-v47-offline-ventas-transferencia-fix1';
+const CACHE_NAME = 'pdlc-v48-firebase.config.local.js-is-retired from-SW';
 // Cache aparte para tiles de mapa offline: a propósito NO se borra cuando
 // sube la versión del shell (ver 'activate' más abajo) — si viviera en
 // CACHE_NAME, cada actualización de la app borraría el mapa descargado.
@@ -116,26 +116,6 @@ self.addEventListener('fetch', (event) => {
     );
     return;
   }
-
-  // Configuración Firebase: sirve la última copia válida de inmediato y la
-  // actualiza en segundo plano. La versión de CACHE_NAME invalida esta copia
-  // cuando se publique una configuración distinta.
-  if (new URL(request.url).pathname.endsWith('/firebase-config.local.js')) {
-    event.respondWith(
-      caches.match(request).then((cached) => {
-        const update = fetch(request)
-          .then((res) => {
-            if (res && res.ok) caches.open(CACHE_NAME).then((c) => c.put(request, res.clone()));
-            return res;
-          })
-          .catch(() => cached);
-        event.waitUntil(update);
-        return cached || update;
-      })
-    );
-    return;
-  }
-
   // Navegación: cache-first con actualización en segundo plano. Evita que una
   // red lenta retrase la entrada en visitas posteriores y conserva la página
   // offline si no hay conectividad.
