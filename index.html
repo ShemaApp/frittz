@@ -42,6 +42,38 @@
   html,body{height:100%;background:var(--bg);color:var(--ink);font-family:var(--font-body)}
   #root{max-width:420px;margin:0 auto;min-height:100vh;position:relative}
   body{scrollbar-width:none}
+
+  /* Frittz v47: la experiencia móvil sigue siendo la base. Estas reglas
+     solo se activan en pantallas anchas y no alteran el layout compacto. */
+  @media (min-width:768px){
+    #root{max-width:none!important;margin:0}
+    .frittz-topbar,.frittz-accent-bar,.frittz-offline-banner,.frittz-nav-shell{
+      max-width:none!important;left:0!important;transform:none!important
+    }
+    .frittz-main-content{
+      width:100%;max-width:1600px;margin:0 auto;
+      padding-left:260px;padding-right:28px
+    }
+    .frittz-topbar{padding-left:260px!important;padding-right:28px!important}
+    .frittz-offline-banner{
+      padding-left:260px!important;padding-right:28px!important;text-align:left!important
+    }
+    .frittz-nav-shell{right:0!important}
+    .frittz-nav-shell nav{
+      transform:translateX(0)!important;box-shadow:none!important
+    }
+    .frittz-menu-toggle{display:none!important}
+    .frittz-login-shell{padding:48px 24px!important}
+    .frittz-login-logo{width:100px!important;height:100px!important}
+    .frittz-login-title{font-size:32px!important}
+    .frittz-login-subtitle{font-size:13px!important;margin-bottom:32px!important}
+    .frittz-login-panel{max-width:460px!important;padding:32px!important}
+  }
+  @media (min-width:1280px){
+    .frittz-main-content{padding-left:280px;padding-right:40px}
+    .frittz-topbar{padding-left:280px!important;padding-right:40px!important}
+    .frittz-offline-banner{padding-left:280px!important;padding-right:40px!important}
+  }
   ::-webkit-scrollbar{display:none}
   input:focus{outline:none!important;border-color:var(--accent-text)!important}
   button,select{font-family:inherit}
