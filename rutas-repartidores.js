@@ -755,7 +755,7 @@ function RepartidoresPanel({
     }
     setVentaRapida(v => ({
       ...v,
-      items: existente ? v.items.map(x => x.id === p.id ? { ...x, cant: x.cant + 1 } : x) : [...v.items, {
+      items: existente ? v.items.map(x => x.id === p.id ? { ...x, cant: (Number(x.cant) || 0) + 1 } : x) : [...v.items, {
         id: p.id,
         nombre: p.nombre,
         cant: 1
@@ -763,9 +763,19 @@ function RepartidoresPanel({
     }));
   };
   const updQtyVenta = (id, val) => {
+    const raw = String(val ?? '');
+    if (!/^\d*$/.test(raw)) return;
+    if (raw === '') {
+      setVentaRapida(v => ({
+        ...v,
+        items: v.items.map(x => x.id === id ? { ...x, cant: '' } : x)
+      }));
+      return;
+    }
     const disponible = saldoDisponibleTransferencia(ventaRapida?.rutaId, id);
-    const cantidad = Math.min(Number(val || 0), disponible);
-    if (Number(val || 0) > disponible) flash('⚠️ La cantidad se ajustó al saldo disponible en la transferencia');
+    const cantidadSolicitada = Number(raw);
+    const cantidad = Math.min(cantidadSolicitada, disponible);
+    if (cantidadSolicitada > disponible) flash('⚠️ La cantidad se ajustó al saldo disponible en la transferencia');
     setVentaRapida(v => ({
       ...v,
       items: cantidad < 1 ? v.items.filter(x => x.id !== id) : v.items.map(x => x.id === id ? { ...x, cant: cantidad } : x)
@@ -778,6 +788,10 @@ function RepartidoresPanel({
     }
     if (ventaRapida.items.length === 0) {
       flash('⚠️ Agrega al menos un producto');
+      return;
+    }
+    if (ventaRapida.items.some(item => !Number.isInteger(Number(item.cant)) || Number(item.cant) < 1)) {
+      flash('⚠️ Cada producto debe tener una cantidad entera mayor que cero');
       return;
     }
     setVentaRapida(v => ({ ...v, saving: true }));
@@ -1744,30 +1758,11 @@ function RepartidoresPanel({
       fontSize: 12,
       flex: 1
     }
-  }, it.nombre), React.createElement("button", {
-    onClick: () => updQtyVenta(it.id, it.cant - 1),
-    style: {
-      background: 'var(--line-strong)',
-      border: 'none',
-      color: 'var(--ink)',
-      borderRadius: 6,
-      width: 22,
-      height: 22,
-      cursor: 'pointer'
-    }
-  }, "-"), React.createElement("input", {
-    type: "number",
-    min: "1",
-    value: it.cant,
-    onChange: e => {
-      const v = e.target.value;
-      if (v === '') return;
-      const n = parseInt(v);
-      if (!isNaN(n) && n >= 1) updQtyVenta(it.id, n);
-    },
-    onBlur: e => {
-      if (!e.target.value || parseInt(e.target.value) < 1) updQtyVenta(it.id, 1);
-    },
+  }, it.nombre), React.createElement("input", {
+    type: "text",
+    inputMode: "numeric",
+    value: it.cant === undefined ? '' : it.cant,
+    onChange: e => updQtyVenta(it.id, e.target.value),
     style: {
       width: 36,
       textAlign: 'center',
@@ -1778,18 +1773,7 @@ function RepartidoresPanel({
       color: 'var(--ink)',
       padding: '3px 2px'
     }
-  }), React.createElement("button", {
-    onClick: () => updQtyVenta(it.id, it.cant + 1),
-    style: {
-      background: 'var(--line-strong)',
-      border: 'none',
-      color: 'var(--ink)',
-      borderRadius: 6,
-      width: 22,
-      height: 22,
-      cursor: 'pointer'
-    }
-  }, "+")))), React.createElement("div", {
+  })))), React.createElement("div", {
     style: {
       display: 'flex',
       gap: 8,

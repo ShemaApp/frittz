@@ -205,7 +205,7 @@ function RutaReparto({
       const ex = c.find(x => x.id === p.id);
       return ex ? c.map(x => x.id === p.id ? {
         ...x,
-        cant: x.cant + 1
+        cant: (Number(x.cant) || 0) + 1
       } : x) : [...c, {
         id: p.id,
         nombre: p.nombre,
@@ -310,13 +310,12 @@ function RutaReparto({
     setGuardandoProducto(false);
   };
   const updQty = (id, v) => {
-    if (v < 1) {
-      setCart(c => c.filter(x => x.id !== id));
-      return;
-    }
+    const raw = String(v ?? '');
+    // Permitir campo vacío durante la edición, pero mantener cantidades enteras.
+    if (!/^\d*$/.test(raw)) return;
     setCart(c => c.map(x => x.id === id ? {
       ...x,
-      cant: v
+      cant: raw
     } : x));
   };
   const guardarRuta = async () => {
@@ -326,6 +325,14 @@ function RutaReparto({
     }
     if (cart.length === 0) {
       flash('⚠️ Agrega al menos un producto a la transferencia');
+      return;
+    }
+    const cantidadesCart = cart.map(item => ({
+      ...item,
+      cant: Number(item.cant)
+    }));
+    if (cantidadesCart.some(item => !Number.isInteger(item.cant) || item.cant < 1)) {
+      flash('⚠️ Cada producto debe tener una cantidad entera mayor que cero');
       return;
     }
       const asignacion = currentUser.role === 'repartidor'
@@ -340,7 +347,7 @@ function RutaReparto({
       const fecha = new Date().toISOString();
       const pedidosSeleccionados = (pedidos || []).filter(p => pedidosIncluidos.includes(p.id));
       const itemsMap = {};
-      cart.forEach(item => {
+      cantidadesCart.forEach(item => {
         const reservado = pedidosSeleccionados.reduce((sum, pedido) => sum + Number((pedido.items || []).find(x => x.id === item.id)?.cant || 0), 0);
         itemsMap[item.id] = {
           nombre: item.nombre,
@@ -351,18 +358,18 @@ function RutaReparto({
         };
       });
       await db.runTransaction(async tx => {
-        const existencias = await Promise.all(cart.map(item => tx.get(db.collection('productos').doc(item.id))));
+        const existencias = await Promise.all(cantidadesCart.map(item => tx.get(db.collection('productos').doc(item.id))));
         const pedidosSnaps = await Promise.all(pedidosSeleccionados.map(pedido => tx.get(db.collection('pedidos').doc(pedido.id))));
         pedidosSnaps.forEach((snap, index) => {
           const pedido = pedidosSeleccionados[index];
           if (!snap.exists || snap.data().estado !== 'asignado_pendiente_transferencia' || snap.data().repartidorId !== asignacion.repartidorId) throw new Error('El pedido ya no está disponible para esta transferencia: ' + pedido.clienteNombre);
         });
         existencias.forEach((snap, index) => {
-          const item = cart[index];
+          const item = cantidadesCart[index];
           if (!snap.exists || Number(snap.data().stock || 0) < item.cant) throw new Error('Stock insuficiente para ' + item.nombre);
         });
         const rutaRef = db.collection('rutas').doc();
-        cart.forEach(item => {
+        cantidadesCart.forEach(item => {
           const cambiosProducto = {
             stock: firebase.firestore.FieldValue.increment(-item.cant)
           };
@@ -482,19 +489,26 @@ function RutaReparto({
     });
   };
   const updEntQty = (id, v) => {
-    if (!v || v < 1) {
-      setEntCart(c => c.filter(x => x.id !== id));
+    const raw = String(v ?? '');
+    if (!/^\d*$/.test(raw)) return;
+    if (raw === '') {
+      setEntCart(c => c.map(x => x.id === id ? { ...x, cant: '' } : x));
       return;
     }
-    setEntCart(c => c.map(x => x.id === id ? {
+    const cantidad = Math.min(Number(raw), Number(entCart.find(x => x.id === id)?.max || 0));
+    setEntCart(c => cantidad < 1 ? c.filter(x => x.id !== id) : c.map(x => x.id === id ? {
       ...x,
-      cant: Math.min(v, x.max)
+      cant: cantidad
     } : x));
   };
   const clienteEnt = cliMode === 'nuevo' ? nuevoC : cliSel;
   const canSaveEnt = clienteEnt?.nombre && entCart.length > 0;
   const guardarEntrega = async () => {
     if (!canSaveEnt || !rutaActiva) return;
+    if (entCart.some(item => !Number.isInteger(Number(item.cant)) || Number(item.cant) < 1 || Number(item.cant) > Number(item.max))) {
+      flash('⚠️ Cada producto debe tener una cantidad entera válida para esta transferencia');
+      return;
+    }
     if (currentUser.role !== 'repartidor' || rutaActiva.repartidorId !== currentUser.uid) { flash('⚠️ Solo el repartidor asignado puede registrar ventas desde esta transferencia'); return; }
     setSaving(true);
     try {
@@ -794,7 +808,7 @@ function RutaReparto({
       fontWeight: 700,
       marginBottom: 10
     }
-  }, "PRODUCTOS ESCANEADOS (", cart.reduce((s, x) => s + x.cant, 0), ")"), cart.map(item => React.createElement(Row, {
+  }, "PRODUCTOS ESCANEADOS (", cart.reduce((s, x) => s + (Number(x.cant) || 0), 0), ")"), cart.map(item => React.createElement(Row, {
     key: item.id,
     style: {
       justifyContent: 'space-between',
@@ -815,37 +829,11 @@ function RutaReparto({
       fontSize: 11,
       color: 'var(--ink-faint)'
     }
-  }, item.unidad)), React.createElement(Row, {
-    style: {
-      gap: 5
-    }
-  }, React.createElement("button", {
-    onClick: () => updQty(item.id, item.cant - 1),
-    style: {
-      background: 'var(--surface-2)',
-      border: 'none',
-      color: 'var(--ink)',
-      borderRadius: 6,
-      width: 26,
-      height: 26,
-      cursor: 'pointer',
-      fontSize: 15
-    }
-  }, "-"), React.createElement("input", {
-    type: "number",
-    min: "1",
-    value: item.cant,
-    onChange: e => {
-      const v = e.target.value;
-      if (v === '') {
-        return;
-      }
-      const n = parseInt(v);
-      if (!isNaN(n) && n >= 1) updQty(item.id, n);
-    },
-    onBlur: e => {
-      if (!e.target.value || parseInt(e.target.value) < 1) updQty(item.id, 1);
-    },
+  }, item.unidad)), React.createElement("input", {
+    type: "text",
+    inputMode: "numeric",
+    value: item.cant === undefined ? '' : item.cant,
+    onChange: e => updQty(item.id, e.target.value),
     style: {
       width: 44,
       textAlign: 'center',
@@ -857,19 +845,7 @@ function RutaReparto({
       color: 'var(--ink)',
       padding: '4px 2px'
     }
-  }), React.createElement("button", {
-    onClick: () => updQty(item.id, item.cant + 1),
-    style: {
-      background: 'var(--surface-2)',
-      border: 'none',
-      color: 'var(--ink)',
-      borderRadius: 6,
-      width: 26,
-      height: 26,
-      cursor: 'pointer',
-      fontSize: 15
-    }
-  }, "+")))), React.createElement(BFill, {
+  }))), React.createElement(BFill, {
     onClick: guardarRuta,
     style: {
       width: '100%',
@@ -1067,38 +1043,11 @@ function RutaReparto({
       minWidth: 0,
       fontSize: 13
     }
-  }, item.nombre), React.createElement(Row, {
-    style: {
-      gap: 5
-    }
-  }, React.createElement("button", {
-    onClick: () => updEntQty(item.id, item.cant - 1),
-    style: {
-      background: 'var(--surface-2)',
-      border: 'none',
-      color: 'var(--ink)',
-      borderRadius: 6,
-      width: 24,
-      height: 24,
-      cursor: 'pointer',
-      fontSize: 14
-    }
-  }, "-"), React.createElement("input", {
-    type: "number",
-    min: "1",
-    max: item.max,
-    value: item.cant,
-    onChange: e => {
-      const v = e.target.value;
-      if (v === '') {
-        return;
-      }
-      const n = parseInt(v);
-      if (!isNaN(n) && n >= 1) updEntQty(item.id, n);
-    },
-    onBlur: e => {
-      if (!e.target.value || parseInt(e.target.value) < 1) updEntQty(item.id, 1);
-    },
+  }, item.nombre), React.createElement("input", {
+    type: "text",
+    inputMode: "numeric",
+    value: item.cant === undefined ? '' : item.cant,
+    onChange: e => updEntQty(item.id, e.target.value),
     style: {
       width: 40,
       textAlign: 'center',
@@ -1110,19 +1059,7 @@ function RutaReparto({
       color: 'var(--ink)',
       padding: '3px 2px'
     }
-  }), React.createElement("button", {
-    onClick: () => updEntQty(item.id, item.cant + 1),
-    style: {
-      background: 'var(--surface-2)',
-      border: 'none',
-      color: 'var(--ink)',
-      borderRadius: 6,
-      width: 24,
-      height: 24,
-      cursor: 'pointer',
-      fontSize: 14
-    }
-  }, "+"))))), React.createElement(Row, {
+  })))), React.createElement(Row, {
     style: {
       gap: 8,
       marginBottom: 12
