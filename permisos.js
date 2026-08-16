@@ -13,6 +13,9 @@ function Permisos({
     return unsub;
   }, []);
   const cambiar = async (u, grupo, clave, valor) => {
+    const permisoFijoRepartidor = u.role === 'repartidor'
+      && (grupo === 'tabs' || grupo === 'edita' || (grupo === 'acciones' && clave === 'csv'));
+    if (permisoFijoRepartidor) return;
     const key = u.id + grupo + clave;
     setGuardando(key);
     setErr('');
@@ -47,7 +50,7 @@ function Permisos({
       marginBottom: 14,
       lineHeight: 1.5
     }
-  }, "Concede o retira, por persona, el acceso de lectura a cada pantalla y el permiso para crear o editar en cada formulario. Los administradores siempre tienen acceso completo y no aparecen en esta lista."), err && React.createElement("div", {
+  }, "Concede o retira, por persona, el acceso de lectura a cada pantalla y el permiso para crear o editar en cada formulario. En el repartidor, las capacidades operativas permanecen habilitadas; Productos, Inventario, Reportes y la exportación CSV están bloqueados. Los administradores siempre tienen acceso completo y no aparecen en esta lista."), err && React.createElement("div", {
     style: {
       background: 'var(--danger-bg)',
       borderRadius: 4,
@@ -160,7 +163,7 @@ function Permisos({
       }
     }, lbl)), React.createElement(Toggle, {
       checked: !!tabs[id],
-      disabled: guardando === u.id + 'tabs' + id,
+      disabled: guardando === u.id + 'tabs' + id || u.role === 'repartidor',
       onChange: v => cambiar(u, 'tabs', id, v)
     }))), React.createElement("div", {
       style: {
@@ -189,7 +192,7 @@ function Permisos({
       }
     }, lbl)), React.createElement(Toggle, {
       checked: !!edita[id],
-      disabled: guardando === u.id + 'edita' + id,
+      disabled: guardando === u.id + 'edita' + id || u.role === 'repartidor',
       onChange: v => cambiar(u, 'edita', id, v)
     }))), React.createElement("div", {
       style: {
@@ -218,7 +221,7 @@ function Permisos({
       }
     }, lbl)), React.createElement(Toggle, {
       checked: !!acciones[id],
-      disabled: guardando === u.id + 'acciones' + id,
+      disabled: guardando === u.id + 'acciones' + id || (u.role === 'repartidor' && id === 'csv'),
       onChange: v => cambiar(u, 'acciones', id, v)
     })))));
   }), React.createElement("div", {

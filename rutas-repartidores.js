@@ -1281,7 +1281,7 @@ function RepartidoresPanel({
       cursor: 'pointer',
       flexShrink: 0
     }
-  }, "🔲 QR")))), tab === 'comprobantes' && React.createElement(React.Fragment, null, rutasReales.length > 0 && React.createElement("div", {
+  }, "🔲 QR")))), tab === 'comprobantes' && React.createElement(React.Fragment, null, _permisoCSV && rutasReales.length > 0 && React.createElement("div", {
     style: {
       display: 'flex',
       gap: 8,

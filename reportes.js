@@ -647,6 +647,7 @@ function Reportes({
     rows.push(['', 'TOTAL', nominaData.totalVentas, nominaData.totalVendido.toFixed(2), '']);
     downloadCSV('sueldo_' + nominaData.vendedorNombre.replace(/\s+/g, '_') + '_' + Date.now() + '.csv', rows);
   };
+  if (currentUser?.role === 'repartidor') return null;
   return React.createElement("div", {
     style: {
       padding: '16px 12px'

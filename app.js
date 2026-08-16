@@ -31,6 +31,7 @@ function App() {
   const navegarA = (destino, opciones = {}) => {
     setNavOpen(false);
     if (!destino) return;
+    if (destino !== 'home' && destino !== 'config' && !tabsPermitidos.includes(destino)) return;
     if (destino === 'nota' && !opciones.conservarModoNota) setModoNota('pedidos');
     if (destino === tab) return;
     historialTabs.current.push(tab);

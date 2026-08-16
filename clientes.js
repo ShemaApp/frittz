@@ -584,6 +584,7 @@ function Clientes({
     };
     if (form.id) await db.collection('clientes').doc(form.id).update(item);else await db.collection('clientes').add({
       ...item,
+      creadoPorUid: currentUser.uid,
       fechaAlta: new Date().toISOString()
     });
     setForm(null);

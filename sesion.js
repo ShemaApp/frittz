@@ -33,9 +33,15 @@ const ACCIONES_DEFAULT_ROL = {
     password: true
   }
 };
-const permisoAcciones = u => u?.role === 'admin' ? ACCIONES_DEFAULT_ROL.admin : {
-  ...(ACCIONES_DEFAULT_ROL[u?.role] || ACCIONES_DEFAULT_ROL.usuario),
-  ...(u?.permisos?.acciones || {})
+const permisoAcciones = u => {
+  if (u?.role === 'admin') return ACCIONES_DEFAULT_ROL.admin;
+  const acciones = {
+    ...(ACCIONES_DEFAULT_ROL[u?.role] || ACCIONES_DEFAULT_ROL.usuario),
+    ...(u?.permisos?.acciones || {})
+  };
+  // El repartidor nunca puede recuperar exportaciones mediante overrides antiguos.
+  if (u?.role === 'repartidor') acciones.csv = false;
+  return acciones;
 };
 const TABS_DEFAULT_ROL = {
   admin: {
@@ -62,9 +68,9 @@ const TABS_DEFAULT_ROL = {
   },
   repartidor: {
     productos: false,
-    nota: false,
-    clientes: false,
-    creditos: false,
+    nota: true,
+    clientes: true,
+    creditos: true,
     ruta: true,
     repartidores: true,
     inventario: false,
@@ -85,17 +91,42 @@ const EDITA_DEFAULT_ROL = {
   },
   repartidor: {
     productos: false,
-    clientes: false,
-    creditos: false
+    clientes: true,
+    creditos: true
   }
 };
-const permisoTabs = u => ({
-  ...(TABS_DEFAULT_ROL[u?.role] || TABS_DEFAULT_ROL.usuario),
-  ...(u?.permisos?.tabs || {})
-});
-const permisoEdita = u => u?.role === 'admin' ? EDITA_DEFAULT_ROL.admin : {
-  ...(EDITA_DEFAULT_ROL[u?.role] || EDITA_DEFAULT_ROL.usuario),
-  ...(u?.permisos?.edita || {})
+const permisoTabs = u => {
+  const tabs = {
+    ...(TABS_DEFAULT_ROL[u?.role] || TABS_DEFAULT_ROL.usuario),
+    ...(u?.permisos?.tabs || {})
+  };
+  if (u?.role === 'repartidor') {
+    // Capacidades operativas obligatorias del repartidor.
+    tabs.nota = true;
+    tabs.clientes = true;
+    tabs.creditos = true;
+    tabs.ruta = true;
+    tabs.repartidores = true;
+    tabs.gerencia = true;
+    // Restricciones estructurales: no se pueden reactivar desde UI.
+    tabs.productos = false;
+    tabs.inventario = false;
+    tabs.reportes = false;
+  }
+  return tabs;
+};
+const permisoEdita = u => {
+  if (u?.role === 'admin') return EDITA_DEFAULT_ROL.admin;
+  const edita = {
+    ...(EDITA_DEFAULT_ROL[u?.role] || EDITA_DEFAULT_ROL.usuario),
+    ...(u?.permisos?.edita || {})
+  };
+  if (u?.role === 'repartidor') {
+    edita.productos = false;
+    edita.clientes = true;
+    edita.creditos = true;
+  }
+  return edita;
 };
 
 /* ── Utilidades de sesión local (candado por PIN) ──

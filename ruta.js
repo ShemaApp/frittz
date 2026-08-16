@@ -175,12 +175,14 @@ function RutaReparto({
     setSaving(false);
   };
   const confirmarAsignacion = () => {
-    if (currentUser.role !== 'admin') return;
+    if (currentUser.role !== 'admin' && currentUser.role !== 'repartidor') return;
     if (!progForm?.repartidorId) {
       flash('⚠️ Elige a qué repartidor se la asignas');
       return;
     }
-    flash('✅ Repartidor asignado. Ahora agrega el cargamento e inicia la ruta.');
+    flash(currentUser.role === 'repartidor'
+      ? '✅ Transferencia preparada para ti. Ahora agrega el cargamento e inicia la ruta.'
+      : '✅ Repartidor asignado. Ahora agrega el cargamento e inicia la ruta.');
   };
   const pedidosPendientesRepartidor = (pedidos || []).filter(p => p.estado === 'asignado_pendiente_transferencia' && p.repartidorId === progForm?.repartidorId);
   const togglePedidoTransferencia = pedido => {
@@ -241,6 +243,10 @@ function RutaReparto({
     setProductoNoEncontrado('');
   };
   const guardarProductoEscaneado = async () => {
+    if (currentUser.role === 'repartidor') {
+      flash('⚠️ El repartidor no puede dar de alta productos en el inventario general');
+      return;
+    }
     if (!altaProducto?.nombre?.trim() || altaProducto.precio === '') {
       flash('⚠️ Indica nombre y precio del producto');
       return;
@@ -314,15 +320,17 @@ function RutaReparto({
     } : x));
   };
   const guardarRuta = async () => {
-    if (currentUser.role !== 'admin') {
-      flash('⚠️ Solo almacén puede crear una transferencia');
+    if (currentUser.role !== 'admin' && currentUser.role !== 'repartidor') {
+      flash('⚠️ Tu rol no puede crear transferencias');
       return;
     }
     if (cart.length === 0) {
       flash('⚠️ Agrega al menos un producto a la transferencia');
       return;
     }
-    const asignacion = progForm;
+      const asignacion = currentUser.role === 'repartidor'
+        ? { ...progForm, repartidorId: currentUser.uid, repartidorNombre: currentUser.nombre || '' }
+        : progForm;
     if (!asignacion?.repartidorId) {
       flash('⚠️ Asigna la transferencia a un responsable antes de confirmar la salida');
       return;
@@ -354,9 +362,20 @@ function RutaReparto({
           if (!snap.exists || Number(snap.data().stock || 0) < item.cant) throw new Error('Stock insuficiente para ' + item.nombre);
         });
         const rutaRef = db.collection('rutas').doc();
-        cart.forEach(item => tx.update(db.collection('productos').doc(item.id), {
-          stock: firebase.firestore.FieldValue.increment(-item.cant)
-        }));
+        cart.forEach(item => {
+          const cambiosProducto = {
+            stock: firebase.firestore.FieldValue.increment(-item.cant)
+          };
+          // El repartidor solo puede descontar stock dentro de la creación
+          // atómica de su propia transferencia.
+          if (currentUser.role === 'repartidor') {
+            cambiosProducto.ultimaTransferenciaId = rutaRef.id;
+            cambiosProducto.ultimaTransferenciaRepartidorUid = currentUser.uid;
+            cambiosProducto.ultimaTransferenciaCantidad = item.cant;
+            cambiosProducto.ultimaTransferenciaFecha = fecha;
+          }
+          tx.update(db.collection('productos').doc(item.id), cambiosProducto);
+        });
         tx.set(rutaRef, {
           fecha,
           fechaSalidaReal: fecha,
@@ -573,10 +592,10 @@ function RutaReparto({
       color: 'var(--ok-text)',
       marginBottom: 12
     }
-  }, msg), currentUser.role === 'admin' && React.createElement(Card, null, React.createElement("button", {
+  }, msg), (currentUser.role === 'admin' || currentUser.role === 'repartidor') && React.createElement(Card, null, React.createElement("button", {
     onClick: () => setProgForm(f => f ? null : {
-      repartidorId: '',
-      repartidorNombre: '',
+      repartidorId: currentUser.role === 'repartidor' ? currentUser.uid : '',
+      repartidorNombre: currentUser.role === 'repartidor' ? currentUser.nombre || '' : '',
       vehiculo: '',
       zona: '',
       fechaProgramada: '',
@@ -603,7 +622,7 @@ function RutaReparto({
     style: {
       marginTop: 12
     }
-  }, React.createElement(Lbl, null, "Responsable de transferencia"), React.createElement("select", {
+  }, React.createElement(Lbl, null, currentUser.role === 'repartidor' ? 'Responsable de transferencia (tú)' : 'Responsable de transferencia'), React.createElement("select", {
     value: progForm.repartidorId,
     onChange: e => {
       const u = usuarios.find(x => x.id === e.target.value);
@@ -627,10 +646,10 @@ function RutaReparto({
     }
   }, React.createElement("option", {
     value: ""
-  }, "Selecciona…"), usuarios.filter(u => u.role === 'repartidor').map(u => React.createElement("option", {
+  }, "Selecciona…"), (currentUser.role === 'repartidor' ? [{ id: currentUser.uid, nombre: currentUser.nombre || 'Tú' }] : usuarios.filter(u => u.role === 'repartidor')).map(u => React.createElement("option", {
     key: u.id,
     value: u.id
-  }, u.nombre))), usuarios.filter(u => u.role === 'repartidor').length === 0 && React.createElement("div", {
+  }, u.nombre))), currentUser.role === 'admin' && usuarios.filter(u => u.role === 'repartidor').length === 0 && React.createElement("div", {
     style: {
       fontSize: 11,
       color: 'var(--warn-text)',

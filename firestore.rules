@@ -10,10 +10,10 @@ service cloud.firestore {
     // catch-all final para funcionar — ese catch-all solo existe para
     // bloquear colecciones NO anticipadas (typos, nombres nuevos que se
     // agreguen en el código sin agregar su regla aquí).
-    //   ✅ productos            ✅ notas              ✅ rutas
-    //   ✅ inventario_historial ✅ creditos           ✅ devoluciones
-    //   ✅ clientes             ✅ rutas              ✅ gastos
-    //   ✅ usuarios             ✅ _meta
+    //   ✅ productos            ✅ notas              ✅ pedidos
+    //   ✅ inventario_historial ✅ creditos           ✅ rutas
+    //   ✅ clientes             ✅ devoluciones       ✅ gastos
+    //   ✅ cierres_caja         ✅ usuarios           ✅ _meta
     // Si agregas una colección nueva en el código: agrégala aquí también, o
     // sus lecturas/escrituras van a fallar en silencio (ya nos ocurrió con
     // una colección operativa sin regla explícita).
@@ -41,21 +41,47 @@ service cloud.firestore {
     // que se combinan sobre el valor por defecto de su rol (mismo criterio que
     // permisoEdita() en app-core.js — si se cambia uno, cambiar el otro).
     // 'recurso' es uno de: 'productos', 'clientes', 'creditos'.
+    // El permiso de productos no concede al repartidor ajustes manuales; su
+    // única excepción está declarada en match /productos/{id} y se valida con
+    // el documento de la transferencia creada en la misma transacción.
     function permisoEdicion(recurso) {
       let datos = datosUsuario();
       let overrides = ('permisos' in datos) && ('edita' in datos.permisos) ? datos.permisos.edita : {};
-      let porDefecto = datos.role == 'usuario'; // admin: siempre true (ver abajo); repartidor: false por defecto
+      let porDefecto = datos.role == 'usuario'
+        || (datos.role == 'repartidor'
+          && (recurso == 'clientes' || recurso == 'creditos'));
       let valor = recurso in overrides ? overrides[recurso] == true : porDefecto;
-      return signedIn() && (datos.role == 'admin' || valor);
+      // El repartidor nunca obtiene edición manual de productos, aunque exista
+      // un override antiguo en usuarios/{uid}.permisos.edita.
+      return signedIn()
+        && !(recurso == 'productos' && datos.role == 'repartidor')
+        && (datos.role == 'admin' || valor);
     }
 
     // ── productos ──
     match /productos/{id} {
       allow read: if signedIn();
       allow create: if permisoEdicion('productos');
-      // Solo almacén (administrador o usuario con permiso) modifica el stock general.
-      // El repartidor vende desde su transferencia y nunca descuenta directamente productos.stock.
-      allow update: if permisoEdicion('productos');
+      // Admin/usuario pueden ajustar inventario según permisos. El repartidor
+      // solo puede descontar stock en la creación atómica de una transferencia
+      // nueva que queda asignada a él; no puede hacer ajustes posteriores.
+      allow update: if permisoEdicion('productos')
+        || (signedIn() && role() == 'repartidor'
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'stock', 'ultimaTransferenciaId',
+            'ultimaTransferenciaRepartidorUid',
+            'ultimaTransferenciaCantidad', 'ultimaTransferenciaFecha'
+          ])
+          && request.resource.data.ultimaTransferenciaRepartidorUid == request.auth.uid
+          && request.resource.data.ultimaTransferenciaId is string
+          && request.resource.data.ultimaTransferenciaCantidad > 0
+          && request.resource.data.stock
+            == resource.data.stock - request.resource.data.ultimaTransferenciaCantidad
+          && !exists(/databases/$(database)/documents/rutas/$(request.resource.data.ultimaTransferenciaId))
+          && getAfter(/databases/$(database)/documents/rutas/$(request.resource.data.ultimaTransferenciaId)).data.repartidorId == request.auth.uid
+          && getAfter(/databases/$(database)/documents/rutas/$(request.resource.data.ultimaTransferenciaId)).data.estado == 'activa'
+          && getAfter(/databases/$(database)/documents/rutas/$(request.resource.data.ultimaTransferenciaId)).data.items.keys().hasAny([id])
+          && getAfter(/databases/$(database)/documents/rutas/$(request.resource.data.ultimaTransferenciaId)).data.items[id].cantCargada == request.resource.data.ultimaTransferenciaCantidad);
       allow delete: if isAdmin();
     }
 
@@ -64,11 +90,13 @@ service cloud.firestore {
     // (usuarioUid debe coincidir con quien está autenticado) — la escritura
     // real de stock que acompaña a este log ya está protegida por su propia
     // regla (productos: permisoEdicion), así que aquí basta con el ownership.
-    // Repartidor entra aquí al hacer conteos de inventario o reingresos de
-    // devolución desde rutas-repartidores.js.
+    // Los registros de ajuste pertenecen a almacén; el repartidor solo
+    // descuenta stock mediante la excepción transaccional de productos.
     match /inventario_historial/{id} {
       allow read: if isAdmin();
-      allow create: if signedIn() && request.resource.data.usuarioUid == request.auth.uid;
+      allow create: if signedIn()
+        && role() != 'repartidor'
+        && request.resource.data.usuarioUid == request.auth.uid;
       allow update, delete: if false;
     }
 
@@ -76,7 +104,8 @@ service cloud.firestore {
     match /clientes/{id} {
       allow read: if signedIn();
       allow create: if permisoEdicion('clientes')
-        || (signedIn() && role() == 'repartidor' && request.resource.data.creadoPorUid == request.auth.uid);
+        && (role() != 'repartidor'
+          || request.resource.data.creadoPorUid == request.auth.uid);
       allow update: if permisoEdicion('clientes');
       allow delete: if false;
     }
@@ -108,13 +137,64 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // ── pedidos ──
+    match /pedidos/{id} {
+      allow read: if isStaff()
+        || (signedIn() && role() == 'repartidor'
+          && resource.data.repartidorId == request.auth.uid);
+
+      // Oficina crea borradores. Administración asigna pedidos a terceros.
+      // El repartidor crea únicamente pedidos asignados a sí mismo.
+      allow create: if (
+          (isStaff() && request.resource.data.creadoPorUid == request.auth.uid)
+          || (signedIn() && role() == 'repartidor'
+            && request.resource.data.creadoPorUid == request.auth.uid
+            && request.resource.data.repartidorId == request.auth.uid
+            && request.resource.data.estado == 'asignado_pendiente_transferencia')
+        );
+
+      allow update: if isAdmin()
+        || (signedIn() && role() == 'repartidor'
+          && resource.data.repartidorId == request.auth.uid
+          && request.resource.data.repartidorId == request.auth.uid
+          && resource.data.estado == 'asignado_pendiente_transferencia'
+          && request.resource.data.estado == 'transferencia_confirmada'
+          && request.resource.data.transferenciaId is string
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'estado', 'transferenciaId', 'fechaConfirmacionTransferencia',
+            'confirmadaPorUid', 'confirmadaPorNombre', 'fechaActualizacion'
+          ])
+          && request.resource.data.confirmadaPorUid == request.auth.uid
+          && getAfter(/databases/$(database)/documents/rutas/$(request.resource.data.transferenciaId)).data.repartidorId == request.auth.uid
+          && getAfter(/databases/$(database)/documents/rutas/$(request.resource.data.transferenciaId)).data.estado == 'activa')
+        || (signedIn() && role() == 'repartidor'
+          && resource.data.repartidorId == request.auth.uid
+          && request.resource.data.repartidorId == request.auth.uid
+          && resource.data.estado == 'transferencia_confirmada'
+          && request.resource.data.estado == 'entregado'
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'estado', 'notaId', 'fechaEntrega', 'entregadoPorUid',
+            'entregadoPorNombre', 'fechaActualizacion', 'requiereRevision'
+          ])
+          && request.resource.data.entregadoPorUid == request.auth.uid);
+
+      allow delete: if false;
+    }
+
     // ── rutas ──
-    // La colección mantiene temporalmente la compatibilidad de nombre, pero cada documento
-    // representa una transferencia desde almacén. El repartidor opera solo sus propias transferencias.
+    // La colección mantiene transferencias desde almacén. El repartidor puede
+    // crear solo una transferencia propia y operar únicamente sus documentos.
     match /rutas/{id} {
       allow read: if isAdmin()
         || (signedIn() && role() == 'repartidor' && resource.data.repartidorId == request.auth.uid);
-      allow create: if isAdmin();
+      allow create: if isAdmin()
+        || (signedIn() && role() == 'repartidor'
+          && request.resource.data.repartidorId == request.auth.uid
+          && request.resource.data.asignadaPorUid == request.auth.uid
+          && request.resource.data.tipo == 'transferencia_almacen'
+          && request.resource.data.origen == 'almacen'
+          && request.resource.data.estado == 'activa'
+          && request.resource.data.items.size() > 0);
       allow update: if isAdmin()
         || (signedIn() && role() == 'repartidor'
           && resource.data.repartidorId == request.auth.uid
@@ -144,7 +224,7 @@ service cloud.firestore {
     match /devoluciones/{id} {
       allow read: if signedIn();
       allow create: if isAdmin()
-        || (signedIn() && role() == 'repartidor'
+        || (signedIn() && role() == 'usuario'
           && request.resource.data.capturadoPorUid == request.auth.uid);
       allow update, delete: if isAdmin();
     }
