@@ -487,6 +487,8 @@ function Pedidos({ productos, clientes, pedidos, currentUser }) {
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState('');
   const [asignando, setAsignando] = useState(null);
+  const [borradorListo, setBorradorListo] = useState(false);
+  const [borradorRestaurado, setBorradorRestaurado] = useState(false);
   const flash = texto => { setMsg(texto); setTimeout(() => setMsg(''), 3000); };
   const puedeAsignar = currentUser.role === 'admin';
   const puedeCrearTransferenciaPropia = currentUser.role === 'repartidor';
@@ -495,6 +497,22 @@ function Pedidos({ productos, clientes, pedidos, currentUser }) {
     const unsub = db.collection('usuarios').onSnapshot(snap => setRepartidores(snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(u => u.role === 'repartidor')), () => {});
     return unsub;
   }, [puedeAsignar]);
+  useEffect(() => {
+    const borrador = frittzReadDraft('pedido', currentUser?.uid);
+    if (borrador) {
+      setCliMode(borrador.cliMode === 'nuevo' ? 'nuevo' : 'buscar');
+      setCliSearch(String(borrador.cliSearch || ''));
+      setCliSel(borrador.cliSel && borrador.cliSel.id ? borrador.cliSel : null);
+      setNuevoC({ nombre: String(borrador.nuevoC?.nombre || ''), telefono: String(borrador.nuevoC?.telefono || '') });
+      setCart(Array.isArray(borrador.cart) ? borrador.cart.filter(item => item && item.id).map(item => ({
+        id: item.id, nombre: item.nombre || '', precio: Number(item.precio || 0), unidad: item.unidad || '', cant: item.cant
+      })) : []);
+      setPagoPrevisto(['efectivo', 'transferencia', 'credito'].includes(borrador.pagoPrevisto) ? borrador.pagoPrevisto : 'efectivo');
+      setRepartidorId(String(borrador.repartidorId || ''));
+      setBorradorRestaurado(true);
+    }
+    setBorradorListo(true);
+  }, [currentUser?.uid]);
   const cliFilt = clientes.filter(c => c.activo && c.nombre.toLowerCase().includes(cliSearch.toLowerCase()) && !c.esPublicoGeneral);
   const addCart = p => setCart(actual => {
     const existe = actual.find(x => x.id === p.id);
@@ -510,6 +528,28 @@ function Pedidos({ productos, clientes, pedidos, currentUser }) {
   const items = cart.filter(x => Number(x.cant) > 0).map(x => ({ ...x, cant: Number(x.cant) }));
   const total = items.reduce((sum, x) => sum + Number(x.precio || 0) * x.cant, 0);
   const cliente = cliMode === 'nuevo' ? nuevoC : cliSel;
+  const hayBorradorPedido = !!(cart.length || cliSel?.id || nuevoC.nombre.trim() || nuevoC.telefono.trim() || cliSearch.trim() || repartidorId || pagoPrevisto !== 'efectivo');
+  useEffect(() => {
+    if (!borradorListo) return;
+    if (!hayBorradorPedido) {
+      frittzClearDraft('pedido', currentUser?.uid);
+      return;
+    }
+    frittzWriteDraft('pedido', currentUser?.uid, {
+      cliMode,
+      cliSearch,
+      cliSel: cliSel ? { id: cliSel.id, nombre: cliSel.nombre || '', telefono: cliSel.telefono || '', localidad: cliSel.localidad || '' } : null,
+      nuevoC: { nombre: nuevoC.nombre || '', telefono: nuevoC.telefono || '' },
+      cart: cart.map(item => ({ id: item.id, nombre: item.nombre || '', precio: Number(item.precio || 0), unidad: item.unidad || '', cant: item.cant })),
+      pagoPrevisto,
+      repartidorId
+    });
+  }, [borradorListo, currentUser?.uid, hayBorradorPedido, cliMode, cliSearch, cliSel, nuevoC, cart, pagoPrevisto, repartidorId]);
+  const descartarBorradorPedido = () => {
+    frittzClearDraft('pedido', currentUser?.uid);
+    setCart([]); setCliSel(null); setNuevoC({ nombre: '', telefono: '' }); setCliSearch(''); setCliMode('buscar'); setPagoPrevisto('efectivo'); setRepartidorId(''); setBorradorRestaurado(false);
+    flash('🗑️ Borrador local descartado');
+  };
   const crearPedido = async estado => {
     if (!cliente?.nombre?.trim() || !items.length) { flash('⚠️ Selecciona un cliente y al menos un producto'); return; }
     if (estado === 'asignado_pendiente_transferencia' && !repartidorId && !puedeCrearTransferenciaPropia) { flash('⚠️ Elige al repartidor responsable antes de asignar'); return; }
@@ -543,6 +583,7 @@ function Pedidos({ productos, clientes, pedidos, currentUser }) {
         });
       });
       flash(estado === 'borrador' ? '✅ Borrador guardado sin mover inventario' : '✅ Pedido asignado; queda pendiente de confirmar transferencia');
+      frittzClearDraft('pedido', currentUser?.uid);
       setCart([]); setCliSel(null); setNuevoC({ nombre: '', telefono: '' }); setCliMode('buscar'); setRepartidorId('');
     } catch (e) { flash('❌ No se pudo guardar el pedido: ' + e.message); }
     setSaving(false);
@@ -569,7 +610,8 @@ function Pedidos({ productos, clientes, pedidos, currentUser }) {
     React.createElement('div', { style: { fontSize: 12, color: 'var(--ink-soft)', marginBottom: 12, lineHeight: 1.4 } }, 'Un pedido no descuenta inventario ni genera crédito. Se carga al repartidor únicamente al confirmar la transferencia.'),
     msg && React.createElement('div', { style: { background: 'var(--ok-bg)', color: 'var(--ok-text)', padding: '8px 10px', borderRadius: 6, fontSize: 12, marginBottom: 12 } }, msg),
     React.createElement(Card, null,
-      React.createElement('div', { style: { fontWeight: 700, marginBottom: 10 } }, '➕ Nuevo pedido'),
+      React.createElement(Row, { style: { justifyContent: 'space-between', gap: 8, marginBottom: 10 } }, React.createElement('div', { style: { fontWeight: 700 } }, '➕ Nuevo pedido'), hayBorradorPedido && React.createElement(BOut, { onClick: descartarBorradorPedido, color: 'var(--danger-text)', style: { padding: '5px 8px', fontSize: 10 } }, 'Descartar')),
+      borradorRestaurado && React.createElement('div', { style: { background: 'var(--info-bg)', color: 'var(--info-text)', borderRadius: 5, padding: '7px 9px', fontSize: 11, marginBottom: 10 } }, '↺ Borrador local restaurado. Puedes continuar o descartarlo.'),
       React.createElement(Lbl, null, 'Cliente'),
       React.createElement(Row, { style: { gap: 6, marginBottom: 8 } }, [['buscar', 'Existente'], ['nuevo', 'Nuevo']].map(([valor, etiqueta]) => React.createElement('button', { key: valor, onClick: () => setCliMode(valor), style: { flex: 1, padding: 7, border: 'none', borderRadius: 6, cursor: 'pointer', fontWeight: 700, fontSize: 12, background: cliMode === valor ? 'var(--accent)' : 'var(--surface-2)', color: cliMode === valor ? 'var(--ink)' : 'var(--ink-soft)' } }, etiqueta))),
       cliMode === 'buscar' ? React.createElement(React.Fragment, null,

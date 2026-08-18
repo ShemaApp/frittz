@@ -8,6 +8,43 @@ const snapTienePendientes = snap => snap.docs.some(d => d.metadata.hasPendingWri
 // pinKey/hashPin/savePin/clearPin y S_PROD/S_CLI se movieron a sesion.js
 // (capa de servicios) — siguen siendo globales, solo cambió el archivo.
 const fmt = n => '$' + Number(n || 0).toFixed(2);
+// Borradores locales: solo datos de formularios aún no confirmados. Se separan
+// por usuario y caducan en 7 días para no conservar información operativa indefinidamente.
+const FRITTZ_DRAFT_VERSION = 1;
+const FRITTZ_DRAFT_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+const frittzDraftKey = (scope, userId) => `frittz_draft_v${FRITTZ_DRAFT_VERSION}_${scope}_${userId || 'sin_usuario'}`;
+const frittzReadDraft = (scope, userId) => {
+  if (!userId || typeof localStorage === 'undefined') return null;
+  const key = frittzDraftKey(scope, userId);
+  try {
+    const saved = JSON.parse(localStorage.getItem(key) || 'null');
+    if (!saved || saved.version !== FRITTZ_DRAFT_VERSION || !saved.savedAt || Date.now() - saved.savedAt > FRITTZ_DRAFT_MAX_AGE_MS) {
+      localStorage.removeItem(key);
+      return null;
+    }
+    return saved.data || null;
+  } catch (e) {
+    localStorage.removeItem(key);
+    return null;
+  }
+};
+const frittzWriteDraft = (scope, userId, data) => {
+  if (!userId || typeof localStorage === 'undefined') return;
+  try {
+    localStorage.setItem(frittzDraftKey(scope, userId), JSON.stringify({
+      version: FRITTZ_DRAFT_VERSION,
+      savedAt: Date.now(),
+      data
+    }));
+  } catch (e) {
+    // Si el navegador bloquea o llena el almacenamiento, el flujo operativo continúa.
+    console.warn('No se pudo guardar el borrador local:', scope);
+  }
+};
+const frittzClearDraft = (scope, userId) => {
+  if (!userId || typeof localStorage === 'undefined') return;
+  try { localStorage.removeItem(frittzDraftKey(scope, userId)); } catch (e) {}
+};
 const fDate = d => new Date(d).toLocaleDateString('es-MX', {
   day: '2-digit',
   month: 'short',

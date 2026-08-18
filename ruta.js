@@ -56,9 +56,33 @@ function RutaReparto({
     if (typeof subscribe !== 'function') return undefined;
     return subscribe(setOfflineVentaResumen);
   }, []);
+  useEffect(() => {
+    const borrador = frittzReadDraft('transferencia', currentUser?.uid);
+    if (borrador) {
+      const form = borrador.progForm;
+      if (form && typeof form === 'object') {
+        setProgForm({
+          repartidorId: String(form.repartidorId || ''),
+          repartidorNombre: String(form.repartidorNombre || ''),
+          vehiculo: String(form.vehiculo || ''),
+          zona: String(form.zona || ''),
+          fechaProgramada: String(form.fechaProgramada || ''),
+          fechaRegresoProgramada: String(form.fechaRegresoProgramada || '')
+        });
+      }
+      setCart(Array.isArray(borrador.cart) ? borrador.cart.filter(item => item && item.id).map(item => ({
+        id: item.id, nombre: item.nombre || '', unidad: item.unidad || '', cant: item.cant
+      })) : []);
+      setPedidosIncluidos(Array.isArray(borrador.pedidosIncluidos) ? borrador.pedidosIncluidos.filter(id => typeof id === 'string') : []);
+      setBorradorRestaurado(true);
+    }
+    setBorradorListo(true);
+  }, [currentUser?.uid]);
   const [progForm, setProgForm] = useState(null);
   const [progSaving, setProgSaving] = useState(false);
   const [pedidosIncluidos, setPedidosIncluidos] = useState([]);
+  const [borradorListo, setBorradorListo] = useState(false);
+  const [borradorRestaurado, setBorradorRestaurado] = useState(false);
   const [recepcion, setRecepcion] = useState(null);
   const [pedidoEntrega, setPedidoEntrega] = useState(null);
   const transferenciasPendientes = currentUser.role === 'admin' ? rutas.filter(r => r.estado === 'pendiente_recepcion') : [];
@@ -183,6 +207,29 @@ function RutaReparto({
     flash(currentUser.role === 'repartidor'
       ? '✅ Transferencia preparada para ti. Ahora agrega el cargamento e inicia la ruta.'
       : '✅ Repartidor asignado. Ahora agrega el cargamento e inicia la ruta.');
+  };
+  const hayBorradorTransferencia = !!(cart.length || pedidosIncluidos.length || (progForm && (
+    progForm.repartidorId || progForm.vehiculo?.trim() || progForm.zona?.trim() || progForm.fechaProgramada || progForm.fechaRegresoProgramada
+  )));
+  useEffect(() => {
+    if (!borradorListo) return;
+    if (!hayBorradorTransferencia) {
+      frittzClearDraft('transferencia', currentUser?.uid);
+      return;
+    }
+    frittzWriteDraft('transferencia', currentUser?.uid, {
+      progForm: progForm ? {
+        repartidorId: progForm.repartidorId || '', repartidorNombre: progForm.repartidorNombre || '', vehiculo: progForm.vehiculo || '',
+        zona: progForm.zona || '', fechaProgramada: progForm.fechaProgramada || '', fechaRegresoProgramada: progForm.fechaRegresoProgramada || ''
+      } : null,
+      cart: cart.map(item => ({ id: item.id, nombre: item.nombre || '', unidad: item.unidad || '', cant: item.cant })),
+      pedidosIncluidos: pedidosIncluidos.slice()
+    });
+  }, [borradorListo, currentUser?.uid, hayBorradorTransferencia, progForm, cart, pedidosIncluidos]);
+  const descartarBorradorTransferencia = () => {
+    frittzClearDraft('transferencia', currentUser?.uid);
+    setProgForm(null); setCart([]); setPedidosIncluidos([]); setManualOpen(false); setManualSearch(''); setBorradorRestaurado(false);
+    flash('🗑️ Borrador local de transferencia descartado');
   };
   const pedidosPendientesRepartidor = (pedidos || []).filter(p => p.estado === 'asignado_pendiente_transferencia' && p.repartidorId === progForm?.repartidorId);
   const togglePedidoTransferencia = pedido => {
@@ -409,6 +456,7 @@ function RutaReparto({
           confirmadaPorUid: currentUser.uid, confirmadaPorNombre: currentUser.nombre || '', fechaActualizacion: fecha
         }));
       });
+      frittzClearDraft('transferencia', currentUser?.uid);
       setCart([]);
       setPedidosIncluidos([]);
       setProgForm(null);
@@ -606,7 +654,29 @@ function RutaReparto({
       color: 'var(--ok-text)',
       marginBottom: 12
     }
-  }, msg), (currentUser.role === 'admin' || currentUser.role === 'repartidor') && React.createElement(Card, null, React.createElement("button", {
+  }, msg), borradorRestaurado && React.createElement("div", {
+    style: {
+      background: 'var(--info-bg)',
+      color: 'var(--info-text)',
+      borderRadius: 6,
+      padding: '8px 10px',
+      fontSize: 12,
+      marginBottom: 10
+    }
+  }, React.createElement(Row, {
+    style: {
+      justifyContent: 'space-between',
+      gap: 8
+    }
+  }, React.createElement("span", null, "↺ Borrador local de transferencia restaurado."), React.createElement(BOut, {
+    onClick: descartarBorradorTransferencia,
+    color: "var(--danger-text)",
+    style: {
+      padding: '4px 7px',
+      fontSize: 10,
+      flexShrink: 0
+    }
+  }, "Descartar"))), (currentUser.role === 'admin' || currentUser.role === 'repartidor') && React.createElement(Card, null, React.createElement("button", {
     onClick: () => setProgForm(f => f ? null : {
       repartidorId: currentUser.role === 'repartidor' ? currentUser.uid : '',
       repartidorNombre: currentUser.role === 'repartidor' ? currentUser.nombre || '' : '',
