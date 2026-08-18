@@ -75,6 +75,7 @@ function App() {
   const pendientesTotales = totalPendientes + Number(offlineVentaResumen.pendientes || 0);
   const mostrarBanner = !isOnline || pendientesTotales > 0;
   return React.createElement("div", {
+    className: 'frittz-app-shell',
     style: {
       minHeight: '100vh',
       position: 'relative',
@@ -83,6 +84,7 @@ function App() {
       background: 'var(--bg)'
     }
   }, React.createElement("div", {
+    className: 'frittz-topbar',
     style: {
       position: 'fixed',
       top: 0,
@@ -119,6 +121,7 @@ function App() {
       lineHeight: 1
     }
   }, '←'), tab !== 'config' && React.createElement("button", {
+    className: 'frittz-menu-toggle',
     onClick: () => setNavOpen(o => !o),
     style: {
       background: 'none',
@@ -188,6 +191,7 @@ function App() {
       alignItems: 'center'
     }
   }, React.createElement(Gear, null)))), React.createElement("div", {
+    className: 'frittz-accent-bar',
     style: {
       position: 'fixed',
       top: 50,
@@ -200,6 +204,7 @@ function App() {
       background: 'repeating-linear-gradient(-45deg,var(--accent),var(--accent) 10px,var(--rail) 10px,var(--rail) 20px)'
     }
   }), mostrarBanner && React.createElement("div", {
+    className: 'frittz-offline-banner',
     style: {
       position: 'fixed',
       top: 53,
@@ -216,7 +221,9 @@ function App() {
       padding: '6px 12px',
       boxSizing: 'border-box'
     }
-  }, isOnline ? `⏳ Sincronizando ${pendientesTotales} cambio${pendientesTotales === 1 ? '' : 's'}…` : `📡 Sin conexión — puedes seguir trabajando, se sincroniza solo${pendientesTotales > 0 ? ` (${pendientesTotales} en cola)` : ''}`), firestoreError && React.createElement("div", {
+  }, isOnline ? `⏳ Sincronizando ${pendientesTotales} cambio${pendientesTotales === 1 ? '' : 's'}…` : `📡 Sin conexión — puedes seguir trabajando, se sincroniza solo${pendientesTotales > 0 ? ` (${pendientesTotales} en cola)` : ''}`), React.createElement("main", {
+    className: 'frittz-main-content'
+  }, firestoreError && React.createElement("div", {
     style: {
       margin: '0 12px 10px',
       background: 'var(--danger-bg)',
@@ -280,7 +287,7 @@ function App() {
     onLogout: logout,
     abrirUsuarios: abrirUsuarios,
     onAbrirUsuariosConsumido: () => setAbrirUsuarios(false)
-  }), navOpen && React.createElement("div", {
+  })), navOpen && React.createElement("div", {
     onClick: () => setNavOpen(false),
     style: {
       position: 'fixed',
@@ -289,6 +296,7 @@ function App() {
       zIndex: 190
     }
   }), React.createElement("div", {
+    className: 'frittz-nav-shell',
     style: {
       position: 'fixed',
       top: 0,

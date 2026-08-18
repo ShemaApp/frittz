@@ -39,12 +39,16 @@
     --warn:#C2601D; --warn-text:#8C4515; --warn-bg:#F3E4D3;
     --admin:#3B4B6B; --font-display:'Oswald',sans-serif; --font-body:'IBM Plex Sans',system-ui,sans-serif; --font-mono:'IBM Plex Mono',monospace;
   }
-  html,body{height:100%;background:var(--bg);color:var(--ink);font-family:var(--font-body)}
-  #root{max-width:420px;margin:0 auto;min-height:100vh;position:relative}
+  html,body{height:100%;min-width:0;background:var(--bg);color:var(--ink);font-family:var(--font-body);overflow-x:hidden}
+  #root{width:100%;max-width:none;margin:0;min-height:100vh;position:relative}
   body{scrollbar-width:none}
+  .frittz-app-shell{width:100%;min-width:0}
+  .frittz-topbar,.frittz-accent-bar,.frittz-offline-banner,.frittz-nav-shell{
+    width:100%!important;max-width:none!important;left:0!important;transform:none!important
+  }
 
-  /* Frittz v47: la experiencia móvil sigue siendo la base. Estas reglas
-     solo se activan en pantallas anchas y no alteran el layout compacto. */
+  /* La experiencia móvil y escritorio comparten el ancho real del viewport.
+     En pantallas anchas se reserva espacio para la navegación lateral. */
   @media (min-width:768px){
     #root{max-width:none!important;margin:0}
     .frittz-topbar,.frittz-accent-bar,.frittz-offline-banner,.frittz-nav-shell{
