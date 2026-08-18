@@ -268,44 +268,39 @@ function MiniaturaQRCliente({
 }
 function HojaCapturaGPSRapida({ cliente, estado, lectura, error, onConfirmar, onReintentar, onGuardar, onCerrar }) {
   if (!cliente) return null;
-  const precision = lectura?.precisionMetros;
-  const calidad = precision === null || precision === undefined ? null : precision <= 30 ? { texto: 'Señal buena', color: 'var(--ok-text)', fondo: 'var(--ok-bg)' } : precision <= 80 ? { texto: 'Precisión revisable', color: 'var(--warn-text)', fondo: 'var(--surface-2)' } : { texto: 'Precisión baja', color: 'var(--danger-text)', fondo: 'var(--surface-2)' };
   const cerrable = estado !== 'buscando' && estado !== 'guardando';
   const asa = { width: 38, height: 4, borderRadius: 99, background: 'var(--line-strong)', margin: '0 auto 16px' };
   let contenido;
   if (estado === 'confirmar') contenido = React.createElement(React.Fragment, null,
     React.createElement('div', { style: asa }),
     React.createElement('div', { style: { fontSize: 18, fontWeight: 800, marginBottom: 6 } }, '📍 ¿Estás en este domicilio?'),
-    React.createElement('div', { style: { fontSize: 12, color: 'var(--ink-faint)', lineHeight: 1.45, marginBottom: 14 } }, 'La ubicación se guardará para preparar rutas futuras.'),
+    React.createElement('div', { style: { fontSize: 12, color: 'var(--ink-faint)', lineHeight: 1.45, marginBottom: 14 } }, 'La referencia de visita se guardará para validar futuras entregas.'),
     React.createElement('div', { style: { background: 'var(--surface-2)', border: '1px solid var(--line)', borderRadius: 10, padding: '11px 12px', marginBottom: 16 } },
       React.createElement('div', { style: { fontSize: 13, fontWeight: 800, marginBottom: 3 } }, cliente.nombre),
       React.createElement('div', { style: { fontSize: 12, color: 'var(--ink-soft)', lineHeight: 1.35 } }, '📍 ', cliente.localidad || cliente.domicilio || 'Localidad sin detalle')),
-    React.createElement(BFill, { onClick: onConfirmar, style: { width: '100%' } }, 'SÍ, CAPTURAR UBICACIÓN'),
+    React.createElement(BFill, { onClick: onConfirmar, style: { width: '100%' } }, 'SÍ, CAPTURAR REFERENCIA'),
     React.createElement('button', { type: 'button', onClick: onCerrar, style: { width: '100%', marginTop: 8, padding: 9, border: 'none', background: 'transparent', color: 'var(--ink-soft)', cursor: 'pointer', fontWeight: 700, fontSize: 12 } }, 'Cancelar')
   );else if (estado === 'buscando' || estado === 'guardando') contenido = React.createElement(React.Fragment, null,
     React.createElement('div', { style: asa }),
-    React.createElement('div', { style: { fontSize: 18, fontWeight: 800, marginBottom: 7 } }, estado === 'guardando' ? 'Guardando ubicación…' : 'Obteniendo señal precisa…'),
-    React.createElement('div', { style: { fontSize: 12, color: 'var(--ink-faint)', lineHeight: 1.45 } }, estado === 'guardando' ? 'Actualizando la ficha de ' + cliente.nombre + '.' : 'Mantente parado en el domicilio. Puede tomar unos segundos.'),
+    React.createElement('div', { style: { fontSize: 18, fontWeight: 800, marginBottom: 7 } }, estado === 'guardando' ? 'Guardando referencia…' : 'Obteniendo señal de visita…'),
+    React.createElement('div', { style: { fontSize: 12, color: 'var(--ink-faint)', lineHeight: 1.45 } }, estado === 'guardando' ? 'Actualizando la referencia de ' + cliente.nombre + '.' : 'Mantente parado en el domicilio. Puede tomar unos segundos.'),
     React.createElement('div', { style: { textAlign: 'center', padding: '25px 0 10px', fontSize: 28, color: 'var(--accent-text)' } }, '◌')
   );else if (estado === 'lectura') contenido = React.createElement(React.Fragment, null,
     React.createElement('div', { style: asa }),
-    React.createElement('div', { style: { fontSize: 18, fontWeight: 800, marginBottom: 4 } }, 'Ubicación detectada'),
+    React.createElement('div', { style: { fontSize: 18, fontWeight: 800, marginBottom: 4 } }, 'Referencia de visita detectada'),
     React.createElement('div', { style: { fontSize: 12, color: 'var(--ink-faint)', marginBottom: 13 } }, cliente.nombre),
-    React.createElement('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: calidad?.fondo || 'var(--surface-2)', border: '1px solid var(--line)', borderRadius: 10, padding: '10px 12px', marginBottom: 9 } },
-      React.createElement('span', { style: { fontSize: 12, color: 'var(--ink-soft)' } }, 'Precisión estimada'),
-      React.createElement('strong', { style: { fontSize: 12, color: calidad?.color || 'var(--ink)' } }, precision !== null && precision !== undefined ? '± ' + precision + ' m' : 'No disponible')),
-    calidad && React.createElement('div', { style: { fontSize: 11, color: calidad.color, fontWeight: 700, marginBottom: 16 } }, calidad.texto + ' · Capturada ahora'),
+    React.createElement('div', { style: { background: 'var(--surface-2)', border: '1px solid var(--line)', borderRadius: 10, padding: '10px 12px', marginBottom: 16, fontSize: 12, color: 'var(--ink-soft)', lineHeight: 1.45 } }, 'Señal recibida. La referencia no se mostrará en pantalla; se usará únicamente para validar la visita.'),
     React.createElement(BFill, { onClick: onGuardar, style: { width: '100%' } }, 'GUARDAR Y CONTINUAR'),
     React.createElement(Row, { style: { gap: 8, marginTop: 8 } }, React.createElement(BOut, { onClick: onReintentar, style: { flex: 1 } }, 'Reintentar'), React.createElement(BOut, { onClick: onCerrar, style: { flex: 1 } }, 'Cancelar'))
   );else if (estado === 'guardado') contenido = React.createElement(React.Fragment, null,
     React.createElement('div', { style: asa }),
     React.createElement('div', { style: { textAlign: 'center', fontSize: 32, marginBottom: 5 } }, '✓'),
-    React.createElement('div', { style: { textAlign: 'center', fontSize: 18, fontWeight: 800, marginBottom: 6, color: 'var(--ok-text)' } }, 'GPS guardado'),
-    React.createElement('div', { style: { textAlign: 'center', fontSize: 12, color: 'var(--ink-faint)', lineHeight: 1.45, marginBottom: 16 } }, 'La ubicación de ' + cliente.nombre + ' ya puede utilizarse para preparar rutas.'),
+    React.createElement('div', { style: { textAlign: 'center', fontSize: 18, fontWeight: 800, marginBottom: 6, color: 'var(--ok-text)' } }, 'Referencia guardada'),
+    React.createElement('div', { style: { textAlign: 'center', fontSize: 12, color: 'var(--ink-faint)', lineHeight: 1.45, marginBottom: 16 } }, 'La referencia de visita de ' + cliente.nombre + ' ya puede utilizarse para validar entregas.'),
     React.createElement(BFill, { onClick: onCerrar, style: { width: '100%' } }, 'CONTINUAR')
   );else contenido = React.createElement(React.Fragment, null,
     React.createElement('div', { style: asa }),
-    React.createElement('div', { style: { fontSize: 18, fontWeight: 800, marginBottom: 7, color: 'var(--danger-text)' } }, 'No se pudo obtener GPS'),
+    React.createElement('div', { style: { fontSize: 18, fontWeight: 800, marginBottom: 7, color: 'var(--danger-text)' } }, 'No se pudo obtener la referencia de visita'),
     React.createElement('div', { style: { fontSize: 12, color: 'var(--ink-soft)', lineHeight: 1.45, marginBottom: 16 } }, error || 'Revisa la señal y los permisos de ubicación del navegador.'),
     React.createElement(Row, { style: { gap: 8 } }, React.createElement(BOut, { onClick: onCerrar, style: { flex: 1 } }, 'Dejar pendiente'), React.createElement(BFill, { onClick: onReintentar, style: { flex: 1 } }, 'Reintentar'))
   );
@@ -320,8 +315,7 @@ function FichaRapidaCliente({
   puedeEditar,
   onEditar,
   onAbrirQR,
-  onHistorial,
-  onUbicacion
+  onHistorial
 }) {
   const ubicacionValida = Number.isFinite(Number(cliente?.ubicacion?.lat)) && Number.isFinite(Number(cliente?.ubicacion?.lng));
   return React.createElement("div", {
@@ -345,9 +339,9 @@ function FichaRapidaCliente({
     color: 'var(--ink-soft)'
   }, 'Sin crédito'), ubicacionValida ? React.createElement(Tag, {
     color: 'var(--ok-text)'
-  }, '✓ GPS guardado') : React.createElement(Tag, {
+  }, '✓ Validación disponible') : React.createElement(Tag, {
     color: 'var(--warn-text)'
-  }, '📍 Sin GPS')), React.createElement("div", {
+  }, '📍 Sin referencia')), React.createElement("div", {
     style: {
       display: 'grid',
       gridTemplateColumns: '1fr 1fr',
@@ -412,13 +406,9 @@ function FichaRapidaCliente({
       gap: 6,
       flexWrap: 'wrap'
     }
-  }, React.createElement(BOut, {
-    onClick: onUbicacion,
-    disabled: !ubicacionValida,
-    style: {
-      flex: 1
-    }
-  }, ubicacionValida ? '📍 Ver ubicación' : '📍 Sin ubicación'), React.createElement(BOut, {
+  }, React.createElement(Tag, {
+    color: ubicacionValida ? 'var(--ok-text)' : 'var(--warn-text)'
+  }, ubicacionValida ? '📍 Validación disponible' : '📍 Sin referencia'), React.createElement(BOut, {
     onClick: onAbrirQR,
     style: {
       flex: 1
@@ -555,16 +545,6 @@ function Clientes({
     return porLocalidad || String(a.nombre || '').localeCompare(String(b.nombre || ''), 'es', { sensitivity: 'base' });
   });
   const historialCliente = clienteId => notas.filter(n => n.clienteId === clienteId).slice().sort((a, b) => new Date(b.fecha || 0).getTime() - new Date(a.fecha || 0).getTime());
-  const abrirUbicacionCliente = cliente => {
-    const ubicacion = cliente?.ubicacion;
-    const lat = Number(ubicacion?.lat);
-    const lng = Number(ubicacion?.lng);
-    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
-      alert('Este cliente todavía no tiene una ubicación GPS válida.');
-      return;
-    }
-    window.open('https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(lat + ',' + lng), '_blank', 'noopener');
-  };
   const save = async () => {
     if (!form.nombre) return;
     const localidadEntrada = form.localidadNueva !== undefined ? form.localidadNueva : form.localidad || form.domicilio || '';
@@ -624,7 +604,7 @@ function Clientes({
   const [capturando, setCapturando] = useState(false);
   const mensajeErrorGPS = e => {
     if (e?.code === 1) return 'El permiso de ubicación está desactivado. Habilítalo para este sitio y vuelve a intentarlo.';
-    if (e?.code === 2) return 'No se detectó una señal GPS utilizable. Muévete a una zona con mejor vista al cielo.';
+    if (e?.code === 2) return 'No se detectó una señal de ubicación utilizable. Muévete a una zona con mejor vista al cielo.';
     if (e?.code === 3) return 'La lectura tardó demasiado. Reintenta cuando la señal sea más estable.';
     return 'No se pudo obtener la ubicación. Revisa los permisos del navegador.';
   };
@@ -790,7 +770,7 @@ function Clientes({
       gap: 6,
       marginBottom: 10
     }
-  }, [['todos', 'Todos', contarClientes(() => true)], ['con-gps', '✓ Con GPS', contarClientes(c => !!c.ubicacion)], ['sin-gps', '📍 Sin GPS', contarClientes(c => !c.ubicacion)]].map(([v, l, total]) => React.createElement("button", {
+  }, [['todos', 'Todos', contarClientes(() => true)], ['con-gps', '✓ Con referencia', contarClientes(c => !!c.ubicacion)], ['sin-gps', '📍 Sin referencia', contarClientes(c => !c.ubicacion)]].map(([v, l, total]) => React.createElement("button", {
     key: v,
     type: 'button',
     onClick: () => setFiltroGPS(v),
@@ -836,7 +816,7 @@ function Clientes({
       marginBottom: 12,
       lineHeight: 1.4
     }
-  }, list.length + ' cliente' + (list.length === 1 ? '' : 's') + ' encontrado' + (list.length === 1 ? '' : 's') + '. ' + (filtroGPS === 'sin-gps' ? 'Captura la ubicación estando en el domicilio; al guardarla desaparecerá de este filtro.' : 'La lista está agrupada por localidad. Toca el botón ⋮ para ver acciones, la miniatura QR para abrir el código o la tarjeta para abrir la ficha rápida.')), list.map((c, indice) => {
+  }, list.length + ' cliente' + (list.length === 1 ? '' : 's') + ' encontrado' + (list.length === 1 ? '' : 's') + '. ' + (filtroGPS === 'sin-gps' ? 'Captura la referencia estando en el domicilio; al guardarla desaparecerá de este filtro.' : 'La lista está agrupada por localidad. Toca el botón ⋮ para ver acciones, la miniatura QR para abrir el código o la tarjeta para abrir la ficha rápida.')), list.map((c, indice) => {
     const expanded = expandedId === c.id;
     const localidadActual = localidadDeCliente(c) || 'Sin clasificar';
     const localidadAnterior = indice > 0 ? localidadDeCliente(list[indice - 1]) || 'Sin clasificar' : null;
@@ -895,9 +875,9 @@ function Clientes({
       color: "var(--ink-soft)"
     }, "Sin crédito"), c.ubicacion ? React.createElement(Tag, {
       color: "var(--ok-text)"
-    }, "✓ GPS guardado") : React.createElement(Tag, {
+    }, "✓ Validación disponible") : React.createElement(Tag, {
       color: "var(--warn-text)"
-    }, "📍 Sin GPS")), React.createElement("div", {
+    }, "📍 Sin referencia")), React.createElement("div", {
       style: {
         fontSize: 12,
         color: 'var(--ink-soft)',
@@ -1103,7 +1083,7 @@ function Clientes({
       lineHeight: 1.4,
       marginBottom: 16
     }
-  }, 'Selecciona una localidad existente o crea una nueva. El nombre se reutilizará en futuros clientes.'), React.createElement(Lbl, null, "Ubicación exacta del domicilio"), React.createElement("div", {
+  }, 'Selecciona una localidad existente o crea una nueva. El nombre se reutilizará en futuros clientes.'), React.createElement(Lbl, null, "Referencia privada para validar visitas"), React.createElement("div", {
     style: {
       marginBottom: 16
     }
@@ -1119,9 +1099,9 @@ function Clientes({
       fontSize: 12,
       color: 'var(--ok-text)'
     }
-  }, "✅ Ubicación guardada (", form.ubicacion.lat.toFixed(5), ", ", form.ubicacion.lng.toFixed(5), ")"), React.createElement("button", {
+  }, '✅ Referencia guardada para validar visitas'), React.createElement("button", {
     onClick: () => {
-      if (window.confirm('¿Deseas reemplazar o retirar el GPS actual? La ubicación existente no cambiará hasta que guardes esta ficha.')) setForm(f => ({
+      if (window.confirm('¿Deseas reemplazar o retirar la referencia actual? El cambio no se guardará hasta que confirmes esta ficha.')) setForm(f => ({
         ...f,
         ubicacion: null
       }));
@@ -1139,7 +1119,7 @@ function Clientes({
       width: '100%'
     },
     disabled: capturando
-  }, capturando ? 'Obteniendo ubicación…' : '📍 Usar mi ubicación actual'), React.createElement("div", {
+  }, capturando ? 'Capturando referencia…' : '📍 Capturar referencia de visita'), React.createElement("div", {
     style: {
       fontSize: 11,
       color: 'var(--ink-faint)',
@@ -1226,7 +1206,6 @@ function Clientes({
       setDetallesFor(null);
       setHistId(clienteId);
     },
-    onUbicacion: () => abrirUbicacionCliente(detallesFor)
   })), React.createElement(HojaCapturaGPSRapida, {
     cliente: capturaRapidaFor,
     estado: estadoCapturaGPS,

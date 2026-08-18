@@ -3,6 +3,7 @@ function Reportes({
   clientes,
   currentUser
 }) {
+  const GPS_AUDIT_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
   const [msg, setMsg] = useState('');
   const flash = m => {
     setMsg(m);
@@ -35,10 +36,13 @@ function Reportes({
       };
       for (const col of colecciones) {
         const snap = await db.collection(col).get();
-        data[col] = snap.docs.map(d => ({
-          id: d.id,
-          ...d.data()
-        }));
+        data[col] = snap.docs.map(d => {
+          const registro = { id: d.id, ...d.data() };
+          if (col === 'notas') delete registro.ubicacionVenta;
+          if (col === 'rutas') delete registro.ubicacionActual;
+          if (col === 'clientes') delete registro.ubicacion;
+          return registro;
+        });
       }
       const blob = new Blob([JSON.stringify(data, null, 2)], {
         type: 'application/json'
@@ -69,15 +73,23 @@ function Reportes({
   const cargarUbicacionDia = async () => {
     setUbicLoading(true);
     try {
-      const desde = new Date(ubicFecha + 'T00:00:00').toISOString();
+      const fechaSeleccionada = new Date(ubicFecha + 'T00:00:00');
+      const corte = new Date(Date.now() - GPS_AUDIT_RETENTION_MS);
+      if (!Number.isFinite(fechaSeleccionada.getTime()) || fechaSeleccionada < corte) {
+        setUbicNotas([]);
+        flash('La auditoría de visitas solo está disponible durante 30 días.');
+        setUbicLoading(false);
+        return;
+      }
+      const desde = fechaSeleccionada.toISOString();
       const hasta = new Date(ubicFecha + 'T23:59:59').toISOString();
-      const snap = await db.collection('notas').where('fecha', '>=', desde).where('fecha', '<=', hasta).get();
-      const notas = snap.docs.map(d => ({
+      const snap = await db.collection('ubicacion_auditoria').where('fecha', '>=', desde).where('fecha', '<=', hasta).get();
+      const auditorias = snap.docs.map(d => ({
         id: d.id,
         ...d.data()
-      })).filter(n => n.ubicacionVenta);
-      notas.sort((a, b) => new Date(a.fecha) - new Date(b.fecha));
-      setUbicNotas(notas);
+      }));
+      auditorias.sort((a, b) => new Date(a.fecha) - new Date(b.fecha));
+      setUbicNotas(auditorias);
     } catch (e) {
       flash('❌ ' + e.message);
     }
@@ -241,7 +253,7 @@ function Reportes({
     }
     setExcelGenerating(true);
     try {
-      const [ventasSnap, creditosSnap, transferenciasSnap, historialSnap] = await Promise.all([db.collection('notas').get(), db.collection('creditos').get(), db.collection('rutas').get(), db.collection('inventario_historial').get()]);
+      const [ventasSnap, creditosSnap, transferenciasSnap, historialSnap, auditoriasSnap] = await Promise.all([db.collection('notas').get(), db.collection('creditos').get(), db.collection('rutas').get(), db.collection('inventario_historial').get(), db.collection('ubicacion_auditoria').get()]);
       const ventas = ordenarPorFechaExcel(ventasSnap.docs.map(d => ({
         id: d.id,
         ...d.data()
@@ -254,12 +266,14 @@ function Reportes({
         id: d.id,
         ...d.data()
       })));
+      const auditorias = new Map(auditoriasSnap.docs.map(d => [d.id, { id: d.id, ...d.data() }]));
       const movimientos = ordenarPorFechaExcel(historialSnap.docs.map(d => ({
         id: d.id,
         ...d.data()
       })));
       const ventasFilas = ventas.map(venta => {
         const items = Array.isArray(venta.items) ? venta.items : [];
+        const auditoria = auditorias.get(venta.id);
         const itemsAplicados = Array.isArray(venta.itemsAplicadosInventario) ? venta.itemsAplicadosInventario : [];
         const itemsFaltantes = Array.isArray(venta.incidenciaInventario?.itemsFaltantes) ? venta.incidenciaInventario.itemsFaltantes : [];
         const unidadesSolicitadas = items.reduce((suma, item) => suma + numeroExcel(item.cant), 0);
@@ -287,7 +301,7 @@ function Reportes({
           'Unidades faltantes': Math.max(0, unidadesSolicitadas - unidadesAplicadas),
           'Detalle incidencia': itemsFaltantes.length ? JSON.stringify(itemsFaltantes) : '',
           Total: numeroExcel(venta.total),
-          'GPS venta disponible': venta.ubicacionVenta ? 'Sí' : 'No'
+          'Validación de visita': auditoria ? (auditoria.ok === true ? 'Validada' : 'No validada') : 'No disponible'
         };
       });
       const ventaDetalleFilas = [];
@@ -418,7 +432,6 @@ function Reportes({
         Activo: producto.activo === false ? 'No' : 'Sí'
       }));
       const clientesFilas = (clientes || []).map(cliente => {
-        const ubicacion = cliente.ubicacion || {};
         return {
           'Cliente ID': cliente.id || '',
           Cliente: cliente.nombre || '',
@@ -428,11 +441,7 @@ function Reportes({
           'Domicilio histórico': cliente.localidad && cliente.domicilio && String(cliente.localidad).trim().toLocaleLowerCase('es') !== String(cliente.domicilio).trim().toLocaleLowerCase('es') ? cliente.domicilio : '',
           Activo: cliente.activo === false ? 'No' : 'Sí',
           'Código QR': qrTextForCliente(cliente.id),
-          'Estado GPS': ubicacion.lat !== undefined && ubicacion.lng !== undefined ? 'Con GPS' : 'Sin GPS',
-          'GPS latitud': ubicacion.lat === undefined ? '' : ubicacion.lat,
-          'GPS longitud': ubicacion.lng === undefined ? '' : ubicacion.lng,
-          'GPS precisión (m)': numeroOVacioExcel(ubicacion.precisionMetros),
-          'Fecha GPS': fechaExcel(ubicacion.fecha),
+          'Referencia de visita': cliente.ubicacion ? 'Disponible' : 'Sin referencia',
           'Creado por UID': cliente.creadoPorUid || ''
         };
       });
@@ -479,7 +488,7 @@ function Reportes({
         Valor: clientesFilas.length
       }];
       agregarHojaExcel(libro, 'Resumen', ['Indicador', 'Valor'], resumenFilas, [], []);
-      agregarHojaExcel(libro, 'Ventas', ['Venta ID', 'Venta offline ID', 'Fecha', 'Cliente ID', 'Cliente', 'Teléfono', 'Vendedor UID', 'Vendedor', 'Forma de pago', 'Origen', 'Transferencia ID', 'Estado', 'Requiere revisión', 'Líneas de venta', 'Unidades solicitadas', 'Unidades aplicadas inventario', 'Unidades faltantes', 'Detalle incidencia', 'Total', 'GPS venta disponible'], ventasFilas, ['Total'], ['Fecha']);
+      agregarHojaExcel(libro, 'Ventas', ['Venta ID', 'Venta offline ID', 'Fecha', 'Cliente ID', 'Cliente', 'Teléfono', 'Vendedor UID', 'Vendedor', 'Forma de pago', 'Origen', 'Transferencia ID', 'Estado', 'Requiere revisión', 'Líneas de venta', 'Unidades solicitadas', 'Unidades aplicadas inventario', 'Unidades faltantes', 'Detalle incidencia', 'Total', 'Validación de visita'], ventasFilas, ['Total'], ['Fecha']);
       agregarHojaExcel(libro, 'VentaDetalle', ['Venta ID', 'Venta offline ID', 'Línea', 'Fecha venta', 'Cliente ID', 'Cliente', 'Producto ID', 'Producto', 'Unidad', 'Cantidad solicitada', 'Cantidad aplicada inventario', 'Cantidad faltante', 'Precio unitario', 'Subtotal', 'Estado', 'Requiere revisión', 'Origen', 'Transferencia ID', 'Forma de pago'], ventaDetalleFilas, ['Precio unitario', 'Subtotal'], ['Fecha venta']);
       agregarHojaExcel(libro, 'Transferencias', ['Transferencia ID', 'Fecha de salida', 'Fecha programada', 'Regreso programado', 'Fecha de recepción', 'Estado', 'Estado transferencia', 'Origen', 'Responsable', 'Responsable UID', 'Vehículo', 'Zona', 'Asignada por', 'Recibida por', 'Motivo de merma', 'Conciliada'], transferenciasFilas, [], ['Fecha de salida', 'Fecha programada', 'Regreso programado', 'Fecha de recepción']);
       agregarHojaExcel(libro, 'TransferenciaDetalle', ['Transferencia ID', 'Fecha de salida', 'Estado', 'Producto ID', 'Producto', 'Unidad', 'Cantidad cargada', 'Cantidad restante', 'Cantidad devuelta', 'Merma', 'Responsable', 'Zona'], transferenciaDetalleFilas, [], ['Fecha de salida']);
@@ -487,7 +496,7 @@ function Reportes({
       agregarHojaExcel(libro, 'Abonos', ['Crédito ID', 'Abono #', 'Fecha', 'Cliente ID', 'Cliente', 'Monto', 'Forma de pago', 'Capturado por UID', 'Capturado por'], abonosFilas, ['Monto'], ['Fecha']);
       agregarHojaExcel(libro, 'MovimientosInventario', ['Movimiento ID', 'Fecha', 'Producto ID', 'Producto', 'Stock anterior', 'Stock nuevo', 'Diferencia', 'Motivo', 'Usuario UID', 'Usuario', 'Correo usuario'], movimientosFilas, [], ['Fecha']);
       agregarHojaExcel(libro, 'Productos', ['Producto ID', 'Código de barras', 'Producto', 'Unidad', 'Precio actual', 'Stock actual', 'Activo'], productosFilas, ['Precio actual'], []);
-      agregarHojaExcel(libro, 'Clientes', ['Cliente ID', 'Cliente', 'Teléfono', 'Localidad', 'Fuente de localidad', 'Domicilio histórico', 'Activo', 'Código QR', 'Estado GPS', 'GPS latitud', 'GPS longitud', 'GPS precisión (m)', 'Fecha GPS', 'Creado por UID'], clientesFilas, [], ['Fecha GPS']);
+      agregarHojaExcel(libro, 'Clientes', ['Cliente ID', 'Cliente', 'Teléfono', 'Localidad', 'Fuente de localidad', 'Domicilio histórico', 'Activo', 'Código QR', 'Referencia de visita', 'Creado por UID'], clientesFilas, [], []);
       XLSX.writeFile(libro, 'libro_operativo_productos_de_la_costa_' + new Date().toISOString().slice(0, 10) + '.xlsx', {
         compression: true,
         cellDates: true
@@ -732,9 +741,9 @@ function Reportes({
       color: 'var(--ink-faint)'
     }
   }, "Recomendado: hazlo cada semana, y guarda uno aparte cada fin de mes. Te avisamos aquí arriba cuando ya lleve más de 7 días.")), subTab === 'ubicacion' && (() => {
-    const ok = (ubicNotas || []).filter(n => n.ubicacionVenta.ok === true);
-    const mal = (ubicNotas || []).filter(n => n.ubicacionVenta.ok === false);
-    const sinDatos = (ubicNotas || []).filter(n => n.ubicacionVenta.ok === null);
+    const ok = (ubicNotas || []).filter(n => n.ok === true);
+    const mal = (ubicNotas || []).filter(n => n.ok === false);
+    const sinDatos = (ubicNotas || []).filter(n => n.ok === null);
     return React.createElement(React.Fragment, null, React.createElement("div", {
       style: {
         fontSize: 11,
@@ -881,13 +890,13 @@ function Reportes({
         color: 'var(--danger-text)',
         marginTop: 2
       }
-    }, fDateTime(n.fecha), " · a ", n.ubicacionVenta.distanciaM, " m del domicilio registrado", n.capturadoPorNombre ? ' · ' + n.capturadoPorNombre : '')))), sinDatos.length > 0 && React.createElement("div", {
+    }, fDateTime(n.fecha), n.ok === true ? ' · Visita validada' : n.ok === false ? ' · Visita fuera del rango permitido' : ' · Validación no disponible', n.capturadoPorNombre ? ' · ' + n.capturadoPorNombre : '')))), sinDatos.length > 0 && React.createElement("div", {
       style: {
         fontSize: 11,
         color: 'var(--ink-faint)',
         marginTop: mal.length ? 14 : 0
       }
-    }, "\"Sin datos\" significa que el cliente no tiene ubicación registrada, o no se pudo obtener el GPS del repartidor en ese momento — no es evidencia de nada, solo falta información para comparar.")));
+    }, "\"Sin datos\" significa que no existe una auditoría de visita para esa operación o que no se pudo validar la visita; no se muestran coordenadas.")));
   })(), subTab === 'reporte' && React.createElement(React.Fragment, null, React.createElement("div", {
     style: {
       display: 'flex',

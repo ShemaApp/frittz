@@ -12,6 +12,7 @@ service cloud.firestore {
     // agreguen en el código sin agregar su regla aquí).
     //   ✅ productos            ✅ notas              ✅ pedidos
     //   ✅ inventario_historial ✅ creditos           ✅ rutas
+    //   ✅ ubicacion_auditoria
     //   ✅ clientes             ✅ devoluciones       ✅ gastos
     //   ✅ cierres_caja         ✅ usuarios           ✅ _meta
     // Si agregas una colección nueva en el código: agrégala aquí también, o
@@ -116,6 +117,7 @@ service cloud.firestore {
     match /notas/{id} {
       allow read: if signedIn();
       allow create: if signedIn() && request.resource.data.capturadoPorUid == request.auth.uid
+        && !request.resource.data.keys().hasAny(['ubicacionVenta'])
         && (
           (request.resource.data.origen == 'almacen' && permisoEdicion('productos'))
           || ((request.resource.data.origen == 'transferencia_almacen' || request.resource.data.origen == 'qr_cliente_ruta')
@@ -125,6 +127,24 @@ service cloud.firestore {
             && getAfter(/databases/$(database)/documents/rutas/$(request.resource.data.transferenciaId)).data.estado == 'activa'
             && getAfter(/databases/$(database)/documents/rutas/$(request.resource.data.transferenciaId)).data.entregas.size() == get(/databases/$(database)/documents/rutas/$(request.resource.data.transferenciaId)).data.entregas.size() + 1)
         );
+      allow update, delete: if false;
+    }
+
+    // ── ubicacion_auditoria (validación de visita, separada de notas) ──
+    // El repartidor puede crear únicamente su propia auditoría al registrar
+    // la venta. La auditoría no se edita ni se borra desde el cliente; la
+    // limpieza por retención la ejecutará TTL/backend con credenciales seguras.
+    match /ubicacion_auditoria/{id} {
+      allow read: if isAdmin();
+      allow create: if signedIn()
+        && request.resource.data.capturadoPorUid == request.auth.uid
+        && request.resource.data.notaId is string
+        && request.resource.data.rutaId is string
+        && request.resource.data.clienteId is string
+        && request.resource.data.ok is bool
+        && (request.resource.data.distanciaM == null || request.resource.data.distanciaM is number)
+        && request.resource.data.retentionClass == 'gps_visit_30d'
+        && request.resource.data.expiresAt is timestamp;
       allow update, delete: if false;
     }
 

@@ -465,10 +465,11 @@ function useSesion() {
     }, errorHandler), db.collection('notas').orderBy('fecha', 'desc').limit(500).onSnapshot({
       includeMetadataChanges: true
     }, snap => {
-      setNotas(snap.docs.map(d => ({
-        id: d.id,
-        ...d.data()
-      })));
+      setNotas(snap.docs.map(d => {
+        const datos = d.data();
+        const { ubicacionVenta, ...notaSinUbicacion } = datos;
+        return { id: d.id, ...notaSinUbicacion };
+      }));
       pend('notas', snap);
     }, errorHandler), db.collection('creditos').onSnapshot({
       includeMetadataChanges: true

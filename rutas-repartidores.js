@@ -798,7 +798,7 @@ function RepartidoresPanel({
     try {
       const loc = await getLoc();
       const cliente = ventaRapida.cliente;
-      const ubicacionVenta = loc && cliente.ubicacion ? {
+      const validacionVisita = loc && cliente.ubicacion ? {
         ok: distanciaMetros(loc.lat, loc.lng, cliente.ubicacion.lat, cliente.ubicacion.lng) <= RADIO_VISITA_METROS,
         distanciaM: Math.round(distanciaMetros(loc.lat, loc.lng, cliente.ubicacion.lat, cliente.ubicacion.lng))
       } : { ok: null, distanciaM: null };
@@ -823,7 +823,7 @@ function RepartidoresPanel({
         total,
         formaPago: ventaRapida.pago,
         tipoVenta: 'rapida_repartidor',
-        ubicacionVenta
+        validacionVisita
       });
       setVentaRapida(v => ({ ...v, saving: false, done: resultado }));
       if (resultado.estado === 'pendiente_local') {
@@ -1834,10 +1834,10 @@ function RepartidoresPanel({
   }, ventaRapida.cliente.nombre, " · ", fmtx(ventaRapida.done.total)), React.createElement("div", {
     style: {
       fontSize: 11,
-      color: ventaRapida.done.ubicacionVenta.ok === false ? 'var(--danger-text)' : ventaRapida.done.ubicacionVenta.ok === true ? 'var(--ok)' : 'var(--warn-text)',
+      color: ventaRapida.done.validacionVisita?.ok === false ? 'var(--danger-text)' : ventaRapida.done.validacionVisita?.ok === true ? 'var(--ok)' : 'var(--warn-text)',
       marginBottom: 20
     }
-  }, ventaRapida.done.ubicacionVenta.ok === true ? '📍 Ubicación confirmada' : ventaRapida.done.ubicacionVenta.ok === false ? `⚠️ Ubicación fuera de rango (${ventaRapida.done.ubicacionVenta.distanciaM} m)` : '📍 No se pudo validar la ubicación'), ventaRapida.cliente.telefono && React.createElement("button", {
+  }, ventaRapida.done.validacionVisita?.ok === true ? '✓ Visita validada' : ventaRapida.done.validacionVisita?.ok === false ? '⚠️ Visita fuera del rango permitido' : '— Validación no disponible'), ventaRapida.cliente.telefono && React.createElement("button", {
     onClick: () => window.open(waVentaLink(ventaRapida.cliente, ventaRapida.done.items, ventaRapida.done.total, ventaRapida.done.pago), '_blank'),
     style: {
       width: '100%',

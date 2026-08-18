@@ -17,6 +17,7 @@
   const DB_VERSION = 1;
   const STORE = 'ventas_transferencia';
   const RETRY_STATES = ['pendiente', 'reintentando'];
+  const GPS_AUDIT_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
   let dbOpenPromise = null;
   let syncPromise = null;
   const listeners = new Set();
@@ -99,6 +100,15 @@
 
   const clone = value => JSON.parse(JSON.stringify(value));
 
+  const quitarValidacionVencida = venta => {
+    const creadoMs = Date.parse(venta?.creadoEn || '');
+    if (!Number.isFinite(creadoMs) || Date.now() - creadoMs <= GPS_AUDIT_RETENTION_MS) return venta;
+    const copia = { ...venta };
+    delete copia.validacionVisita;
+    delete copia.ubicacionVenta;
+    return copia;
+  };
+
   const normalizeItems = items => (items || []).map(item => ({
     id: String(item.id),
     nombre: String(item.nombre || ''),
@@ -133,7 +143,7 @@
       formaPago: payload.formaPago || 'efectivo',
       origen: 'transferencia_almacen',
       tipoVenta: payload.tipoVenta || 'rapida_repartidor',
-      ubicacionVenta: payload.ubicacionVenta || null,
+      validacionVisita: payload.validacionVisita || payload.ubicacionVenta || null,
       pedidoId: payload.pedidoId || null,
       notaId: payload.notaId || ventaId,
       creditoId: payload.formaPago === 'credito' ? (payload.creditoId || uid()) : null,
@@ -178,7 +188,6 @@
     transferenciaId: venta.transferenciaId,
     rutaId: venta.rutaId,
     pedidoId: venta.pedidoId || null,
-    ubicacionVenta: venta.ubicacionVenta || null,
     capturadoPorUid: venta.repartidorUid,
     capturadoPorNombre: venta.repartidorNombre || '',
     estado: incidencia ? 'incidencia_inventario' : 'confirmada',
@@ -197,6 +206,7 @@
     if (!firestore || !global.firebase?.firestore) throw new Error('Firestore aún no está inicializado');
     const rutaRef = firestore.collection('rutas').doc(venta.transferenciaId);
     const notaRef = firestore.collection('notas').doc(venta.notaId || venta.id);
+    const auditRef = firestore.collection('ubicacion_auditoria').doc(venta.notaId || venta.id);
     const creditoRef = venta.formaPago === 'credito' && venta.creditoId ? firestore.collection('creditos').doc(venta.creditoId) : null;
     const pedidoRef = venta.pedidoId ? firestore.collection('pedidos').doc(venta.pedidoId) : null;
 
@@ -210,7 +220,7 @@
 
       // Idempotencia: si la operación ya llegó a Firestore pero el dispositivo
       // perdió la respuesta, el reintento no duplica nota, crédito ni entrega.
-      if (notaSnap.exists) return { estado: notaSnap.data().estado || 'confirmada', notaId: notaSnap.id, yaExistia: true, data: notaSnap.data() };
+      if (notaSnap.exists) return { estado: notaSnap.data().estado || 'confirmada', notaId: notaSnap.id, yaExistia: true, data: notaSnap.data(), validacionVisita: venta.validacionVisita || null };
       if (!rutaSnap.exists) throw errorIncidencia('La transferencia ya no existe', { tipo: 'transferencia_no_encontrada' });
 
       const ruta = rutaSnap.data();
@@ -250,6 +260,22 @@
       const ventaParaNota = { ...venta, cliente, items, formaPago, total };
       const nota = construirNotaBase(ventaParaNota, fecha, items, incidencia, itemsAplicados, itemsFaltantes);
       tx.set(notaRef, nota);
+      const validacionVisita = venta.validacionVisita || null;
+      if (validacionVisita && validacionVisita.ok !== null && validacionVisita.ok !== undefined) {
+        const fechaMs = Date.parse(fecha);
+        tx.set(auditRef, {
+          notaId: notaRef.id,
+          rutaId: venta.rutaId,
+          clienteId: cliente.id,
+          capturadoPorUid: venta.repartidorUid,
+          ok: validacionVisita.ok === true,
+          distanciaM: Number.isFinite(Number(validacionVisita.distanciaM)) ? Number(validacionVisita.distanciaM) : null,
+          fecha,
+          fechaAuditoria: firebase.firestore.Timestamp.fromDate(new Date(fecha)),
+          expiresAt: firebase.firestore.Timestamp.fromDate(new Date(fechaMs + GPS_AUDIT_RETENTION_MS)),
+          retentionClass: 'gps_visit_30d'
+        });
+      }
 
       if (formaPago === 'credito' && creditoRef) {
         tx.set(creditoRef, {
@@ -304,7 +330,7 @@
           requiereRevision: incidencia
         });
       }
-      return { estado: incidencia ? 'incidencia_inventario' : 'confirmada', notaId: notaRef.id, incidencia, itemsFaltantes, total, fecha };
+      return { estado: incidencia ? 'incidencia_inventario' : 'confirmada', notaId: notaRef.id, incidencia, itemsFaltantes, total, fecha, validacionVisita: venta.validacionVisita || null };
     });
   };
 
@@ -343,21 +369,37 @@
         revisarEnCierreCaja: true
       }
     });
-    return { estado: 'incidencia_inventario', notaId: notaRef.id, incidencia: true, total: venta.total, fecha };
+    const validacionVisita = venta.validacionVisita || null;
+    if (validacionVisita && validacionVisita.ok !== null && validacionVisita.ok !== undefined) {
+      const fechaMs = Date.parse(fecha);
+      await firestore.collection('ubicacion_auditoria').doc(venta.notaId || venta.id).set({
+        notaId: venta.notaId || venta.id,
+        rutaId: venta.rutaId,
+        clienteId: venta.cliente.id,
+        capturadoPorUid: venta.repartidorUid,
+        ok: validacionVisita.ok === true,
+        distanciaM: Number.isFinite(Number(validacionVisita.distanciaM)) ? Number(validacionVisita.distanciaM) : null,
+        fecha,
+        fechaAuditoria: firebase.firestore.Timestamp.fromDate(new Date(fecha)),
+        expiresAt: firebase.firestore.Timestamp.fromDate(new Date(fechaMs + GPS_AUDIT_RETENTION_MS)),
+        retentionClass: 'gps_visit_30d'
+      });
+    }
+    return { estado: 'incidencia_inventario', notaId: notaRef.id, incidencia: true, total: venta.total, fecha, validacionVisita: venta.validacionVisita || null };
   };
 
   const enqueue = async payload => {
-    const venta = normalizePayload(payload);
+    const venta = quitarValidacionVencida(normalizePayload(payload));
     await putRecord(venta);
     await notify();
     // La sincronización automática se intenta de inmediato si la red volvió
     // entre la validación de la pantalla y el guardado local.
     if (global.navigator?.onLine) setTimeout(() => global.frittzSincronizarVentasOffline && global.frittzSincronizarVentasOffline(), 0);
-    return { estado: 'pendiente_local', ventaId: venta.id, notaId: venta.notaId, total: venta.total };
+    return { estado: 'pendiente_local', ventaId: venta.id, notaId: venta.notaId, total: venta.total, validacionVisita: venta.validacionVisita || null };
   };
 
   const guardar = async payload => {
-    const venta = normalizePayload(payload);
+    const venta = quitarValidacionVencida(normalizePayload(payload));
     try {
       if (!global.navigator?.onLine) return enqueue(venta);
       const resultado = await conciliar(venta);
@@ -377,7 +419,7 @@
   const processOne = async venta => {
     const actual = await getRecord(venta.id);
     if (!actual || !RETRY_STATES.includes(actual.estado)) return { estado: actual?.estado || 'omitida' };
-    const reintentando = { ...actual, estado: 'reintentando', intentos: Number(actual.intentos || 0) + 1, actualizadoEn: new Date().toISOString() };
+    const reintentando = quitarValidacionVencida({ ...actual, estado: 'reintentando', intentos: Number(actual.intentos || 0) + 1, actualizadoEn: new Date().toISOString() });
     await putRecord(reintentando);
     try {
       const resultado = await conciliar(reintentando);
