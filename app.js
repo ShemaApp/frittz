@@ -12,14 +12,15 @@ function App() {
   const [modoNota, setModoNota] = useState('pedidos');
   const [abrirFormProducto, setAbrirFormProducto] = useState(false);
   const [abrirUsuarios, setAbrirUsuarios] = useState(false);
+  const [abrirPrivacidad, setAbrirPrivacidad] = useState(false);
   const [offlineVentaResumen, setOfflineVentaResumen] = useState({ total: 0, pendientes: 0, incidencias: 0, registros: [] });
   useEffect(() => {
     if (typeof frittzSuscribirVentasOffline !== 'function') return undefined;
     return frittzSuscribirVentasOffline(setOfflineVentaResumen);
   }, []);
-  const ALL_TABS = [['home', '🏠', 'Inicio'], ['productos', '📦', 'Productos'], ['nota', '📋', 'Pedidos'], ['clientes', '👥', 'Clientes'], ['creditos', '💳', 'Créditos'], ['ruta', '📦', 'Transferencias'], ['repartidores', '🧭', 'Distribución'], ['inventario', '📋', 'Inventario'], ['reportes', '📈', 'Reportes'], ['gerencia', '💰', 'Gerencia']];
+  const ALL_TABS = [['home', '🏠', 'Inicio'], ['productos', '📦', 'Productos'], ['nota', '📋', 'Pedidos'], ['clientes', '👥', 'Clientes'], ['creditos', '💳', 'Créditos'], ['ruta', '📦', 'Transferencias'], ['repartidores', '🧭', 'Distribución'], ['inventario', '📋', 'Inventario'], ['reportes', '📈', 'Reportes'], ['gerencia', '💰', 'Gerencia'], ['privacidad', '🛡️', 'Privacidad']];
   const permTabs = permisoTabs(currentUser);
-  const tabsPermitidos = ['home', ...ALL_TABS.filter(([id]) => id !== 'home' && permTabs[id]).map(([id]) => id)];
+  const tabsPermitidos = ['home', 'privacidad', ...ALL_TABS.filter(([id]) => id !== 'home' && id !== 'privacidad' && permTabs[id]).map(([id]) => id)];
   const TABS = ALL_TABS.filter(([id]) => tabsPermitidos.includes(id));
   useEffect(() => {
     if (!currentUser) return;
@@ -30,6 +31,10 @@ function App() {
   }, [currentUser]);
   const navegarA = (destino, opciones = {}) => {
     setNavOpen(false);
+    if (destino === 'privacidad') {
+      setAbrirPrivacidad(true);
+      destino = 'config';
+    }
     if (!destino) return;
     if (destino !== 'home' && destino !== 'config' && !tabsPermitidos.includes(destino)) return;
     if (destino === 'nota' && !opciones.conservarModoNota) setModoNota('pedidos');
@@ -42,6 +47,7 @@ function App() {
     setTab(historialTabs.current.pop() || 'home');
   };
   const goConfig = () => navegarA('config');
+  const goPrivacidad = () => navegarA('privacidad');
   const logout = () => {
     auth.signOut();
     setTab('nota');
@@ -286,7 +292,9 @@ function App() {
     onBack: volverAtras,
     onLogout: logout,
     abrirUsuarios: abrirUsuarios,
-    onAbrirUsuariosConsumido: () => setAbrirUsuarios(false)
+    onAbrirUsuariosConsumido: () => setAbrirUsuarios(false),
+    abrirPrivacidad: abrirPrivacidad,
+    onAbrirPrivacidadConsumido: () => setAbrirPrivacidad(false)
   })), navOpen && React.createElement("div", {
     onClick: () => setNavOpen(false),
     style: {

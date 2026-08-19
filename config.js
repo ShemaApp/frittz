@@ -3,7 +3,9 @@ function Configuracion({
   onBack,
   onLogout,
   abrirUsuarios,
-  onAbrirUsuariosConsumido
+  onAbrirUsuariosConsumido,
+  abrirPrivacidad,
+  onAbrirPrivacidadConsumido
 }) {
   const [sub, setSub] = useState('perfil');
   const [users, setUsersList] = useState([]);
@@ -60,6 +62,11 @@ function Configuracion({
       onAbrirUsuariosConsumido && onAbrirUsuariosConsumido();
     }
   }, [abrirUsuarios]);
+  useEffect(() => {
+    if (!abrirPrivacidad) return;
+    setSub('privacidad');
+    onAbrirPrivacidadConsumido && onAbrirPrivacidadConsumido();
+  }, [abrirPrivacidad]);
   useEffect(() => {
     if (!isAdmin) return;
     const unsub = db.collection('usuarios').onSnapshot(snap => {
@@ -206,9 +213,10 @@ function Configuracion({
   }, err), React.createElement(Row, {
     style: {
       gap: 6,
-      marginBottom: 16
+      marginBottom: 16,
+      flexWrap: 'wrap'
     }
-  }, [['perfil', '👤 Perfil'], ...(permisoAcciones(currentUser).password ? [['password', '🔑 Contraseña']] : []), ['pin', '🔒 PIN'], ...(isAdmin ? [['usuarios', '👥 Usuarios'], ['permisos', '🔐 Permisos']] : [])].map(([v, l]) => React.createElement("button", {
+  }, [['perfil', '👤 Perfil'], ...(permisoAcciones(currentUser).password ? [['password', '🔑 Contraseña']] : []), ['pin', '🔒 PIN'], ['privacidad', '🛡️ Privacidad'], ...(isAdmin ? [['usuarios', '👥 Usuarios'], ['permisos', '🔐 Permisos']] : [])].map(([v, l]) => React.createElement("button", {
     key: v,
     onClick: () => {
       setSub(v);
@@ -216,7 +224,7 @@ function Configuracion({
       setMsg('');
     },
     style: {
-      flex: 1,
+      flex: '1 1 72px',
       padding: '8px 2px',
       borderRadius: 8,
       border: 'none',
@@ -340,7 +348,51 @@ function Configuracion({
       cursor: 'pointer',
       marginTop: 18
     }
-  }, "Cancelar"))), sub === 'usuarios' && isAdmin && React.createElement(React.Fragment, null, React.createElement(Row, {
+  }, "Cancelar"))), sub === 'privacidad' && React.createElement(Card, null, React.createElement("div", {
+    style: {
+      fontSize: 17,
+      fontWeight: 800,
+      marginBottom: 6
+    }
+  }, "🛡️ Privacidad y uso seguro"), React.createElement("div", {
+    style: {
+      fontSize: 12,
+      color: 'var(--ink-soft)',
+      lineHeight: 1.45,
+      marginBottom: 14
+    }
+  }, "Consulta los documentos de uso abierto. Se abren en otra pestaña para conservar tu sesión y el trabajo que llevas en Frittz."), React.createElement("a", {
+    href: 'privacidad.html',
+    target: '_blank',
+    rel: 'noopener noreferrer',
+    style: {
+      display: 'block',
+      padding: '11px 12px',
+      marginBottom: 8,
+      border: '1px solid var(--line)',
+      borderRadius: 8,
+      color: 'var(--ink)',
+      background: 'var(--surface-2)',
+      textDecoration: 'none',
+      fontSize: 13,
+      fontWeight: 700
+    }
+  }, "📄 Abrir aviso de privacidad"), React.createElement("a", {
+    href: 'confidencialidad-movil.html',
+    target: '_blank',
+    rel: 'noopener noreferrer',
+    style: {
+      display: 'block',
+      padding: '11px 12px',
+      border: '1px solid var(--line)',
+      borderRadius: 8,
+      color: 'var(--ink)',
+      background: 'var(--surface-2)',
+      textDecoration: 'none',
+      fontSize: 13,
+      fontWeight: 700
+    }
+  }, "📱 Abrir uso confidencial del equipo móvil")), sub === 'usuarios' && isAdmin && React.createElement(React.Fragment, null, React.createElement(Row, {
     style: {
       justifyContent: 'flex-end',
       marginBottom: 10

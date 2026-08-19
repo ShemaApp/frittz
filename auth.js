@@ -109,7 +109,47 @@ function Login() {
       marginTop: 4,
       opacity: loading ? 0.6 : 1
     }
-  }, loading ? 'Ingresando…' : 'Iniciar sesión →')));
+  }, loading ? 'Ingresando…' : 'Iniciar sesión →'), React.createElement("div", {
+    style: {
+      marginTop: 18,
+      paddingTop: 13,
+      borderTop: '1px solid var(--line)',
+      textAlign: 'center',
+      fontSize: 11,
+      lineHeight: 1.5,
+      color: 'var(--ink-faint)'
+    }
+  }, "Consulta antes de ingresar:", React.createElement("div", {
+    style: {
+      marginTop: 5,
+      display: 'flex',
+      justifyContent: 'center',
+      flexWrap: 'wrap',
+      gap: 8
+    }
+  }, React.createElement("a", {
+    href: "privacidad.html",
+    target: "_blank",
+    rel: "noopener noreferrer",
+    style: {
+      color: 'var(--info-text)',
+      fontWeight: 700,
+      textDecoration: 'underline'
+    }
+  }, "Aviso de privacidad"), React.createElement("span", {
+    style: {
+      color: 'var(--line-strong)'
+    }
+  }, "·"), React.createElement("a", {
+    href: "confidencialidad-movil.html",
+    target: "_blank",
+    rel: "noopener noreferrer",
+    style: {
+      color: 'var(--info-text)',
+      fontWeight: 700,
+      textDecoration: 'underline'
+    }
+  }, "Uso confidencial del equipo móvil")))));
 }
 function PinPad({
   len = 4,

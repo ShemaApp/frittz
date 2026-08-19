@@ -5,12 +5,12 @@
 
 // Cambia esta versión en cada publicación para invalidar el shell anterior.
 const CACHE_PREFIX = 'pdlc-';
-const CACHE_NAME = 'pdlc-v55-persistent-drafts';
-// Cache aparte para tiles de mapa offline: a propósito NO se borra cuando
-// sube la versión del shell (ver 'activate' más abajo) — si viviera en
-// CACHE_NAME, cada actualización de la app borraría el mapa descargado.
-const TILES_CACHE = 'distribupanel-tiles-v1';
-const TILE_HOST = 'tile.openstreetmap.org';
+const CACHE_NAME = 'pdlc-v58-internal-privacy-links';
+// Cache heredado de teselas descargadas por la función de mapa offline retirada.
+// Se elimina al activar esta versión para no conservar recursos obtenidos para
+// un uso que ya no está permitido por el proveedor estándar.
+const LEGACY_TILES_CACHE = 'distribupanel-tiles-v1';
+const ONLINE_TILE_HOST = 'tile.openstreetmap.org';
 
 // Ajusta la ruta de tu HTML principal si tu index no se llama exactamente así.
 const SHELL_URLS = [
@@ -18,6 +18,8 @@ const SHELL_URLS = [
   './index.html',
   './firebase-init.js',
   './offline.html',
+  './privacidad.html',
+  './confidencialidad-movil.html',
   './app-core.js',
   './ventas-offline.js',
   './sesion.js',
@@ -70,13 +72,13 @@ self.addEventListener('install', (event) => {
   })());
 });
 
-// --- Activación: conserva tiles y elimina solo versiones antiguas de esta PWA ---
+// --- Activación: elimina cachés antiguas del shell y de mapas offline retirados ---
 self.addEventListener('activate', (event) => {
   event.waitUntil((async () => {
     const keys = await caches.keys();
     await Promise.all(
       keys
-        .filter((key) => key.startsWith(CACHE_PREFIX) && key !== CACHE_NAME && key !== TILES_CACHE)
+        .filter((key) => (key.startsWith(CACHE_PREFIX) && key !== CACHE_NAME) || key === LEGACY_TILES_CACHE)
         .map((key) => caches.delete(key))
     );
     await self.clients.claim();
@@ -99,23 +101,9 @@ self.addEventListener('fetch', (event) => {
     return; // deja pasar sin interceptar
   }
 
-  // Tiles de mapa (OpenStreetMap): cache-first puro, sin red si ya están
-  // descargadas — esto es lo que hace que el mapa funcione sin conexión
-  // dentro de la zona que se haya descargado desde la pestaña Mapa.
-  if (request.url.includes(TILE_HOST)) {
-    event.respondWith(
-      caches.open(TILES_CACHE).then((cache) =>
-        cache.match(request).then((cached) => {
-          if (cached) return cached;
-          return fetch(request).then((res) => {
-            if (res && res.ok) cache.put(request, res.clone());
-            return res;
-          }).catch(() => cached);
-        })
-      )
-    );
-    return;
-  }
+  // El mapa permanece disponible únicamente en línea. No interceptar ni
+  // almacenar teselas evita reintroducir una función de mapa sin conexión.
+  if (request.url.includes(ONLINE_TILE_HOST)) return;
 
   // Navegación: cache-first con actualización en segundo plano. Evita que una
   // red lenta retrase la entrada en visitas posteriores y conserva la página

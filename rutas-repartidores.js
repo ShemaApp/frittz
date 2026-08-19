@@ -232,32 +232,7 @@ function getLoc() {
     });
   });
 }
-function lonLatATile(lat, lng, z) {
-  const n = Math.pow(2, z);
-  const x = Math.floor((lng + 180) / 360 * n);
-  const latRad = lat * Math.PI / 180;
-  const y = Math.floor((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2 * n);
-  return {
-    x,
-    y
-  };
-}
-function tilesParaZona(bounds, zMin, zMax) {
-  const tiles = [];
-  for (let z = zMin; z <= zMax; z++) {
-    const nw = lonLatATile(bounds.getNorth(), bounds.getWest(), z);
-    const se = lonLatATile(bounds.getSouth(), bounds.getEast(), z);
-    for (let x = nw.x; x <= se.x; x++) {
-      for (let y = nw.y; y <= se.y; y++) tiles.push({
-        z,
-        x,
-        y
-      });
-    }
-  }
-  return tiles;
-}
-const MAPA_OFFLINE_KEY = 'pdlc_mapa_offline_v1';
+const MAPA_OFFLINE_KEY_HEREDADO = 'pdlc_mapa_offline_v1';
 const inputStyle = {
   background: 'var(--surface-2)',
   border: '1px solid var(--line-strong)',
@@ -467,14 +442,6 @@ function RepartidoresPanel({
   const [expandComp, setExpandComp] = useState(null);
   const [msg, setMsg] = useState('');
   const [mapReady, setMapReady] = useState(false);
-  const [mapaOffline, setMapaOffline] = useState(() => {
-    try {
-      return JSON.parse(localStorage.getItem(MAPA_OFFLINE_KEY) || 'null');
-    } catch (e) {
-      return null;
-    }
-  });
-  const [descargandoMapa, setDescargandoMapa] = useState(null);
   const mapRef = useRef(null);
   const mapInstance = useRef(null);
   const markersRef = useRef({});
@@ -504,66 +471,13 @@ function RepartidoresPanel({
     if (typeof frittzSuscribirVentasOffline !== 'function') return undefined;
     return frittzSuscribirVentasOffline(setOfflineVentaResumen);
   }, []);
-  const descargarZonaOffline = async () => {
-    if (!mapInstance.current) return;
-    const bounds = mapInstance.current.getBounds();
-    const zActual = Math.round(mapInstance.current.getZoom());
-    const zMin = Math.max(zActual, 12),
-      zMax = Math.min(zActual + 3, 17);
-    const tiles = tilesParaZona(bounds, zMin, zMax);
-    if (tiles.length > 3500) {
-      flash('⚠️ La zona visible es muy grande (' + tiles.length + ' tiles). Acércate más con el zoom antes de descargar.');
-      return;
-    }
-    if (!confirm('Se van a descargar ' + tiles.length + ' imágenes de mapa (~' + Math.max(1, Math.round(tiles.length * 15 / 1024)) + ' MB aprox., zoom ' + zMin + '–' + zMax + '). ¿Continuar?')) return;
-    setDescargandoMapa({
-      hecho: 0,
-      total: tiles.length
-    });
-    const cola = [...tiles];
-    let hecho = 0;
-    const trabajador = async () => {
-      while (cola.length) {
-        const t = cola.shift();
-        try {
-          await fetch(`https://a.tile.openstreetmap.org/${t.z}/${t.x}/${t.y}.png`);
-        } catch (e) {}
-        hecho++;
-        setDescargandoMapa({
-          hecho,
-          total: tiles.length
-        });
-      }
-    };
-    await Promise.all(Array.from({
-      length: 6
-    }, trabajador));
-    const meta = {
-      fecha: new Date().toISOString(),
-      tileCount: tiles.length,
-      zMin,
-      zMax,
-      bounds: {
-        n: bounds.getNorth(),
-        s: bounds.getSouth(),
-        e: bounds.getEast(),
-        w: bounds.getWest()
-      }
-    };
-    localStorage.setItem(MAPA_OFFLINE_KEY, JSON.stringify(meta));
-    setMapaOffline(meta);
-    setDescargandoMapa(null);
-    flash('✅ Zona de mapa lista para uso sin conexión');
-  };
-  const borrarMapaOffline = async () => {
-    if (!confirm('¿Borrar el mapa descargado de este dispositivo?')) return;
+  useEffect(() => {
+    // Limpia el metadato de la función retirada. El service worker v56 borra
+    // también el caché heredado de teselas al actualizarse.
     try {
-      if ('caches' in window) await caches.delete('distribupanel-tiles-v1');
+      localStorage.removeItem(MAPA_OFFLINE_KEY_HEREDADO);
     } catch (e) {}
-    localStorage.removeItem(MAPA_OFFLINE_KEY);
-    setMapaOffline(null);
-    flash('🗑️ Mapa offline borrado');
-  };
+  }, []);
   useEffect(() => {
     if (tab !== 'mapa') return;
     ensureLeaflet(() => {
@@ -571,8 +485,8 @@ function RepartidoresPanel({
       setTimeout(() => {
         if (!mapInstance.current && mapRef.current) {
           mapInstance.current = window.L.map(mapRef.current).setView([23.6, -102.5], 5);
-          window.L.tileLayer('https://a.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '© OpenStreetMap'
+          window.L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors'
           }).addTo(mapInstance.current);
         }
         setMapReady(true);
@@ -1027,59 +941,14 @@ function RepartidoresPanel({
       fontWeight: 700,
       marginBottom: 6
     }
-  }, "🗺️ Mapa sin conexión"), React.createElement("div", {
+  }, "🌐 Mapa en línea"), React.createElement("div", {
     style: {
       fontSize: 11,
       color: 'var(--ink-faint)',
       marginBottom: 8,
       lineHeight: 1.4
     }
-  }, "Navega el mapa de arriba (pan/zoom) hasta cubrir tu zona de reparto y descárgala — queda guardada en ", React.createElement("strong", null, "este dispositivo"), " para verse sin internet. Cada dispositivo (el tuyo, el de cada repartidor) necesita descargarla por separado, una vez, mientras tenga conexión."), mapaOffline ? React.createElement("div", {
-    style: {
-      fontSize: 11,
-      color: 'var(--ok-text)',
-      marginBottom: 8
-    }
-  }, "✅ Zona descargada el ", fDateTime(mapaOffline.fecha), " · ", mapaOffline.tileCount, " imágenes · zoom ", mapaOffline.zMin, "–", mapaOffline.zMax) : React.createElement("div", {
-    style: {
-      fontSize: 11,
-      color: 'var(--ink-faint)',
-      marginBottom: 8
-    }
-  }, "Sin zona descargada todavía en este dispositivo."), descargandoMapa ? React.createElement("div", {
-    style: {
-      fontSize: 12,
-      fontWeight: 700
-    }
-  }, "Descargando… ", descargandoMapa.hecho, "/", descargandoMapa.total) : React.createElement(Row, {
-    style: {
-      gap: 8
-    }
-  }, React.createElement("button", {
-    onClick: descargarZonaOffline,
-    style: {
-      flex: 1,
-      background: 'var(--accent)',
-      color: 'var(--surface-2)',
-      border: 'none',
-      borderRadius: 8,
-      padding: 10,
-      fontWeight: 700,
-      cursor: 'pointer',
-      fontSize: 12
-    }
-  }, "📥 Descargar esta zona"), mapaOffline && React.createElement("button", {
-    onClick: borrarMapaOffline,
-    style: {
-      background: 'var(--danger-bg)',
-      color: 'var(--danger-text)',
-      border: 'none',
-      borderRadius: 8,
-      padding: '0 14px',
-      fontWeight: 700,
-      cursor: 'pointer'
-    }
-  }, "🗑️")))), tab === 'clientesqr' && React.createElement(React.Fragment, null, React.createElement("div", {
+  }, "Consulta la ubicación en vivo cuando haya conexión. La descarga y el almacenamiento local de zonas de mapa están deshabilitados."))), tab === 'clientesqr' && React.createElement(React.Fragment, null, React.createElement("div", {
     style: {
       display: 'flex',
       gap: 8,
