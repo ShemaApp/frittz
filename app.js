@@ -13,6 +13,7 @@ function App() {
   const [abrirFormProducto, setAbrirFormProducto] = useState(false);
   const [abrirUsuarios, setAbrirUsuarios] = useState(false);
   const [abrirPrivacidad, setAbrirPrivacidad] = useState(false);
+  const [abrirVentaRapidaQR, setAbrirVentaRapidaQR] = useState(false);
   const [offlineVentaResumen, setOfflineVentaResumen] = useState({ total: 0, pendientes: 0, incidencias: 0, registros: [] });
   useEffect(() => {
     if (typeof frittzSuscribirVentasOffline !== 'function') return undefined;
@@ -248,6 +249,10 @@ function App() {
       setModoNota('almacen');
       navegarA('nota', { conservarModoNota: true });
     },
+    onVentaRapidaQR: () => {
+      setAbrirVentaRapidaQR(true);
+      navegarA('repartidores');
+    },
     onAgregarProducto: () => {
       setAbrirFormProducto(true);
       navegarA('productos');
@@ -277,7 +282,9 @@ function App() {
   }), tab === 'repartidores' && React.createElement(RepartidoresPanel, {
     ...ctx,
     currentUser: currentUser,
-    onIrA: navegarA
+    onIrA: navegarA,
+    abrirVentaRapida: abrirVentaRapidaQR,
+    onAbrirVentaRapidaConsumido: () => setAbrirVentaRapidaQR(false)
   }), tab === 'inventario' && React.createElement(Inventario, {
     ...ctx,
     currentUser: currentUser

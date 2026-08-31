@@ -284,12 +284,12 @@ function useSesion() {
     const avisos = [];
     const fechaAviso = valor => valor || new Date().toISOString();
     if (currentUser.role === 'admin') {
-      (rutas || []).filter(r => r.estado === 'pendiente_recepcion').forEach(r => avisos.push({
+      (rutas || []).filter(r => r.estado === 'activa' && r.estadoTransferencia === 'pendiente_recepcion').forEach(r => avisos.push({
         id: 'recepcion-' + r.id,
         tipo: 'recepcion',
-        titulo: 'Transferencia pendiente de recepción',
-        detalle: `${r.repartidorNombre || 'Repartidor'} tiene mercancía pendiente de conciliar`,
-        fecha: fechaAviso(r.fechaRegresoReal || r.fecha),
+        titulo: 'Transferencia en revisión de almacén',
+        detalle: `${r.repartidorNombre || 'Repartidor'} sigue vendiendo; revisa cuando puedas`,
+        fecha: fechaAviso(r.fechaSolicitudCierre || r.fecha),
         rutaId: r.id
       }));
       (pedidos || []).filter(p => p.estado === 'asignado_pendiente_transferencia').forEach(p => avisos.push({
