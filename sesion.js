@@ -12,6 +12,12 @@
    (movido de app-core.js, sin cambios de lógica) */
 const TABS_INFO = [['productos', '📦', 'Productos'], ['nota', '📋', 'Pedidos'], ['clientes', '👥', 'Clientes'], ['creditos', '💳', 'Créditos'], ['ruta', '📦', 'Transferencias'], ['repartidores', '🧭', 'Distribución'], ['inventario', '📋', 'Inventario'], ['reportes', '📈', 'Reportes'], ['gerencia', '💰', 'Gerencia']];
 const EDICION_INFO = [['productos', '📦', 'Editar / dar de alta productos'], ['clientes', '👥', 'Editar / dar de alta clientes'], ['creditos', '💳', 'Registrar abonos a créditos']];
+const ROLE_INFO = {
+  admin: { label: 'Admin', color: 'var(--admin)' },
+  repartidor: { label: 'Repartidor', color: 'var(--warn-text)' },
+  usuario: { label: 'Equipo', color: 'var(--info-text)' }
+};
+const roleInfo = u => ROLE_INFO[u?.role] || ROLE_INFO.usuario;
 const ACCIONES_INFO = [['camara', '📷', 'Usar cámara (escanear QR de cliente)'], ['csv', '📄', 'Descargar reportes en CSV'], ['gps', '📍', 'Compartir ubicación en vivo (GPS)'], ['password', '🔑', 'Cambiar su propia contraseña']];
 const ACCIONES_DEFAULT_ROL = {
   admin: {
@@ -53,7 +59,8 @@ const TABS_DEFAULT_ROL = {
     repartidores: true,
     inventario: true,
     reportes: true,
-    gerencia: true
+    gerencia: true,
+    bitacora: true
   },
   usuario: {
     productos: true,
@@ -64,7 +71,8 @@ const TABS_DEFAULT_ROL = {
     repartidores: false,
     inventario: true,
     reportes: false,
-    gerencia: true
+    gerencia: true,
+    bitacora: false
   },
   repartidor: {
     productos: false,
@@ -75,7 +83,8 @@ const TABS_DEFAULT_ROL = {
     repartidores: true,
     inventario: false,
     reportes: false,
-    gerencia: true
+    gerencia: true,
+    bitacora: false
   }
 };
 const EDITA_DEFAULT_ROL = {
@@ -113,6 +122,9 @@ const permisoTabs = u => {
     tabs.inventario = false;
     tabs.reportes = false;
   }
+  // La bitácora es auditoría: solo el admin puede verla, sin excepción
+  // por permisos individuales (las reglas de Firestore ya lo exigen también).
+  if (u?.role !== 'admin') tabs.bitacora = false;
   return tabs;
 };
 const permisoEdita = u => {

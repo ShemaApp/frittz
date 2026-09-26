@@ -220,22 +220,22 @@ service cloud.firestore {
           && resource.data.repartidorId == request.auth.uid
           && request.resource.data.repartidorId == request.auth.uid
           && (
-            // Mientras está abierta, el responsable comparte GPS o registra una venta.
+            // Mientras está abierta, el responsable comparte GPS, registra una
+            // venta, o avisa a almacén para revisión. El estado se mantiene
+            // 'activa' en los tres casos: avisar a almacén nunca bloquea ventas.
             (resource.data.estado == 'activa'
               && request.resource.data.estado == 'activa'
               && (
                 request.resource.data.diff(resource.data).affectedKeys().hasOnly(['ubicacionActual'])
                 || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['items', 'entregas'])
                   && request.resource.data.entregas.size() == resource.data.entregas.size() + 1)
+                || (request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+                      'estadoTransferencia', 'fechaSolicitudCierre',
+                      'solicitadoPorUid', 'solicitadoPorNombre'
+                    ])
+                  && request.resource.data.estadoTransferencia == 'pendiente_recepcion'
+                  && request.resource.data.solicitadoPorUid == request.auth.uid)
               ))
-            // Al terminar, únicamente solicita que almacén reciba y concilie.
-            || (resource.data.estado == 'activa'
-              && request.resource.data.estado == 'pendiente_recepcion'
-              && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-                'estado', 'estadoTransferencia', 'fechaSolicitudCierre',
-                'solicitadoPorUid', 'solicitadoPorNombre'
-              ])
-              && request.resource.data.solicitadoPorUid == request.auth.uid)
           ));
       allow delete: if false;
     }

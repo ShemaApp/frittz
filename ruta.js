@@ -85,7 +85,10 @@ function RutaReparto({
   const [borradorRestaurado, setBorradorRestaurado] = useState(false);
   const [recepcion, setRecepcion] = useState(null);
   const [pedidoEntrega, setPedidoEntrega] = useState(null);
-  const transferenciasPendientes = currentUser.role === 'admin' ? rutas.filter(r => r.estado === 'pendiente_recepcion') : [];
+  const [reabastecer, setReabastecer] = useState(null);
+  const [reabasteciendo, setReabasteciendo] = useState(false);
+  const transferenciasPendientes = currentUser.role === 'admin' ? rutas.filter(r => r.estado === 'activa' && r.estadoTransferencia === 'pendiente_recepcion') : [];
+  const transferenciasActivas = currentUser.role === 'admin' ? rutas.filter(r => r.estado === 'activa') : [];
   const abrirRecepcion = transferencia => {
     const items = {};
     Object.entries(transferencia.items || {}).forEach(([id, item]) => {
@@ -130,7 +133,7 @@ function RutaReparto({
         const transferenciaSnap = await tx.get(transferenciaRef);
         if (!transferenciaSnap.exists) throw new Error('La transferencia ya no existe');
         const transferencia = transferenciaSnap.data();
-        if (transferencia.estado !== 'pendiente_recepcion') throw new Error('La transferencia no está pendiente de recepción');
+        if (transferencia.estadoTransferencia !== 'pendiente_recepcion') throw new Error('La transferencia no está pendiente de recepción');
         const detalle = Object.entries(recepcion.items).map(([id, input]) => {
           const itemActual = transferencia.items && transferencia.items[id];
           if (!itemActual) throw new Error('El producto ya no existe en la transferencia');
@@ -621,19 +624,87 @@ function RutaReparto({
       flash('⚠️ Hay ' + pendientesOffline.total + ' venta(s) offline pendiente(s) de sincronizar; conecta el dispositivo antes de cerrar');
       return;
     }
-    if (!confirm('¿Enviar esta transferencia a recepción de almacén? Ya no se podrán registrar más ventas hasta que se concilie.')) return;
+    if (!confirm('¿Avisar a almacén para revisar esta transferencia? Podrás seguir vendiendo mientras la revisan.')) return;
     try {
       await db.collection('rutas').doc(rutaActiva.id).update({
-        estado: 'pendiente_recepcion',
         estadoTransferencia: 'pendiente_recepcion',
         fechaSolicitudCierre: new Date().toISOString(),
         solicitadoPorUid: currentUser.uid,
         solicitadoPorNombre: currentUser.nombre || ''
       });
-      flash('📦 Transferencia enviada a recepción de almacén');
+      flash('📦 Almacén fue avisado; puedes seguir vendiendo mientras revisan');
     } catch (e) {
-      flash('❌ No se pudo solicitar la recepción: ' + e.message);
+      flash('❌ No se pudo avisar a almacén: ' + e.message);
     }
+  };
+  const abrirReabastecimiento = ruta => {
+    setReabastecer({ rutaId: ruta.id, repartidorNombre: ruta.repartidorNombre || 'Sin responsable', cart: [], search: '' });
+  };
+  const addReabastecer = p => {
+    setReabastecer(r => {
+      if (!r) return r;
+      const ex = r.cart.find(x => x.id === p.id);
+      const cart = ex
+        ? r.cart.map(x => x.id === p.id ? { ...x, cant: (Number(x.cant) || 0) + 1 } : x)
+        : [...r.cart, { id: p.id, nombre: p.nombre, unidad: p.unidad, cant: 1, stockDisponible: p.stock }];
+      return { ...r, cart };
+    });
+  };
+  const updQtyReabastecer = (id, v) => {
+    const raw = String(v ?? '');
+    if (!/^\d*$/.test(raw)) return;
+    setReabastecer(r => r ? { ...r, cart: r.cart.map(x => x.id === id ? { ...x, cant: raw } : x) } : r);
+  };
+  const confirmarReabastecimiento = async () => {
+    if (!reabastecer) return;
+    const items = reabastecer.cart.map(item => ({ ...item, cant: Number(item.cant) }));
+    if (items.length === 0) {
+      flash('⚠️ Agrega al menos un producto para reabastecer');
+      return;
+    }
+    if (items.some(item => !Number.isInteger(item.cant) || item.cant < 1)) {
+      flash('⚠️ Cada producto debe tener una cantidad entera mayor que cero');
+      return;
+    }
+    setReabasteciendo(true);
+    try {
+      const fecha = new Date().toISOString();
+      const rutaRef = db.collection('rutas').doc(reabastecer.rutaId);
+      await db.runTransaction(async tx => {
+        const rutaSnap = await tx.get(rutaRef);
+        if (!rutaSnap.exists) throw new Error('La transferencia ya no existe');
+        const ruta = rutaSnap.data();
+        if (ruta.estado !== 'activa') throw new Error('Esa transferencia ya no está activa');
+        const existencias = await Promise.all(items.map(item => tx.get(db.collection('productos').doc(item.id))));
+        existencias.forEach((snap, index) => {
+          const item = items[index];
+          if (!snap.exists || Number(snap.data().stock || 0) < item.cant) throw new Error('Stock insuficiente en almacén para ' + item.nombre);
+        });
+        const cambios = {
+          reabastecimientos: firebase.firestore.FieldValue.arrayUnion({
+            fecha, items: items.map(item => ({ id: item.id, nombre: item.nombre, unidad: item.unidad, cant: item.cant })),
+            realizadoPorUid: currentUser.uid, realizadoPorNombre: currentUser.nombre || ''
+          })
+        };
+        items.forEach(item => {
+          const actual = ruta.items && ruta.items[item.id];
+          cambios['items.' + item.id + '.nombre'] = item.nombre;
+          cambios['items.' + item.id + '.unidad'] = item.unidad;
+          cambios['items.' + item.id + '.cantReservadaPedidos'] = actual?.cantReservadaPedidos || 0;
+          cambios['items.' + item.id + '.cantCargada'] = firebase.firestore.FieldValue.increment(item.cant);
+          cambios['items.' + item.id + '.cantRestante'] = firebase.firestore.FieldValue.increment(item.cant);
+          tx.update(db.collection('productos').doc(item.id), {
+            stock: firebase.firestore.FieldValue.increment(-item.cant)
+          });
+        });
+        tx.update(rutaRef, cambios);
+      });
+      flash('✅ Mercancía agregada a la transferencia de ' + reabastecer.repartidorNombre);
+      setReabastecer(null);
+    } catch (e) {
+      flash('❌ No se pudo reabastecer: ' + e.message);
+    }
+    setReabasteciendo(false);
   };
   return React.createElement("div", {
     style: {
@@ -937,8 +1008,8 @@ function RutaReparto({
       fontSize: 14
     }
   }, "📦 Transferencia activa"), React.createElement(Tag, {
-    color: "var(--accent-text)"
-  }, "Transferencia abierta")), Object.entries(rutaActiva.items).map(([id, it]) => React.createElement(Row, {
+    color: rutaActiva.estadoTransferencia === 'pendiente_recepcion' ? 'var(--warn-text)' : 'var(--accent-text)'
+  }, rutaActiva.estadoTransferencia === 'pendiente_recepcion' ? 'En revisión de almacén' : 'Transferencia abierta')), Object.entries(rutaActiva.items).map(([id, it]) => React.createElement(Row, {
     key: id,
     style: {
       justifyContent: 'space-between',
@@ -953,14 +1024,20 @@ function RutaReparto({
       fontSize: 12,
       color: it.cantRestante === 0 ? 'var(--ink-faint)' : 'var(--ink-soft)'
     }
-  }, it.cantRestante, " / ", it.cantCargada, " ", it.unidad))), React.createElement(BOut, {
+  }, it.cantRestante, " / ", it.cantCargada, " ", it.unidad))), (rutaActiva.reabastecimientos || []).length > 0 && React.createElement("div", {
+    style: { marginTop: 10, paddingTop: 8, borderTop: '1px solid var(--line)' }
+  }, React.createElement("div", { style: { fontSize: 11, color: 'var(--ink-faint)', fontWeight: 700, marginBottom: 6 } }, "MERCANCÍA AGREGADA DESPUÉS"), rutaActiva.reabastecimientos.map((r, i) => React.createElement("div", {
+    key: i, style: { fontSize: 11, color: 'var(--ink-soft)', marginBottom: 4 }
+  }, fDate(r.fecha), ' · ', (r.items || []).map(item => item.nombre + ' +' + item.cant).join(', ')))), rutaActiva.estadoTransferencia === 'pendiente_recepcion' ? React.createElement("div", {
+    style: { fontSize: 11, color: 'var(--warn-text)', marginTop: 10, lineHeight: 1.4 }
+  }, "🔍 Almacén ya fue avisado y está revisando. Puedes seguir vendiendo mientras tanto.") : React.createElement(BOut, {
     onClick: cerrarRuta,
     color: "var(--danger-text)",
     style: {
       width: '100%',
       marginTop: 10
     }
-  }, "📥 Enviar a recepción de almacén")), currentUser.role === 'repartidor' && pedidosEnTransferencia.length > 0 && React.createElement(Card, null, React.createElement('div', { style: { fontWeight: 700, marginBottom: 8 } }, '📋 Pedidos pendientes de entregar'), pedidosEnTransferencia.map(pedido => React.createElement('div', { key: pedido.id, style: { padding: '9px 0', borderBottom: '1px solid var(--line)' } }, React.createElement(Row, { style: { justifyContent: 'space-between', gap: 8 } }, React.createElement('div', null, React.createElement('div', { style: { fontSize: 13, fontWeight: 700 } }, pedido.clienteNombre), React.createElement('div', { style: { fontSize: 11, color: 'var(--ink-faint)' } }, (pedido.items || []).map(item => item.nombre + ' ×' + item.cant).join(', '))), React.createElement('strong', { style: { fontSize: 12, color: 'var(--accent-text)' } }, fmt(pedido.total || 0))), React.createElement(BFill, { onClick: () => setPedidoEntrega(pedido), style: { marginTop: 8, padding: '6px 10px', fontSize: 11 } }, 'Confirmar entrega')))), currentUser.role === 'repartidor' && React.createElement(Card, null, React.createElement("button", {
+  }, "📥 Avisar a almacén")), currentUser.role === 'repartidor' && pedidosEnTransferencia.length > 0 && React.createElement(Card, null, React.createElement('div', { style: { fontWeight: 700, marginBottom: 8 } }, '📋 Pedidos pendientes de entregar'), pedidosEnTransferencia.map(pedido => React.createElement('div', { key: pedido.id, style: { padding: '9px 0', borderBottom: '1px solid var(--line)' } }, React.createElement(Row, { style: { justifyContent: 'space-between', gap: 8 } }, React.createElement('div', null, React.createElement('div', { style: { fontSize: 13, fontWeight: 700 } }, pedido.clienteNombre), React.createElement('div', { style: { fontSize: 11, color: 'var(--ink-faint)' } }, (pedido.items || []).map(item => item.nombre + ' ×' + item.cant).join(', '))), React.createElement('strong', { style: { fontSize: 12, color: 'var(--accent-text)' } }, fmt(pedido.total || 0))), React.createElement(BFill, { onClick: () => setPedidoEntrega(pedido), style: { marginTop: 8, padding: '6px 10px', fontSize: 11 } }, 'Confirmar entrega')))), currentUser.role === 'repartidor' && React.createElement(Card, null, React.createElement("button", {
     onClick: () => setEntOpen(o => !o),
     style: {
       background: 'none',
@@ -1186,15 +1263,58 @@ function RutaReparto({
       fontWeight: 700,
       color: 'var(--accent-text)'
     }
-  }, fmt(e.total)))))), currentUser.role === 'admin' && transferenciasPendientes.length > 0 && React.createElement(Card, null, React.createElement("div", {
+  }, fmt(e.total)))))), currentUser.role === 'admin' && transferenciasActivas.length > 0 && React.createElement(Card, null, React.createElement("div", {
+    style: { fontSize: 11, color: 'var(--ink-faint)', fontWeight: 700, marginBottom: 10 }
+  }, "TRANSFERENCIAS ACTIVAS (", transferenciasActivas.length, ")"), React.createElement("div", {
+    style: { fontSize: 11, color: 'var(--ink-faint)', marginBottom: 10, lineHeight: 1.4 }
+  }, "Agrega mercancía cuando quieras sin cerrar la transferencia; el repartidor no deja de vender."), transferenciasActivas.map(t => React.createElement(Row, {
+    key: t.id,
+    style: { justifyContent: 'space-between', gap: 8, paddingBottom: 8, borderBottom: '1px solid var(--line)', marginBottom: 8 }
+  }, React.createElement("div", null, React.createElement("div", { style: { fontSize: 13, fontWeight: 700 } }, t.repartidorNombre || 'Sin responsable'), React.createElement("div", { style: { fontSize: 11, color: 'var(--ink-faint)' } }, (t.entregas || []).length, " ventas registradas", t.estadoTransferencia === 'pendiente_recepcion' ? ' · en revisión' : '')), React.createElement(BFill, {
+    onClick: () => abrirReabastecimiento(t),
+    style: { fontSize: 12, padding: '7px 10px' }
+  }, "➕ Agregar mercancía")))), currentUser.role === 'admin' && transferenciasPendientes.length > 0 && React.createElement(Card, null, React.createElement("div", {
     style: { fontSize: 11, color: 'var(--warn-text)', fontWeight: 700, marginBottom: 10 }
-  }, "RECEPCIONES PENDIENTES (", transferenciasPendientes.length, ")"), transferenciasPendientes.map(t => React.createElement(Row, {
+  }, "EN REVISIÓN DE ALMACÉN (", transferenciasPendientes.length, ")"), React.createElement("div", {
+    style: { fontSize: 11, color: 'var(--ink-faint)', marginBottom: 10, lineHeight: 1.4 }
+  }, "El repartidor sigue vendiendo con normalidad. Usa esto solo cuando quieras cuadrar mermas o cerrar por completo."), transferenciasPendientes.map(t => React.createElement(Row, {
     key: t.id,
     style: { justifyContent: 'space-between', gap: 8, paddingBottom: 8, borderBottom: '1px solid var(--line)', marginBottom: 8 }
   }, React.createElement("div", null, React.createElement("div", { style: { fontSize: 13, fontWeight: 700 } }, t.repartidorNombre || 'Sin responsable'), React.createElement("div", { style: { fontSize: 11, color: 'var(--ink-faint)' } }, (t.entregas || []).length, " ventas registradas")), React.createElement(BFill, {
     onClick: () => abrirRecepcion(t),
     style: { fontSize: 12, padding: '7px 10px' }
-  }, "Recibir")))), recepcion && React.createElement(Modal, {
+  }, "Recibir")))), reabastecer && React.createElement(Modal, {
+    title: '➕ Agregar mercancía a la transferencia de ' + reabastecer.repartidorNombre,
+    onClose: () => !reabasteciendo && setReabastecer(null)
+  }, React.createElement("div", { style: { fontSize: 12, color: 'var(--ink-soft)', marginBottom: 12, lineHeight: 1.45 } }, "Esto suma unidades a lo que el repartidor ya tiene, sin cerrar ni interrumpir sus ventas."), React.createElement(Inp, {
+    placeholder: "🔍 Buscar producto…",
+    value: reabastecer.search,
+    onChange: e => setReabastecer(r => ({ ...r, search: e.target.value })),
+    style: { marginBottom: 8 }
+  }), React.createElement("div", {
+    style: { maxHeight: 180, overflowY: 'auto', marginBottom: 12 }
+  }, productos.filter(p => p.nombre.toLowerCase().includes(reabastecer.search.toLowerCase())).map(p => React.createElement(Row, {
+    key: p.id,
+    style: { justifyContent: 'space-between', padding: '9px 0', borderBottom: '1px solid var(--line)' }
+  }, React.createElement("div", null, React.createElement("div", { style: { fontSize: 13, fontWeight: 600 } }, p.nombre), React.createElement("div", { style: { fontSize: 11, color: 'var(--ink-faint)' } }, "Stock almacén: ", p.stock, " ", p.unidad)), React.createElement(BFill, {
+    onClick: () => addReabastecer(p),
+    style: { padding: '5px 12px', fontSize: 12 }
+  }, "+ Agregar")))), reabastecer.cart.length > 0 && React.createElement("div", { style: { marginBottom: 12 } }, React.createElement("div", {
+    style: { fontSize: 11, color: 'var(--ink-faint)', fontWeight: 700, marginBottom: 10 }
+  }, "A AGREGAR (", reabastecer.cart.reduce((s, x) => s + (Number(x.cant) || 0), 0), ")"), reabastecer.cart.map(item => React.createElement(Row, {
+    key: item.id,
+    style: { justifyContent: 'space-between', marginBottom: 10 }
+  }, React.createElement("div", { style: { flex: 1, minWidth: 0 } }, React.createElement("div", { style: { fontSize: 13, fontWeight: 600 } }, item.nombre), React.createElement("div", { style: { fontSize: 11, color: 'var(--ink-faint)' } }, item.unidad)), React.createElement("input", {
+    type: "text",
+    inputMode: "numeric",
+    value: item.cant === undefined ? '' : item.cant,
+    onChange: e => updQtyReabastecer(item.id, e.target.value),
+    style: { width: 44, textAlign: 'center', fontWeight: 700, fontSize: 14, background: 'var(--surface-2)', border: '1px solid var(--line-strong)', borderRadius: 6, color: 'var(--ink)', padding: '4px 2px' }
+  })))), React.createElement(BFill, {
+    onClick: confirmarReabastecimiento,
+    disabled: reabasteciendo || reabastecer.cart.length === 0,
+    style: { width: '100%' }
+  }, reabasteciendo ? 'Guardando…' : '📦 Agregar a la transferencia')), recepcion && React.createElement(Modal, {
     title: '📥 Recibir transferencia de ' + recepcion.responsable,
     onClose: () => !saving && setRecepcion(null)
   }, React.createElement("div", { style: { fontSize: 12, color: 'var(--ink-soft)', marginBottom: 12, lineHeight: 1.45 } }, "Confirma lo recibido en almacén. Las cantidades devueltas regresan al stock general; cualquier diferencia se registra como merma."), Object.entries(recepcion.items).map(([id, item]) => React.createElement(Row, {

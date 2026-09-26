@@ -42,7 +42,7 @@ function Configuracion({
     if (expandedId === id) setExpandedId(null);
   };
   const isAdmin = currentUser.role === 'admin';
-  const roleColor = r => r === 'admin' ? 'var(--admin)' : r === 'repartidor' ? 'var(--warn-text)' : 'var(--info-text)';
+  const roleColor = r => roleInfo({ role: r }).color;
   const flash = (m, isErr = false) => {
     isErr ? setErr(m) : setMsg(m);
     setTimeout(() => {

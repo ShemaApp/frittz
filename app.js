@@ -19,7 +19,7 @@ function App() {
     if (typeof frittzSuscribirVentasOffline !== 'function') return undefined;
     return frittzSuscribirVentasOffline(setOfflineVentaResumen);
   }, []);
-  const ALL_TABS = [['home', '🏠', 'Inicio'], ['productos', '📦', 'Productos'], ['nota', '📋', 'Pedidos'], ['clientes', '👥', 'Clientes'], ['creditos', '💳', 'Créditos'], ['ruta', '📦', 'Transferencias'], ['repartidores', '🧭', 'Distribución'], ['inventario', '📋', 'Inventario'], ['reportes', '📈', 'Reportes'], ['gerencia', '💰', 'Gerencia'], ['privacidad', '🛡️', 'Privacidad']];
+  const ALL_TABS = [['home', '🏠', 'Inicio'], ['productos', '📦', 'Productos'], ['nota', '📋', 'Pedidos'], ['clientes', '👥', 'Clientes'], ['creditos', '💳', 'Créditos'], ['ruta', '📦', 'Transferencias'], ['repartidores', '🧭', 'Distribución'], ['inventario', '📋', 'Inventario'], ['reportes', '📈', 'Reportes'], ['bitacora', '🗂️', 'Bitácora'], ['gerencia', '💰', 'Gerencia'], ['privacidad', '🛡️', 'Privacidad']];
   const permTabs = permisoTabs(currentUser);
   const tabsPermitidos = ['home', 'privacidad', ...ALL_TABS.filter(([id]) => id !== 'home' && id !== 'privacidad' && permTabs[id]).map(([id]) => id)];
   const TABS = ALL_TABS.filter(([id]) => tabsPermitidos.includes(id));
@@ -81,6 +81,7 @@ function App() {
   });
   const pendientesTotales = totalPendientes + Number(offlineVentaResumen.pendientes || 0);
   const mostrarBanner = !isOnline || pendientesTotales > 0;
+  const rol = roleInfo(currentUser);
   return React.createElement("div", {
     className: 'frittz-app-shell',
     style: {
@@ -106,7 +107,8 @@ function App() {
       alignItems: 'center',
       justifyContent: 'space-between',
       padding: '0 16px',
-      boxSizing: 'border-box'
+      boxSizing: 'border-box',
+      borderBottom: '3px solid ' + rol.color
     }
   }, React.createElement(Row, {
     style: {
@@ -143,7 +145,7 @@ function App() {
     style: {
       fontSize: 14,
       fontWeight: 700,
-      color: 'var(--accent)',
+      color: rol.color,
       fontFamily: 'var(--font-display)',
       textTransform: 'uppercase',
       letterSpacing: '.02em'
@@ -182,15 +184,22 @@ function App() {
     }
   }, notificacionesTransferencias.length)), React.createElement("span", {
     style: {
-      fontSize: 12,
-      color: 'var(--rail-ink-faint)'
+      fontSize: 9,
+      fontWeight: 800,
+      letterSpacing: '.03em',
+      textTransform: 'uppercase',
+      color: rol.color,
+      background: rol.color + '1a',
+      border: '1px solid ' + rol.color + '55',
+      borderRadius: 20,
+      padding: '3px 8px'
     }
-  }, "Hola, ", currentUser.nombre.split(' ')[0]), React.createElement("button", {
+  }, rol.label), React.createElement("button", {
     onClick: goConfig,
     style: {
       background: tab === 'config' ? 'var(--rail-border)' : 'none',
       border: 'none',
-      color: tab === 'config' ? 'var(--accent)' : 'var(--rail-ink-faint)',
+      color: tab === 'config' ? rol.color : 'var(--rail-ink-faint)',
       cursor: 'pointer',
       borderRadius: 3,
       padding: '5px 7px',
@@ -291,6 +300,8 @@ function App() {
   }), tab === 'reportes' && React.createElement(Reportes, {
     ...ctx,
     currentUser: currentUser
+  }), tab === 'bitacora' && React.createElement(Bitacora, {
+    currentUser: currentUser
   }), tab === 'gerencia' && React.createElement(Gerencia, {
     ...ctx,
     currentUser: currentUser
@@ -353,8 +364,8 @@ function App() {
       padding: '12px 18px',
       background: tab === id ? 'var(--rail-border)' : 'none',
       border: 'none',
-      borderLeft: tab === id ? '3px solid var(--accent)' : '3px solid transparent',
-      color: tab === id ? 'var(--accent)' : 'var(--rail-ink-faint)',
+      borderLeft: tab === id ? '3px solid ' + rol.color : '3px solid transparent',
+      color: tab === id ? rol.color : 'var(--rail-ink-faint)',
       cursor: 'pointer',
       textAlign: 'left',
       fontSize: 13,

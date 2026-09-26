@@ -199,6 +199,23 @@ function downloadCSV(filename, rows) {
   document.body.removeChild(a);
   setTimeout(() => URL.revokeObjectURL(url), 4000);
 }
+function downloadXLSX(filename, sheetName, rows) {
+  if (!_permisoCSV) {
+    alert('No tienes permiso para descargar reportes en Excel. Pídele a un administrador que te lo active en Configuración → Permisos.');
+    return;
+  }
+  if (typeof XLSX === 'undefined') {
+    alert('El generador de Excel aún no cargó; espera un momento e inténtalo de nuevo.');
+    return;
+  }
+  const hoja = XLSX.utils.aoa_to_sheet(rows);
+  hoja['!cols'] = rows[0].map((_, colIdx) => ({
+    wch: Math.min(40, Math.max(10, ...rows.map(r => String(r[colIdx] ?? '').length)))
+  }));
+  const libro = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(libro, hoja, sheetName);
+  XLSX.writeFile(libro, filename);
+}
 function waVentaLink(cliente, items, total, pago) {
   const lineas = items.map(it => `• ${it.nombre} x${it.cant} = ${fmtx((it.precio || 0) * it.cant)}`).join('\n');
   const texto = `🧾 *PEDIDO*\n👤 ${cliente.nombre}\n\n${lineas}\n\n💰 *Total: ${fmtx(total)}*\nPago: ${pago}`;
@@ -381,7 +398,7 @@ function RutaActivaCard({ ruta, currentUser, puedeGps, tracking, onTracking, onC
       cursor: 'pointer',
       fontSize: 11
     }
-  }, tracking ? '📍 GPS activo' : '📍 Compartir GPS'), React.createElement("button", {
+  }, tracking ? '📍 GPS activo' : '📍 Compartir GPS'), ruta.estadoTransferencia !== 'pendiente_recepcion' && React.createElement("button", {
     key: 'cerrar',
     onClick: onCerrar,
     style: {
@@ -395,7 +412,7 @@ function RutaActivaCard({ ruta, currentUser, puedeGps, tracking, onTracking, onC
       cursor: 'pointer',
       fontSize: 11
     }
-  }, '🏁 Cerrar ruta')]) : null;
+  }, '📥 Avisar a almacén')]) : null;
   return React.createElement("div", {
     style: {
       background: 'var(--surface)',
@@ -433,7 +450,9 @@ function RepartidoresPanel({
   clientes,
   rutas: rutasReales,
   currentUser,
-  onIrA
+  onIrA,
+  abrirVentaRapida,
+  onAbrirVentaRapidaConsumido
 }) {
   const [tab, setTab] = useState('activas');
   const rutas = rutasReales || [];
@@ -530,16 +549,15 @@ function RepartidoresPanel({
     }
     try {
       await dbx.collection('rutas').doc(r.id).update({
-        estado: 'pendiente_recepcion',
         estadoTransferencia: 'pendiente_recepcion',
         fechaSolicitudCierre: new Date().toISOString(),
         solicitadoPorUid: currentUser.uid,
         solicitadoPorNombre: currentUser.nombre || ''
       });
       if (tracking === r.id) detenerSeguimiento();
-      flash('📦 Transferencia enviada a recepción de almacén para su conciliación');
+      flash('📦 Almacén fue avisado para revisar esta transferencia; el repartidor puede seguir vendiendo');
     } catch (e) {
-      flash('❌ No se pudo solicitar la recepción de la transferencia: ' + e.message);
+      flash('❌ No se pudo avisar a almacén: ' + e.message);
     }
   };
   const verQR = cliente => {
@@ -619,6 +637,21 @@ function RepartidoresPanel({
     }
   };
   const rutasActivasVenta = rutas.filter(r => r.estado === 'activa' && currentUser.role === 'repartidor' && r.repartidorId === currentUser.uid);
+  useEffect(() => {
+    if (!abrirVentaRapida) return;
+    if (currentUser.role === 'repartidor') {
+      setTab('clientesqr');
+      if (rutasActivasVenta.length === 0) {
+        flash('⚠️ No tienes una transferencia activa; pide que almacén te transfiera mercancía primero');
+      } else if (permisoAcciones(currentUser).camara) {
+        setClienteScanOpen(true);
+      } else {
+        setClienteBuscarOpen(true);
+      }
+    }
+    onAbrirVentaRapidaConsumido && onAbrirVentaRapidaConsumido();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [abrirVentaRapida]);
   const abrirVentaParaCliente = cliente => {
     if (currentUser.role !== 'repartidor') {
       flash('⚠️ Las ventas desde transferencia solo las registra el repartidor asignado.');
@@ -752,16 +785,18 @@ function RepartidoresPanel({
       setVentaRapida(v => ({ ...v, saving: false }));
     }
   };
-  const exportarHistorialCSV = () => {
+  const filasHistorial = () => {
     const rows = [['Fecha', 'Repartidor', 'Vehículo', 'Zona', 'Estado', 'Salida real', 'Regreso real', 'Duración (min)', 'Entregas', 'Total vendido']];
     hist.forEach(r => {
       const dur = r.fechaSalidaReal && r.fechaRegresoReal ? Math.round((new Date(r.fechaRegresoReal) - new Date(r.fechaSalidaReal)) / 60000) : '';
       const resumen = resumenRuta(r);
       rows.push([fDateTime(r.fecha), r.repartidorNombre || '', r.vehiculo || '', r.zona || '', ESTADOS[r.estado]?.label || r.estado, fDateTime(r.fechaSalidaReal), fDateTime(r.fechaRegresoReal), dur, resumen.entregas.length, resumen.totalVendido.toFixed(2)]);
     });
-    downloadCSV('historial_rutas_' + Date.now() + '.csv', rows);
+    return rows;
   };
-  const exportarComprobantesCSV = () => {
+  const exportarHistorialCSV = () => downloadCSV('historial_rutas_' + Date.now() + '.csv', filasHistorial());
+  const exportarHistorialExcel = () => downloadXLSX('historial_rutas_' + Date.now() + '.xlsx', 'Historial', filasHistorial());
+  const filasComprobantes = () => {
     const rows = [['Fecha', 'Estado', 'Entregas', 'Total vendido']];
     rutasReales.forEach(r => {
       const {
@@ -770,17 +805,21 @@ function RepartidoresPanel({
       } = resumenRuta(r);
       rows.push([fDateTime(r.fecha), r.estado === 'activa' ? 'en curso' : 'cerrada', entregas.length, totalVendido.toFixed(2)]);
     });
-    downloadCSV('comprobantes_rutas_' + Date.now() + '.csv', rows);
+    return rows;
   };
-  const exportarVentasDetalladoCSV = () => {
+  const exportarComprobantesCSV = () => { downloadCSV('comprobantes_rutas_' + Date.now() + '.csv', filasComprobantes()); registrarBitacora({ tipo: 'reporte', entidad: 'reporte', entidadNombre: 'Comprobantes por ruta (CSV)', descripcion: 'Descargó comprobantes por ruta en CSV', currentUser }); };
+  const exportarComprobantesExcel = () => { downloadXLSX('comprobantes_rutas_' + Date.now() + '.xlsx', 'Comprobantes', filasComprobantes()); registrarBitacora({ tipo: 'reporte', entidad: 'reporte', entidadNombre: 'Comprobantes por ruta (Excel)', descripcion: 'Descargó comprobantes por ruta en Excel', currentUser }); };
+  const filasVentasDetallado = () => {
     const rows = [['Fecha ruta', 'Cliente', 'Productos', 'Total', 'Forma de pago']];
     rutasReales.forEach(r => {
       (r.entregas || []).forEach(e => {
         rows.push([fDateTime(r.fecha), e.clienteNombre, (e.items || []).map(it => it.nombre + ' x' + it.cant).join(' | '), e.total.toFixed(2), e.formaPago]);
       });
     });
-    downloadCSV('ventas_detalladas_' + Date.now() + '.csv', rows);
+    return rows;
   };
+  const exportarVentasDetalladoCSV = () => { downloadCSV('ventas_detalladas_' + Date.now() + '.csv', filasVentasDetallado()); registrarBitacora({ tipo: 'reporte', entidad: 'reporte', entidadNombre: 'Ventas detalladas (CSV)', descripcion: 'Descargó ventas detalladas en CSV', currentUser }); };
+  const exportarVentasDetalladoExcel = () => { downloadXLSX('ventas_detalladas_' + Date.now() + '.xlsx', 'Ventas', filasVentasDetallado()); registrarBitacora({ tipo: 'reporte', entidad: 'reporte', entidadNombre: 'Ventas detalladas (Excel)', descripcion: 'Descargó ventas detalladas en Excel', currentUser }); };
   const diasDesdeUltimoRespaldo = backupMeta && backupMeta.ultimoRespaldo ? Math.floor((Date.now() - new Date(backupMeta.ultimoRespaldo).getTime()) / 86400000) : null;
   const iniciarSeguimiento = r => {
     if (!navigator.geolocation) {
@@ -1167,6 +1206,7 @@ function RepartidoresPanel({
   }, "🔲 QR")))), tab === 'comprobantes' && React.createElement(React.Fragment, null, _permisoCSV && rutasReales.length > 0 && React.createElement("div", {
     style: {
       display: 'flex',
+      flexWrap: 'wrap',
       gap: 8,
       marginBottom: 14
     }
@@ -1184,6 +1224,19 @@ function RepartidoresPanel({
       fontSize: 11
     }
   }, "📤 CSV por ruta"), React.createElement("button", {
+    onClick: exportarComprobantesExcel,
+    style: {
+      flex: 1,
+      background: 'var(--surface)',
+      color: 'var(--ink-soft)',
+      border: '1px solid var(--line-strong)',
+      borderRadius: 8,
+      padding: 9,
+      fontWeight: 700,
+      cursor: 'pointer',
+      fontSize: 11
+    }
+  }, "📊 Excel por ruta"), React.createElement("button", {
     onClick: exportarVentasDetalladoCSV,
     style: {
       flex: 1,
@@ -1196,7 +1249,20 @@ function RepartidoresPanel({
       cursor: 'pointer',
       fontSize: 11
     }
-  }, "📤 CSV detallado")), rutasReales.length === 0 && React.createElement("div", {
+  }, "📤 CSV detallado"), React.createElement("button", {
+    onClick: exportarVentasDetalladoExcel,
+    style: {
+      flex: 1,
+      background: 'var(--surface)',
+      color: 'var(--ink-soft)',
+      border: '1px solid var(--line-strong)',
+      borderRadius: 8,
+      padding: 9,
+      fontWeight: 700,
+      cursor: 'pointer',
+      fontSize: 11
+    }
+  }, "📊 Excel detallado")), rutasReales.length === 0 && React.createElement("div", {
     style: {
       textAlign: 'center',
       color: 'var(--ink-faint)',
@@ -1360,10 +1426,16 @@ function RepartidoresPanel({
         cursor: 'pointer'
       }
     }, "➤")));
-  })), tab === 'historial' && React.createElement(React.Fragment, null, hist.length > 0 && React.createElement("button", {
+  })), tab === 'historial' && React.createElement(React.Fragment, null, hist.length > 0 && React.createElement("div", {
+    style: {
+      display: 'flex',
+      gap: 8,
+      marginBottom: 14
+    }
+  }, React.createElement("button", {
     onClick: exportarHistorialCSV,
     style: {
-      width: '100%',
+      flex: 1,
       background: 'var(--surface)',
       color: 'var(--ink-soft)',
       border: '1px solid var(--line-strong)',
@@ -1371,10 +1443,22 @@ function RepartidoresPanel({
       padding: 10,
       fontWeight: 700,
       cursor: 'pointer',
-      fontSize: 12,
-      marginBottom: 14
+      fontSize: 12
     }
-  }, "📤 Exportar CSV"), hist.length === 0 && React.createElement("div", {
+  }, "📤 CSV"), React.createElement("button", {
+    onClick: exportarHistorialExcel,
+    style: {
+      flex: 1,
+      background: 'var(--surface)',
+      color: 'var(--ink-soft)',
+      border: '1px solid var(--line-strong)',
+      borderRadius: 8,
+      padding: 10,
+      fontWeight: 700,
+      cursor: 'pointer',
+      fontSize: 12
+    }
+  }, "📊 Excel")), hist.length === 0 && React.createElement("div", {
     style: {
       textAlign: 'center',
       color: 'var(--ink-faint)',

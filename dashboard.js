@@ -50,10 +50,12 @@ function Dashboard({
   currentUser,
   notificacionesTransferencias = [],
   onIrA,
-  onVentaRapida
+  onVentaRapida,
+  onVentaRapidaQR
 }) {
   const isAdmin = currentUser.role === 'admin';
   const isRepartidor = currentUser.role === 'repartidor';
+  const rol = roleInfo(currentUser);
   const tabsPermitidos = permisoTabs(currentUser);
   const esEfectivo = fp => fp === 'efectivo' || fp === 'contado';
   const hoy = new Date().toDateString();
@@ -85,18 +87,21 @@ function Dashboard({
   const acciones = (isRepartidor ? [{
     icon: '🧾',
     label: 'Venta rápida',
-    detalle: rutaActiva ? 'Vender desde mi transferencia' : 'Revisar transferencia',
-    onClick: irA('ruta')
+    detalle: rutaActiva ? 'Escanear cliente y vender ya' : 'Revisar transferencia',
+    onClick: rutaActiva && tabsPermitidos.repartidores ? onVentaRapidaQR : irA('ruta'),
+    tab: 'ruta'
   }, {
     icon: '🧭',
     label: 'Mi distribución',
     detalle: 'Revisar transferencias y clientes QR',
-    onClick: irA('repartidores')
+    onClick: irA('repartidores'),
+    tab: 'repartidores'
   }, {
     icon: '💰',
     label: 'Corte del día',
     detalle: 'Consultar ventas y efectivo',
-    onClick: irA('gerencia')
+    onClick: irA('gerencia'),
+    tab: 'gerencia'
   }] : [{
     icon: '🧾',
     label: 'Nuevo pedido',
@@ -144,11 +149,29 @@ function Dashboard({
     }
   }, React.createElement("div", {
     style: {
-      fontSize: 20,
-      fontWeight: 800,
+      display: 'flex',
+      alignItems: 'center',
+      gap: 8,
       marginBottom: 14
     }
-  }, "📊 Inicio"), avisosTransferencia.length > 0 && React.createElement(Card, {
+  }, React.createElement("div", {
+    style: {
+      fontSize: 20,
+      fontWeight: 800
+    }
+  }, "📊 Inicio"), React.createElement("span", {
+    style: {
+      fontSize: 10,
+      fontWeight: 800,
+      letterSpacing: '.03em',
+      textTransform: 'uppercase',
+      color: rol.color,
+      background: rol.color + '1a',
+      border: '1px solid ' + rol.color + '55',
+      borderRadius: 20,
+      padding: '3px 9px'
+    }
+  }, rol.label)), avisosTransferencia.length > 0 && React.createElement(Card, {
     style: {
       marginBottom: 14,
       border: '1px solid var(--warn)66'
